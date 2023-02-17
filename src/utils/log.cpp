@@ -76,8 +76,12 @@ namespace coffee {
         const auto diff = std::chrono::duration_cast<std::chrono::seconds>(now - detail::startupTime).count();
         const auto formatted = fmt::format(
             "{:%Y-%m-%d %H:%M:%S} [{:>8d}s] | {:>24}:{:<4d} | {}: {}\n", 
-            fmt::localtime(now), diff, detail::getFileName(filePath), line, detail::toString(severity), detail::escape(message.data())
-        );
+            fmt::localtime(std::chrono::system_clock::to_time_t(now)), 
+            diff, 
+            detail::getFileName(filePath), 
+            line, 
+            detail::toString(severity), 
+            detail::escape(message.data()));
 
 #       ifdef COFFEE_WINDOWS
             OutputDebugStringA(formatted.c_str());
