@@ -23,7 +23,8 @@ namespace coffee {
         virtual void endRenderPass() = 0;
 
         virtual void bindPipeline(const Pipeline& pipeline) = 0;
-        virtual void bindDescriptorSets(const Pipeline& pipeline, const DescriptorSet& set) = 0;
+        virtual void bindDescriptorSet(const DescriptorSet& set) = 0;
+        virtual void bindDescriptorSets(const std::vector<DescriptorSet>& sets) = 0;
         //virtual void clearAttachments(
         //    const Framebuffer& framebuffer,
         //    const ClearColorValue& colorValues,

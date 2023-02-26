@@ -7,16 +7,21 @@
 namespace coffee {
 
     VulkanBuffer::VulkanBuffer(VulkanDevice& device, const BufferConfiguration& configuration)
-        : AbstractBuffer { 
-            configuration.usage,
-            configuration.properties,
-            configuration.instanceCount,
-            configuration.instanceSize,
-            calculateAlignment(device, configuration.alignment, configuration.instanceSize, configuration.properties)
-        } , device_ { device }
+        : AbstractBuffer { configuration.instanceCount, configuration.instanceSize, configuration.usage, configuration.properties }
+        , device_ { device }
     {
+        instanceCount_ = configuration.instanceCount;
+        instanceSize_ = configuration.instanceSize;
+        alwaysKeepMapped_ = (static_cast<size_t>(configuration.instanceCount) * configuration.instanceSize) <= alwaysMappedThreshold;
+
+        COFFEE_ASSERT(instanceCount_ > 0, "Buffer cannot be allocated with size 0. (instanceCount)");
+        COFFEE_ASSERT(instanceSize_ > 0, "Buffer cannot be allocated with size 0. (instanceSize)");
+
+        usageFlags_ = configuration.usage;
+        memoryFlags_ = configuration.properties;
+
         VkBufferCreateInfo createInfo { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-        createInfo.size = static_cast<VkDeviceSize>(alignment_) * configuration.instanceCount;
+        createInfo.size = static_cast<size_t>(instanceSize_) * instanceCount_;
         createInfo.usage = VkUtils::transformBufferFlags(usageFlags_);
         createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -25,6 +30,18 @@ namespace coffee {
 
         VkMemoryRequirements memoryRequirements {};
         vkGetBufferMemoryRequirements(device_.getLogicalDevice(), buffer, &memoryRequirements);
+
+        offsetAlignment = [](const VkPhysicalDeviceLimits& limits, BufferUsage usage) {
+            if ((usage & BufferUsage::Uniform) == BufferUsage::Uniform) {
+                return Math::roundToMultiple(limits.minUniformBufferOffsetAlignment, limits.nonCoherentAtomSize);
+            }
+
+            if ((usage & BufferUsage::Storage) == BufferUsage::Storage) {
+                return Math::roundToMultiple(limits.minStorageBufferOffsetAlignment, limits.nonCoherentAtomSize);
+            }
+
+            return limits.nonCoherentAtomSize;
+        }(device_.getProperties().limits, usageFlags_);
 
         VkMemoryAllocateInfo allocateInfo { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         allocateInfo.allocationSize = memoryRequirements.size;
@@ -39,10 +56,18 @@ namespace coffee {
 
         COFFEE_THROW_IF(
             vkBindBufferMemory(device_.getLogicalDevice(), buffer, memory, 0U) != VK_SUCCESS, "Failed to bind buffer to memory!");
+
+        if (((memoryFlags_ & MemoryProperty::HostVisible) == MemoryProperty::HostVisible) && alwaysKeepMapped_) {
+            COFFEE_THROW_IF(
+                vkMapMemory(device_.getLogicalDevice(), memory, 0, memoryRequirements.size, 0, &mappedMemory_) != VK_SUCCESS,
+                "Failed to map memory!");
+        }
+
+        realSize_ = memoryRequirements.size;
     }
 
     VulkanBuffer::~VulkanBuffer() {
-        if (mappedMemory != nullptr) {
+        if (mappedMemory_ != nullptr) {
             vkUnmapMemory(device_.getLogicalDevice(), memory);
         }
 
@@ -50,23 +75,58 @@ namespace coffee {
         vkFreeMemory(device_.getLogicalDevice(), memory, nullptr);
     }
 
-    void* VulkanBuffer::map(size_t size, size_t offset) {
+    void VulkanBuffer::write(const void* data, size_t size, size_t offset) {
+        COFFEE_ASSERT(
+            (memoryFlags_ & MemoryProperty::HostVisible) == MemoryProperty::HostVisible,
+            "Calling write() while buffer isn't host visible is forbidden.");
+        COFFEE_ASSERT(data != nullptr, "data was nullptr.");
+        COFFEE_ASSERT(size < std::numeric_limits<size_t>::max() - offset, "Combination of size and offset will cause an overflow.");
+
         std::scoped_lock<std::mutex> lock { allocationMutex_ };
 
-        if (mappedMemory == nullptr) {
-            // TODO: This might crash because of very huge buffer that cannot be allocated on RAM
-            // So we must actually handle this case and make a allocation that will be an part of whole buffer
-            // Then, when next map comes in, we check if it worth to remap, if so - we remap another part of memory
-            // And we cannot handle same architecture that DX12 can - multiple allocations
-            // Might be a good idea to handle just write() and read() functions instead of direct access
-            vkMapMemory(device_.getLogicalDevice(), memory, 0, std::numeric_limits<uint64_t>::max(), 0, &mappedMemory);
+        if (this->map(size, offset) == VK_SUCCESS) {
+            std::memcpy(mappedMemory_, data, size);
+
+            mappedSize_ = size;
+            mappedOffset_ = offset;
+
+            return;
         }
 
-        return static_cast<char*>(mappedMemory) + offset;
+        size_t splitMultiplier = 2;
+
+        while (this->map(size / splitMultiplier, offset) != VK_SUCCESS) {
+            splitMultiplier *= 2;
+
+            // After that much of divisions it's more likely that we just run out of memory
+            // So it will be better to just throw and don't care
+            COFFEE_THROW_IF(
+                splitMultiplier >= 128 || splitMultiplier >= size,
+                "Failed to find good chunk size for map! This more likely means that there not enough memory!");
+        }
+
+        // This was successfully mapped region, so write to it immediately
+        size_t chunkSize = size / splitMultiplier;
+        size_t chunkOffset = chunkSize;
+        std::memcpy(mappedMemory_, data, chunkSize);
+
+        while (chunkOffset < size) {
+            COFFEE_THROW_IF(
+                this->map(chunkSize, offset + chunkOffset) != VK_SUCCESS, 
+                "Failed to map memory through chunking! This more likely means that there not enough memory!");
+
+            std::memcpy(mappedMemory_, data, chunkSize);
+            chunkOffset += chunkSize;
+        }
+
+        mappedSize_ = chunkSize;
+        mappedOffset_ = offset + chunkOffset - chunkSize;
     }
 
     void VulkanBuffer::flush(size_t size, size_t offset) {
-        COFFEE_ASSERT(mappedMemory != nullptr, "Forbidden call to flush() when memory isn't mapped. Do map() before calling this.");
+        COFFEE_ASSERT(mappedMemory_ != nullptr, "Forbidden call to flush() when memory isn't mapped. Do map() before calling this.");
+
+        alignOffset(size, offset);
 
         VkMappedMemoryRange mappedRange { VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE };
         mappedRange.memory = memory;
@@ -78,7 +138,9 @@ namespace coffee {
     }
 
     void VulkanBuffer::invalidate(size_t size, size_t offset) {
-        COFFEE_ASSERT(mappedMemory != nullptr, "Forbidden call to invalidate() when memory isn't mapped. Do map() before calling this.");
+        COFFEE_ASSERT(mappedMemory_ != nullptr, "Forbidden call to invalidate() when memory isn't mapped. Do map() before calling this.");
+
+        alignOffset(size, offset);
 
         VkMappedMemoryRange mappedRange { VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE };
         mappedRange.memory = memory;
@@ -91,48 +153,41 @@ namespace coffee {
     }
 
     void VulkanBuffer::resize(uint32_t instanceCount, uint32_t instanceSize) {
-        COFFEE_ASSERT(mappedMemory == nullptr, "Forbidden call to resize() when memory mapped. Do unmap() before calling this.");
+        COFFEE_ASSERT(mappedMemory_ == nullptr, "Forbidden call to resize() when memory mapped. Do unmap() before calling this.");
 
-        if (alignment_ * instanceCount >= static_cast<size_t>(instanceSize) * instanceCount) {
+        if (static_cast<size_t>(instanceSize_) * instanceCount_ >= static_cast<size_t>(instanceSize) * instanceCount) {
             return;
         }
 
         // TODO: Implement
     }
 
-    void VulkanBuffer::unmap() {
-        COFFEE_ASSERT(mappedMemory != nullptr, "Forbidden call to unmap() when memory isn't mapped. Do map() before calling this.");
+    VkResult VulkanBuffer::map(size_t size, size_t offset) {
+        if (alwaysKeepMapped_ || (mappedSize_ == size && mappedOffset_ == offset)) {
+            return VK_SUCCESS;
+        }
 
-        std::scoped_lock<std::mutex> lock { allocationMutex_ };
+        if (mappedMemory_ != nullptr) {
+            vkUnmapMemory(device_.getLogicalDevice(), memory);
+        }
 
-        vkUnmapMemory(device_.getLogicalDevice(), memory);
-        mappedMemory = nullptr;
+        return vkMapMemory(device_.getLogicalDevice(), memory, offset, size, 0, &mappedMemory_);
     }
 
-    size_t VulkanBuffer::calculateAlignment(
-        VulkanDevice& device,
-        size_t requestedAlignment,
-        size_t requiredInstanceSize,
-        MemoryProperty properties
-    ) noexcept {
-        // nonCoherentAtomSize is always power of 2 because Vulkan API requires this
-        size_t properAlignment = Math::roundToPowerOf2(requestedAlignment);
-
-        #pragma warning(suppress: 26813) // Suppresses useless warning about using & instead of ==, but we need == here
-        if ((properties & (MemoryProperty::HostVisible | MemoryProperty::HostCoherent)) == MemoryProperty::HostVisible) {
-            // Both numbers are power of 2, so we only need the biggest one to make a proper alignment
-            const VkDeviceSize biggest =
-                std::max(static_cast<VkDeviceSize>(properAlignment), device.getProperties().limits.nonCoherentAtomSize);
-            return (requiredInstanceSize + biggest - 1) & ~(biggest - 1);
+    void VulkanBuffer::alignOffset(size_t& size, size_t& offset) {
+        if (offset < mappedOffset_) {
+            offset = mappedOffset_;
         }
 
-        if (properAlignment > 0) {
-            // Memory flags contains coherent bit, so nonCoherentAtomSize alignment isn't required
-            return (requiredInstanceSize + properAlignment - 1) & ~(properAlignment - 1);
-        }
+        size_t alignedOffset = Math::roundToMultiple(offset, offsetAlignment);
 
-        // No alignment at all
-        return requiredInstanceSize;
+        if (alignedOffset != offset) {
+            alignedOffset -= offsetAlignment;
+
+            if (size != VK_WHOLE_SIZE) {
+                size += offsetAlignment;
+            }
+        }
     }
 
 }

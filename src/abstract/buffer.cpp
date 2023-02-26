@@ -4,18 +4,11 @@
 
 namespace coffee {
 
-    AbstractBuffer::AbstractBuffer(
-        BufferUsage usage,
-        MemoryProperty properties,
-        uint32_t instanceCount,
-        uint32_t instanceSize,
-        size_t alignment
-    ) noexcept
+    AbstractBuffer::AbstractBuffer(uint32_t instanceCount, uint32_t instanceSize, BufferUsage usage, MemoryProperty props) noexcept
         : instanceCount_ { instanceCount }
         , instanceSize_ { instanceSize }
-        , alignment_ { alignment }
         , usageFlags_ { usage }
-        , memoryFlags_ { properties }
+        , memoryFlags_ { props }
     {}
 
     uint32_t AbstractBuffer::getInstanceCount() const noexcept {
@@ -26,12 +19,12 @@ namespace coffee {
         return instanceSize_;
     }
 
-    size_t AbstractBuffer::getAlignment() const noexcept {
-        return alignment_;
+    size_t AbstractBuffer::getTotalSize() const noexcept {
+        return static_cast<size_t>(instanceSize_) * instanceCount_;
     }
 
-    size_t AbstractBuffer::getTotalSize() const noexcept {
-        return static_cast<size_t>(alignment_) * instanceCount_;
+    size_t AbstractBuffer::getRealSize() const noexcept {
+        return size_t();
     }
 
     BufferUsage AbstractBuffer::getUsageFlags() const noexcept {

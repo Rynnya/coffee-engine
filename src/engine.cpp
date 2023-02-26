@@ -1,11 +1,19 @@
 #include <coffee/engine.hpp>
 
 #include <coffee/abstract/vulkan/vk_backend.hpp>
+#include <coffee/objects/vertex.hpp>
 #include <coffee/utils/log.hpp>
 
+#define STB_IMAGE_IMPLEMENTATION
+
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <stb_image.h>
 #include <GLFW/glfw3.h>
 
 #include <chrono>
+#include <filesystem>
 #include <stdexcept>
 
 namespace coffee {
@@ -57,6 +65,12 @@ namespace coffee {
     }
 
     void Engine::PImpl::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+        // Discard all callbacks when window is minimized
+        if (width == 0 || height == 0) {
+            return;
+        }
+
+        // !!! Always recreate swap chain, even if size previous size is same as new one, otherwise it will freeze image
         coffee::Engine* enginePtr = static_cast<coffee::Engine*>(glfwGetWindowUserPointer(window));
         enginePtr->pImpl_->framebufferWidth = static_cast<uint32_t>(width);
         enginePtr->pImpl_->framebufferHeight = static_cast<uint32_t>(height);
@@ -234,6 +248,8 @@ namespace coffee {
                 break;
         }
 
+        createNullTexture();
+
         lastPollTime_ = std::chrono::high_resolution_clock::now();
 
         COFFEE_INFO("Engine initialized!");
@@ -244,6 +260,8 @@ namespace coffee {
         applyRequests();
 
         waitDeviceIdle();
+        loadedTextures_.fill({});
+        defaultTexture_ = nullptr;
         backendImpl_ = nullptr;
 
         glfwDestroyWindow(pImpl_->windowHandle);
@@ -306,6 +324,282 @@ namespace coffee {
 
     const std::vector<Image>& Engine::getPresentImages() const noexcept {
         return backendImpl_->getPresentImages();
+    }
+
+    Model Engine::importModel(const std::string& filename) {
+        Assimp::Importer importer {};
+        uint32_t processFlags =
+            aiProcess_Triangulate |
+            aiProcess_OptimizeMeshes |
+            aiProcess_JoinIdenticalVertices |
+            //aiProcess_MakeLeftHanded |
+            aiProcess_GenNormals |
+            aiProcess_CalcTangentSpace |
+            aiProcess_FlipUVs |
+            aiProcess_PreTransformVertices;
+
+        const aiScene* scene = importer.ReadFile(filename, processFlags);
+
+        COFFEE_THROW_IF(scene == nullptr, "Failed to find proper loader for model ({})!", filename);
+        COFFEE_THROW_IF(scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE, "Failed to fully load model ({})!", filename);
+        COFFEE_THROW_IF(scene->mRootNode == nullptr, "Failed to load tree ({})!", filename);
+
+        std::filesystem::path parentDirectory = std::filesystem::absolute(filename).parent_path();
+
+        auto assimpTypeToEngineType = [](aiTextureType type) -> TextureType {
+            switch (type) {
+                default:
+                case aiTextureType_NONE:
+                    return TextureType::None;
+                case aiTextureType_DIFFUSE:
+                    return TextureType::Diffuse;
+                case aiTextureType_SPECULAR:
+                    return TextureType::Specular;
+                case aiTextureType_AMBIENT:
+                    return TextureType::Ambient;
+                case aiTextureType_EMISSIVE:
+                    return TextureType::Emissive;
+                case aiTextureType_HEIGHT:
+                    return TextureType::Height;
+                case aiTextureType_NORMALS:
+                    return TextureType::Normals;
+                case aiTextureType_DIFFUSE_ROUGHNESS:
+                    return TextureType::Roughness;
+                case aiTextureType_METALNESS:
+                    return TextureType::Metallic;
+                case aiTextureType_AMBIENT_OCCLUSION:
+                    return TextureType::AmbientOcclusion;
+            }
+        };
+
+        auto assimpTypeToFormat = [](aiTextureType type) {
+            switch (type) {
+                case aiTextureType_DIFFUSE:
+                    return Format::R8G8B8A8SRGB;
+                default:
+                    return Format::R8G8B8A8UNorm;
+            }
+        };
+
+        auto createNativeBuffers = [this](
+            const std::vector<Vertex>& vertices,
+            const std::vector<uint32_t>& indices
+        ) -> std::pair<Buffer, Buffer> {
+
+            Buffer verticesBuffer = nullptr;
+            Buffer indicesBuffer = nullptr;
+
+            {
+                BufferConfiguration stagingBufferConfiguration{};
+                stagingBufferConfiguration.usage = BufferUsage::TransferSource;
+                stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
+                stagingBufferConfiguration.instanceCount = vertices.size();
+                stagingBufferConfiguration.instanceSize = sizeof(Vertex);
+                Buffer stagingVerticesBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
+
+                stagingVerticesBuffer->write(vertices.data(), vertices.size() * sizeof(Vertex));
+                stagingVerticesBuffer->flush();
+
+                BufferConfiguration verticesBufferConfiguration{};
+                verticesBufferConfiguration.properties = MemoryProperty::DeviceLocal;
+                verticesBufferConfiguration.usage = BufferUsage::Vertex | BufferUsage::TransferDestination;
+                verticesBufferConfiguration.instanceCount = vertices.size();
+                verticesBufferConfiguration.instanceSize = sizeof(Vertex);
+                verticesBuffer = backendImpl_->createBuffer(verticesBufferConfiguration);
+
+                backendImpl_->copyBuffer(verticesBuffer, stagingVerticesBuffer);
+            }
+
+            if (!indices.empty())
+            {
+                BufferConfiguration stagingBufferConfiguration{};
+                stagingBufferConfiguration.usage = BufferUsage::TransferSource;
+                stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
+                stagingBufferConfiguration.instanceCount = indices.size();
+                stagingBufferConfiguration.instanceSize = sizeof(uint32_t);
+                Buffer stagingIndicesBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
+
+                stagingIndicesBuffer->write(indices.data(), indices.size() * sizeof(uint32_t));
+                stagingIndicesBuffer->flush();
+
+                BufferConfiguration verticesBufferConfiguration{};
+                verticesBufferConfiguration.properties = MemoryProperty::DeviceLocal;
+                verticesBufferConfiguration.usage = BufferUsage::Index | BufferUsage::TransferDestination;
+                verticesBufferConfiguration.instanceCount = indices.size();
+                verticesBufferConfiguration.instanceSize = sizeof(uint32_t);
+                indicesBuffer = backendImpl_->createBuffer(verticesBufferConfiguration);
+
+                backendImpl_->copyBuffer(indicesBuffer, stagingIndicesBuffer);
+            }
+
+            return std::make_pair(verticesBuffer, indicesBuffer);
+        };
+
+        auto loadMaterialTextures = [this, &assimpTypeToEngineType, &assimpTypeToFormat, &parentDirectory](
+            Materials& materials,
+            const aiScene* scene,
+            aiMaterial* material,
+            aiTextureType textureType
+        ) -> void {
+            TextureType engineType = assimpTypeToEngineType(textureType);
+            uint32_t materialTypeIndex = static_cast<uint32_t>(engineType) - 1;
+            COFFEE_ASSERT(materialTypeIndex >= 0 && materialTypeIndex < 10, "Invalid TextureType provided.");
+
+            for (uint32_t i = 0; i < material->GetTextureCount(textureType); i++) {
+                aiString nativeMaterialPath {};
+                material->GetTexture(textureType, i, &nativeMaterialPath);
+
+                auto& materialMap = loadedTextures_[materialTypeIndex];
+                std::string materialPath = (parentDirectory / nativeMaterialPath.data).generic_string();
+
+                int32_t width {}, height {}, numberOfChannels {};
+                Texture newTexture = nullptr;
+
+                if (const aiTexture* embeddedTexture = scene->GetEmbeddedTexture(nativeMaterialPath.data)) {
+                    size_t bufferSize = embeddedTexture->mWidth;
+
+                    if (embeddedTexture->mHeight > 0) {
+                        bufferSize *= embeddedTexture->mHeight;
+                    }
+
+                    uint8_t* rawBytes = stbi_load_from_memory(
+                        reinterpret_cast<const uint8_t*>(embeddedTexture->pcData), bufferSize, &width, &height, &numberOfChannels, STBI_rgb_alpha);
+                    COFFEE_THROW_IF(rawBytes == nullptr, "STBI failed with reason: {}", stbi_failure_reason());
+
+                    newTexture = createTexture(
+                        rawBytes, 4ULL * width * height, assimpTypeToFormat(textureType), width, height, materialPath, engineType);
+                    stbi_image_free(rawBytes);
+                }
+                else {
+                    uint8_t* rawBytes = stbi_load(materialPath.c_str(), &width, &height, &numberOfChannels, STBI_rgb_alpha);
+                    COFFEE_THROW_IF(rawBytes == nullptr, "STBI failed with reason: {}", stbi_failure_reason());
+
+                    newTexture = createTexture(
+                        rawBytes, static_cast<size_t>(width) * height * 4, assimpTypeToFormat(textureType), width, height, materialPath, engineType);
+                    stbi_image_free(rawBytes);
+                }
+
+                materials.write(newTexture);
+                materialMap.emplace(materialPath, newTexture);
+            }
+        };
+
+        auto loadSubmesh = [this, &assimpTypeToEngineType, &loadMaterialTextures, &createNativeBuffers](
+            const aiScene* scene, 
+            aiMesh* mesh
+        ) -> Mesh {
+            std::vector<Vertex> vertices {};
+            std::vector<uint32_t> indices {};
+            Materials materials { defaultTexture_ };
+
+            for (uint32_t i = 0; i < mesh->mNumVertices; i++) {
+                Vertex vertex {};
+
+                vertex.position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
+
+                if (mesh->HasNormals()) {
+                    vertex.normal = { mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z };
+                }
+
+                if (mesh->HasTextureCoords(0)) {
+                    vertex.texCoords = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
+                }
+
+                if (mesh->HasTangentsAndBitangents()) {
+                    vertex.tangent = { mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z };
+                }
+
+                vertices.push_back(std::move(vertex));
+            }
+
+            for (uint32_t i = 0; i < mesh->mNumFaces; i++) {
+                const aiFace& face = mesh->mFaces[i];
+                for (uint32_t j = 0; j < face.mNumIndices; j++) {
+                    indices.push_back(face.mIndices[j]);
+                }
+            }
+
+            if (scene->HasMaterials()) {
+                aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+
+                loadMaterialTextures(materials, scene, material, aiTextureType_DIFFUSE);
+                loadMaterialTextures(materials, scene, material, aiTextureType_SPECULAR);
+                loadMaterialTextures(materials, scene, material, aiTextureType_AMBIENT);
+                loadMaterialTextures(materials, scene, material, aiTextureType_NORMALS);
+
+                aiColor3D diffuseColor { 0.0f, 0.0f, 0.0f };
+                if (material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor) == aiReturn_SUCCESS) {
+                    materials.modifiers.diffuseColor.r = diffuseColor.r;
+                    materials.modifiers.diffuseColor.g = diffuseColor.g;
+                    materials.modifiers.diffuseColor.b = diffuseColor.b;
+                }
+                else {
+                    materials.modifiers.diffuseColor = { 1.0f, 1.0f, 1.0f };
+                }
+
+                aiColor3D specularColor { 0.0f, 0.0f, 0.0f };
+                materials.modifiers.specularColor.r = specularColor.r;
+                materials.modifiers.specularColor.g = specularColor.g;
+                materials.modifiers.specularColor.b = specularColor.b;
+
+                aiColor3D ambientColor { 0.0f, 0.0f, 0.0f };
+                if (material->Get(AI_MATKEY_COLOR_AMBIENT, ambientColor) == aiReturn_SUCCESS) {
+                    materials.modifiers.ambientColor.r = ambientColor.r;
+                    materials.modifiers.ambientColor.g = ambientColor.g;
+                    materials.modifiers.ambientColor.b = ambientColor.b;
+                    materials.modifiers.ambientColor.a = 1.0f;
+                }
+                else {
+                    materials.modifiers.ambientColor = { 1.0f, 1.0f, 1.0f, 0.02f };
+                }
+
+                material->Get(AI_MATKEY_SHININESS, materials.modifiers.shininess);
+            }
+            
+            auto [verticesBuffer, indicesBuffer] = createNativeBuffers(vertices, indices);
+            return std::make_unique<MeshImpl>(std::move(verticesBuffer), std::move(indicesBuffer), std::move(materials));
+        };
+
+        std::vector<Mesh> meshes;
+
+        auto processNode = [&meshes, &loadSubmesh](const aiScene* scene, aiNode* node, const auto& procNode) -> void {
+            for (uint32_t i = 0; i < node->mNumMeshes; i++) {
+                meshes.push_back(loadSubmesh(scene, scene->mMeshes[node->mMeshes[i]]));
+            }
+
+            for (uint32_t i = 0; i < node->mNumChildren; i++) {
+                procNode(scene, node->mChildren[i], procNode);
+            }
+        };
+
+        processNode(scene, scene->mRootNode, processNode);
+
+        return std::make_shared<ModelImpl>(std::move(meshes));
+    }
+
+    Texture Engine::importTexture(const std::string& filename, TextureType type) {
+        uint32_t materialTypeIndex = static_cast<uint32_t>(type) - 1;
+        COFFEE_ASSERT(materialTypeIndex >= 0 && materialTypeIndex < 10, "Invalid TextureType provided.");
+
+        std::string absoluteFilePath = std::filesystem::absolute(filename).generic_string();
+        auto& materialMap = loadedTextures_[materialTypeIndex];
+        auto iterator = materialMap.find(absoluteFilePath);
+
+        if (iterator != materialMap.end()) {
+            return iterator->second;
+        }
+
+        int32_t width {}, height {}, numberOfChannels {};
+
+        uint8_t* rawBytes = stbi_load(absoluteFilePath.c_str(), &width, &height, &numberOfChannels, STBI_rgb_alpha);
+        COFFEE_THROW_IF(rawBytes == nullptr, "STBI failed with reason: {}", stbi_failure_reason());
+
+        Texture loadedTexture = createTexture(
+            rawBytes, static_cast<size_t>(width) * height * 4, Format::R8G8B8A8SRGB, width, height, absoluteFilePath, type);
+        materialMap.emplace(absoluteFilePath, loadedTexture);
+
+        stbi_image_free(rawBytes);
+        return loadedTexture;
     }
 
     Buffer Engine::createBuffer(const BufferConfiguration& configuration) {
@@ -536,7 +830,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            presentModeCallbacks_[name] = std::move(callback);
+            presentModeCallbacks_[name] = callback;
         });
     }
 
@@ -551,7 +845,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            windowFocusCallbacks_[name] = std::move(callback);
+            windowFocusCallbacks_[name] = callback;
         });
     }
 
@@ -566,7 +860,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            windowResizeCallbacks_[name] = std::move(callback);
+            windowResizeCallbacks_[name] = callback;
         });
     }
 
@@ -581,7 +875,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            windowEnterCallbacks_[name] = std::move(callback);
+            windowEnterCallbacks_[name] = callback;
         });
     }
 
@@ -596,7 +890,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            mouseClickCallbacks_[name] = std::move(callback);
+            mouseClickCallbacks_[name] = callback;
         });
     }
 
@@ -611,7 +905,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            mousePositionCallbacks_[name] = std::move(callback);
+            mousePositionCallbacks_[name] = callback;
         });
     }
 
@@ -626,7 +920,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            mouseWheelCallbacks_[name] = std::move(callback);
+            mouseWheelCallbacks_[name] = callback;
         });
     }
 
@@ -641,7 +935,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            keyCallbacks_[name] = std::move(callback);
+            keyCallbacks_[name] = callback;
         });
     }
 
@@ -656,7 +950,7 @@ namespace coffee {
                 COFFEE_WARNING("Callback with name '{}' was replaced", name);
             }
 
-            charCallbacks_[name] = std::move(callback);
+            charCallbacks_[name] = callback;
         });
     }
 
@@ -712,6 +1006,49 @@ namespace coffee {
         addRequest([this, name]() {
             charCallbacks_.erase(name);
         });
+    }
+
+    void Engine::createNullTexture() {
+        defaultTexture_ = createTexture(
+            reinterpret_cast<const uint8_t*>("\255\255\255\255"), 4, Format::R8G8B8A8SRGB, 1U, 1U, "null", TextureType::None);
+    }
+
+    Texture Engine::createTexture(
+        const uint8_t* rawBytes,
+        size_t bufferSize,
+        Format format,
+        uint32_t width,
+        uint32_t height,
+        const std::string& filePath,
+        TextureType type
+    ) {
+        COFFEE_ASSERT(rawBytes != nullptr, "rawBytes was nullptr.");
+
+        ImageConfiguration textureConfiguration {};
+        textureConfiguration.type = ImageType::TwoDimensional;
+        textureConfiguration.format = format;
+        textureConfiguration.width = width;
+        textureConfiguration.height = height;
+        textureConfiguration.tiling = ImageTiling::Optimal;
+        textureConfiguration.usage = ImageUsage::TransferDestination | ImageUsage::Sampled;
+        textureConfiguration.initialState = ResourceState::Undefined;
+        textureConfiguration.viewType = ImageViewType::TwoDimensional;
+        textureConfiguration.aspects = ImageAspect::Color;
+        Image textureImage = backendImpl_->createImage(textureConfiguration);
+
+        BufferConfiguration stagingBufferConfiguration {};
+        stagingBufferConfiguration.usage = BufferUsage::TransferSource;
+        stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
+        stagingBufferConfiguration.instanceCount = 1U;
+        stagingBufferConfiguration.instanceSize = bufferSize;
+        Buffer stagingBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
+
+        stagingBuffer->write(rawBytes, bufferSize);
+        stagingBuffer->flush();
+
+        backendImpl_->copyBufferToImage(textureImage, stagingBuffer);
+
+        return std::make_shared<TextureImpl>(std::move(textureImage), filePath, type);
     }
 
 }

@@ -12,6 +12,9 @@
 #include <coffee/interfaces/deferred_requests.hpp>
 #include <coffee/interfaces/thread_pool.hpp>
 
+#include <coffee/objects/model.hpp>
+#include <coffee/objects/texture.hpp>
+
 #include <coffee/types.hpp>
 
 #include <chrono>
@@ -39,6 +42,9 @@ namespace coffee {
         Format getDepthFormat() const noexcept;
         uint32_t getCurrentImageIndex() const noexcept;
         const std::vector<Image>& getPresentImages() const noexcept;
+
+        Model importModel(const std::string& filename);
+        Texture importTexture(const std::string& filename, TextureType type);
 
         Buffer createBuffer(const BufferConfiguration& configuration);
         Image createImage(const ImageConfiguration& configuration);
@@ -133,6 +139,17 @@ namespace coffee {
         void removeCharCallback(const std::string& name);
 
     private:
+        void createNullTexture();
+
+        Texture createTexture(
+            const uint8_t* rawBytes,
+            size_t bufferSize,
+            Format format,
+            uint32_t width,
+            uint32_t height,
+            const std::string& filePath,
+            TextureType type);
+
         BackendSelect currentBackend_;
         std::unique_ptr<AbstractBackend> backendImpl_ = nullptr;
 
@@ -149,6 +166,9 @@ namespace coffee {
         std::map<std::string, std::function<void(const KeyEvent&)>> keyCallbacks_ {};
         std::map<std::string, std::function<void(char32_t)>> charCallbacks_ {};
         std::map<std::string, std::function<void(const PresentModeEvent&)>> presentModeCallbacks_ {};
+
+        Texture defaultTexture_;
+        std::array<std::unordered_map<std::string, Texture>, 10> loadedTextures_ {};
 
         struct PImpl;
         PImpl* pImpl_;

@@ -49,7 +49,6 @@ namespace coffee {
         static VkDescriptorType getBufferDescriptorType(VkBufferUsageFlags bufferFlags, bool isDynamic = false) noexcept;
         static VkDescriptorType getImageDescriptorType(VkImageUsageFlags imageFlags, bool withSampler = false) noexcept;
 
-        static VkDeviceSize getAlignment(const VkPhysicalDeviceProperties& properties, VkBufferUsageFlags flags) noexcept;
         static VkSampleCountFlagBits getUsableSampleCount(uint32_t sampleCount, const VkPhysicalDeviceProperties& properties) noexcept;
 
         static VkShaderStageFlagBits    transformShaderStage(ShaderStage stage) noexcept;

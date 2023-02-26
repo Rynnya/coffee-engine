@@ -91,16 +91,25 @@ namespace coffee {
         layout = pipelineImpl->layout;
     }
 
-    void VulkanCommandBuffer::bindDescriptorSets(const Pipeline& pipeline, const DescriptorSet& set) {
-        vkCmdBindDescriptorSets(
-            commandBuffer, 
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            static_cast<VulkanPipeline*>(pipeline.get())->layout,
-            0U,
-            1U,
-            &static_cast<VulkanDescriptorSet*>(set.get())->set,
-            0U,
-            nullptr);
+    void VulkanCommandBuffer::bindDescriptorSet(const DescriptorSet& set) {
+        COFFEE_ASSERT(layout != nullptr, "layout was nullptr. Did you forget to bindPipeline()?");
+
+        constexpr auto bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        vkCmdBindDescriptorSets(commandBuffer, bindPoint, layout, 0U, 1U, &static_cast<VulkanDescriptorSet*>(set.get())->set, 0U, nullptr);
+    }
+
+    void VulkanCommandBuffer::bindDescriptorSets(const std::vector<DescriptorSet>& sets) {
+        COFFEE_ASSERT(layout != nullptr, "layout was nullptr. Did you forget to bindPipeline()?");
+
+        std::vector<VkDescriptorSet> implSets {};
+
+        for (const auto& descriptorSet : sets) {
+            COFFEE_ASSERT(descriptorSet != nullptr, "Invalid DescriptorSet provided.");
+            implSets.push_back(static_cast<VulkanDescriptorSet*>(descriptorSet.get())->set);
+        }
+
+        constexpr auto bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        vkCmdBindDescriptorSets(commandBuffer, bindPoint, layout, 0U, static_cast<uint32_t>(implSets.size()), implSets.data(), 0U, nullptr);
     }
 
     //void VulkanCommandBuffer::clearAttachments(

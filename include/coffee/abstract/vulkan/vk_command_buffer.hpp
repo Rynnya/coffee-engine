@@ -19,7 +19,8 @@ namespace coffee {
         void endRenderPass() override;
 
         void bindPipeline(const Pipeline& pipeline) override;
-        void bindDescriptorSets(const Pipeline& pipeline, const DescriptorSet& set) override;
+        void bindDescriptorSet(const DescriptorSet& set) override;
+        void bindDescriptorSets(const std::vector<DescriptorSet>& sets) override;
         //void clearAttachments(
         //    const Framebuffer& framebuffer,
         //    const ClearColorValue& colorValues,

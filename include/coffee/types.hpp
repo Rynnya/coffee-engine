@@ -114,6 +114,19 @@ namespace coffee {
         Linear = 1
     };
 
+    enum class TextureType : uint32_t {
+        None = 0,
+        Diffuse = 1,
+        Specular = 2,
+        Ambient = 3,
+        Emissive = 4,
+        Height = 5,
+        Normals = 6,
+        Roughness = 7,
+        Metallic = 8,
+        AmbientOcclusion = 9
+    };
+
     enum class SamplerFilter : uint32_t {
         // Also knows as Point
         Nearest = 0,
@@ -425,7 +438,6 @@ namespace coffee {
         MemoryProperty properties = MemoryProperty::HostVisible;
         uint32_t instanceCount = 0U;
         uint32_t instanceSize = 0U;
-        uint32_t alignment = 1U;
     };
 
     struct ImageConfiguration {

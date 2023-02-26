@@ -201,20 +201,6 @@ namespace coffee {
         return VK_DESCRIPTOR_TYPE_MAX_ENUM;
     }
 
-    VkDeviceSize VkUtils::getAlignment(const VkPhysicalDeviceProperties& properties, VkBufferUsageFlags flags) noexcept {
-        switch (flags) {
-            case VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT:
-            case VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT:
-                return properties.limits.minTexelBufferOffsetAlignment;
-            case VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT:
-                return properties.limits.minUniformBufferOffsetAlignment;
-            case VK_BUFFER_USAGE_STORAGE_BUFFER_BIT:
-                return properties.limits.minStorageBufferOffsetAlignment;
-            default:
-                return 1ULL;
-        }
-    }
-
     VkSampleCountFlagBits VkUtils::getUsableSampleCount(uint32_t sampleCount, const VkPhysicalDeviceProperties& properties) noexcept {
         size_t powerOf2SampleCount = Math::roundToPowerOf2(sampleCount);
         VkSampleCountFlags counts = properties.limits.framebufferColorSampleCounts & properties.limits.framebufferDepthSampleCounts;

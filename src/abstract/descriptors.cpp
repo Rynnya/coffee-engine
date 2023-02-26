@@ -116,6 +116,16 @@ namespace coffee {
         return *this;
     }
 
+    DescriptorWriter& DescriptorWriter::addTexture(
+        uint32_t bindingIndex,
+        ResourceState state,
+        const Texture& texture,
+        const Sampler& sampler
+    ) {
+        COFFEE_ASSERT(texture != nullptr, "Invalid Texture provided.");
+        return this->addImage(bindingIndex, state, texture->texture_, sampler);
+    }
+
     DescriptorWriter& DescriptorWriter::addSampler(uint32_t bindingIndex, const Sampler& sampler) {
         COFFEE_ASSERT(sampler != nullptr, "Invalid sampler provided.");
 
