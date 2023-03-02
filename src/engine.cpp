@@ -346,38 +346,29 @@ namespace coffee {
 
         std::filesystem::path parentDirectory = std::filesystem::absolute(filename).parent_path();
 
-        auto assimpTypeToEngineType = [](aiTextureType type) -> TextureType {
+        auto assimpTypeToEngineType = [](aiTextureType type) -> std::tuple<TextureType, Format, int32_t> {
             switch (type) {
                 default:
                 case aiTextureType_NONE:
-                    return TextureType::None;
+                    return { TextureType::None, Format::R8UNorm, STBI_grey };
                 case aiTextureType_DIFFUSE:
-                    return TextureType::Diffuse;
+                    return { TextureType::Diffuse, Format::R8G8B8A8SRGB, STBI_rgb_alpha };
                 case aiTextureType_SPECULAR:
-                    return TextureType::Specular;
+                    return { TextureType::Specular, Format::R8UNorm, STBI_grey };
                 case aiTextureType_AMBIENT:
-                    return TextureType::Ambient;
+                    return { TextureType::Ambient, Format::R8UNorm, STBI_grey };
                 case aiTextureType_EMISSIVE:
-                    return TextureType::Emissive;
+                    return { TextureType::Emissive, Format::R8G8B8A8SRGB, STBI_rgb_alpha };
                 case aiTextureType_HEIGHT:
-                    return TextureType::Height;
+                    return { TextureType::Height, Format::R8UNorm, STBI_grey };
                 case aiTextureType_NORMALS:
-                    return TextureType::Normals;
+                    return { TextureType::Normals, Format::R8G8B8A8UNorm, STBI_rgb_alpha };
                 case aiTextureType_DIFFUSE_ROUGHNESS:
-                    return TextureType::Roughness;
+                    return { TextureType::Roughness, Format::R8UNorm, STBI_grey };
                 case aiTextureType_METALNESS:
-                    return TextureType::Metallic;
+                    return { TextureType::Metallic, Format::R8UNorm, STBI_grey };
                 case aiTextureType_AMBIENT_OCCLUSION:
-                    return TextureType::AmbientOcclusion;
-            }
-        };
-
-        auto assimpTypeToFormat = [](aiTextureType type) {
-            switch (type) {
-                case aiTextureType_DIFFUSE:
-                    return Format::R8G8B8A8SRGB;
-                default:
-                    return Format::R8G8B8A8UNorm;
+                    return { TextureType::AmbientOcclusion, Format::R8UNorm, STBI_grey };
             }
         };
 
@@ -435,15 +426,15 @@ namespace coffee {
             return std::make_pair(verticesBuffer, indicesBuffer);
         };
 
-        auto loadMaterialTextures = [this, &assimpTypeToEngineType, &assimpTypeToFormat, &parentDirectory](
+        auto loadMaterialTextures = [this, &assimpTypeToEngineType, &parentDirectory](
             Materials& materials,
             const aiScene* scene,
             aiMaterial* material,
             aiTextureType textureType
         ) -> void {
-            TextureType engineType = assimpTypeToEngineType(textureType);
-            uint32_t materialTypeIndex = static_cast<uint32_t>(engineType) - 1;
-            COFFEE_ASSERT(materialTypeIndex >= 0 && materialTypeIndex < 10, "Invalid TextureType provided.");
+            auto&& [engineType, formatType, stbiType] = assimpTypeToEngineType(textureType);
+            uint32_t materialTypeIndex = Math::indexOfHighestBit(static_cast<uint32_t>(engineType));
+            COFFEE_ASSERT(materialTypeIndex >= 0 && materialTypeIndex <= 8, "Invalid TextureType provided.");
 
             for (uint32_t i = 0; i < material->GetTextureCount(textureType); i++) {
                 aiString nativeMaterialPath {};
@@ -463,19 +454,19 @@ namespace coffee {
                     }
 
                     uint8_t* rawBytes = stbi_load_from_memory(
-                        reinterpret_cast<const uint8_t*>(embeddedTexture->pcData), bufferSize, &width, &height, &numberOfChannels, STBI_rgb_alpha);
+                        reinterpret_cast<const uint8_t*>(embeddedTexture->pcData), bufferSize, &width, &height, &numberOfChannels, stbiType);
                     COFFEE_THROW_IF(rawBytes == nullptr, "STBI failed with reason: {}", stbi_failure_reason());
 
                     newTexture = createTexture(
-                        rawBytes, 4ULL * width * height, assimpTypeToFormat(textureType), width, height, materialPath, engineType);
+                        rawBytes, static_cast<size_t>(stbiType) * width * height, formatType, width, height, materialPath, engineType);
                     stbi_image_free(rawBytes);
                 }
                 else {
-                    uint8_t* rawBytes = stbi_load(materialPath.c_str(), &width, &height, &numberOfChannels, STBI_rgb_alpha);
+                    uint8_t* rawBytes = stbi_load(materialPath.c_str(), &width, &height, &numberOfChannels, stbiType);
                     COFFEE_THROW_IF(rawBytes == nullptr, "STBI failed with reason: {}", stbi_failure_reason());
 
                     newTexture = createTexture(
-                        rawBytes, static_cast<size_t>(width) * height * 4, assimpTypeToFormat(textureType), width, height, materialPath, engineType);
+                        rawBytes, static_cast<size_t>(stbiType) * width * height, formatType, width, height, materialPath, engineType);
                     stbi_image_free(rawBytes);
                 }
 
@@ -526,16 +517,13 @@ namespace coffee {
                 loadMaterialTextures(materials, scene, material, aiTextureType_SPECULAR);
                 loadMaterialTextures(materials, scene, material, aiTextureType_AMBIENT);
                 loadMaterialTextures(materials, scene, material, aiTextureType_NORMALS);
+                loadMaterialTextures(materials, scene, material, aiTextureType_METALNESS);
+                loadMaterialTextures(materials, scene, material, aiTextureType_DIFFUSE_ROUGHNESS);
 
-                aiColor3D diffuseColor { 0.0f, 0.0f, 0.0f };
-                if (material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuseColor) == aiReturn_SUCCESS) {
-                    materials.modifiers.diffuseColor.r = diffuseColor.r;
-                    materials.modifiers.diffuseColor.g = diffuseColor.g;
-                    materials.modifiers.diffuseColor.b = diffuseColor.b;
-                }
-                else {
-                    materials.modifiers.diffuseColor = { 1.0f, 1.0f, 1.0f };
-                }
+                aiColor3D diffuseColor { 1.0f, 1.0f, 1.0f };
+                materials.modifiers.diffuseColor.r = diffuseColor.r;
+                materials.modifiers.diffuseColor.g = diffuseColor.g;
+                materials.modifiers.diffuseColor.b = diffuseColor.b;
 
                 aiColor3D specularColor { 0.0f, 0.0f, 0.0f };
                 materials.modifiers.specularColor.r = specularColor.r;
@@ -553,7 +541,9 @@ namespace coffee {
                     materials.modifiers.ambientColor = { 1.0f, 1.0f, 1.0f, 0.02f };
                 }
 
-                material->Get(AI_MATKEY_SHININESS, materials.modifiers.shininess);
+                material->Get(AI_MATKEY_SHININESS, materials.modifiers.shininessExponent);
+                material->Get(AI_MATKEY_METALLIC_FACTOR, materials.modifiers.metallicFactor);
+                material->Get(AI_MATKEY_ROUGHNESS_FACTOR, materials.modifiers.roughnessFactor);
             }
             
             auto [verticesBuffer, indicesBuffer] = createNativeBuffers(vertices, indices);

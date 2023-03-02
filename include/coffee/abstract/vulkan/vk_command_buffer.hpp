@@ -21,15 +21,9 @@ namespace coffee {
         void bindPipeline(const Pipeline& pipeline) override;
         void bindDescriptorSet(const DescriptorSet& set) override;
         void bindDescriptorSets(const std::vector<DescriptorSet>& sets) override;
-        //void clearAttachments(
-        //    const Framebuffer& framebuffer,
-        //    const ClearColorValue& colorValues,
-        //    const std::optional<ClearDepthStencilValue>& depthValues,
-        //    const Offset2D& offset,
-        //    const Extent2D& clearArea) override;
 
-        void setViewport(float width, float height, float x, float y, float minDepth, float maxDepth) override;
-        void setScissor(uint32_t width, uint32_t height, uint32_t x, uint32_t y) override;
+        void setViewport(const Extent2D& area, const Offset2D& offset, float minDepth, float maxDepth) override;
+        void setScissor(const Extent2D& area, const Offset2D& offset) override;
         void setBlendColors(float red, float green, float blue, float alpha) override;
 
         void pushConstants(ShaderStage shaderStages, const void* data, uint32_t size, uint32_t offset) override;

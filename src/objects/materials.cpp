@@ -4,6 +4,12 @@
 
 namespace coffee {
 
+    static uint32_t textureTypeToIndex(TextureType textureType) {
+        COFFEE_ASSERT(Math::hasSingleBit(static_cast<uint32_t>(textureType)), "textureType must set ONLY one bit.");
+
+        return Math::indexOfHighestBit(static_cast<uint32_t>(textureType));
+    }
+
     Materials::Materials(const Texture& defaultTexture) : defaultTexture { defaultTexture } {
         COFFEE_ASSERT(defaultTexture != nullptr, "Invalid defaultTexture provided.");
 
@@ -11,27 +17,26 @@ namespace coffee {
     }
 
     void Materials::write(const Texture& texture) {
-        uint32_t nativeType = static_cast<uint32_t>(texture->getType()) - 1;
+        TextureType type = texture->getType();
 
-        COFFEE_ASSERT(nativeType >= 0 && nativeType <= 8, "Invalid type index provided. Update this assert if new materials where added.");
+        textures_[textureTypeToIndex(type)] = texture;
 
-        textures_[nativeType] = texture;
+        if (texture != defaultTexture) {
+            reinterpret_cast<uint32_t&>(textureFlags_) |= static_cast<uint32_t>(type);
+        }
     }
 
     const Texture& Materials::read(TextureType type) const noexcept {
-        uint32_t nativeType = static_cast<uint32_t>(type) - 1;
-
-        COFFEE_ASSERT(nativeType >= 0 && nativeType <= 8, "Invalid type index provided. Update this assert if new materials where added.");
-
-        return textures_[nativeType];
+        return textures_[textureTypeToIndex(type)];
     }
 
     void Materials::reset(TextureType type) {
-        uint32_t nativeType = static_cast<uint32_t>(type) - 1;
+        textures_[textureTypeToIndex(type)] = defaultTexture;
+        reinterpret_cast<uint32_t&>(textureFlags_) &= ~static_cast<uint32_t>(type);
+    }
 
-        COFFEE_ASSERT(nativeType >= 0 && nativeType <= 8, "Invalid type index provided. Update this assert if new materials where added.");
-
-        textures_[nativeType] = defaultTexture;
+    TextureType Materials::getTextureFlags() const noexcept {
+        return textureFlags_;
     }
 
 }

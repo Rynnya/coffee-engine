@@ -116,15 +116,15 @@ namespace coffee {
 
     enum class TextureType : uint32_t {
         None = 0,
-        Diffuse = 1,
-        Specular = 2,
-        Ambient = 3,
-        Emissive = 4,
-        Height = 5,
-        Normals = 6,
-        Roughness = 7,
-        Metallic = 8,
-        AmbientOcclusion = 9
+        Diffuse = 1 << 0,
+        Specular = 1 << 1,
+        Ambient = 1 << 2,
+        Emissive = 1 << 3,
+        Height = 1 << 4,
+        Normals = 1 << 5,
+        Roughness = 1 << 6,
+        Metallic = 1 << 7,
+        AmbientOcclusion = 1 << 8
     };
 
     enum class SamplerFilter : uint32_t {
@@ -516,7 +516,7 @@ namespace coffee {
     };
 
     struct InputAssembly {
-        Topology topology = Topology::Line;
+        Topology topology = Topology::Triangle;
         // On every implementation only 32-bit indices allowed. Using 16-bit indices is undefined behaviour
         bool primitiveRestartEnable = false;
     };
@@ -550,6 +550,7 @@ namespace coffee {
         bool logicOpEnable = false;
         LogicOp logicOp = LogicOp::Copy;
         ColorComponent colorWriteMask = static_cast<ColorComponent>(15U);
+        // ^ Same as coffee::ColorComponent::Red | coffee::ColorComponent::Green | coffee::ColorComponent::Blue | coffee::ColorComponent::Alpha
     };
 
     struct StencilOpState {
@@ -615,6 +616,7 @@ namespace coffee {
         float mipLodBias = 0.0f;
         bool anisotropyEnable = false;
         // Must be power of 2, otherwise will be round up to nearest power of 2
+        // Set this value to huge value to get device max anisotropy
         uint32_t maxAnisotropy = 0U;
         CompareOp compareOp = CompareOp::Never;
         BorderColor borderColor = BorderColor::TransparentBlack;

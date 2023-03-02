@@ -10,8 +10,8 @@ namespace coffee {
 
     class ShaderProgram : NonCopyable {
     public:
-        ShaderProgram() noexcept = default;
-        ~ShaderProgram() noexcept = default;
+        ShaderProgram() = default;
+        ~ShaderProgram() = default;
 
         ShaderProgram(ShaderProgram&&) noexcept;
         ShaderProgram& operator=(ShaderProgram&&) noexcept;

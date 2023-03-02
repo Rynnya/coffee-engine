@@ -176,6 +176,8 @@ namespace coffee {
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
 
+        COFFEE_ASSERT(!attachments.empty(), "No attachments was provided to render pass.");
+
         COFFEE_THROW_IF(
             vkCreateRenderPass(device_.getLogicalDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS,
             "Failed to create render pass!");

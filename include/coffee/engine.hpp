@@ -168,7 +168,7 @@ namespace coffee {
         std::map<std::string, std::function<void(const PresentModeEvent&)>> presentModeCallbacks_ {};
 
         Texture defaultTexture_;
-        std::array<std::unordered_map<std::string, Texture>, 10> loadedTextures_ {};
+        std::array<std::unordered_map<std::string, Texture>, 9> loadedTextures_ {};
 
         struct PImpl;
         PImpl* pImpl_;

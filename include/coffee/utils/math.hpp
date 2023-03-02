@@ -50,6 +50,21 @@ namespace coffee {
             return bitmask & ~getHighestBit(bitmask);
         }
 
+        static constexpr uint32_t indexOfHighestBit(uint32_t bitmask) noexcept {
+            constexpr size_t multiplyDeBruijnBitPosition[32] = {
+                0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30,
+                8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31
+            };
+
+            bitmask |= bitmask >> 1;
+            bitmask |= bitmask >> 2;
+            bitmask |= bitmask >> 4;
+            bitmask |= bitmask >> 8;
+            bitmask |= bitmask >> 16;
+
+            return multiplyDeBruijnBitPosition[static_cast<uint32_t>(bitmask * 0x07C4ACDDU) >> 27];
+        }
+
         static constexpr size_t countActiveBits(size_t bitmask) noexcept {
             // Reference: https://en.wikipedia.org/wiki/Hamming_weight#Efficient_implementation
 

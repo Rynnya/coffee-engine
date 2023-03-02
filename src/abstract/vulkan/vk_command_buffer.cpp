@@ -112,80 +112,40 @@ namespace coffee {
         vkCmdBindDescriptorSets(commandBuffer, bindPoint, layout, 0U, static_cast<uint32_t>(implSets.size()), implSets.data(), 0U, nullptr);
     }
 
-    //void VulkanCommandBuffer::clearAttachments(
-    //    const Framebuffer& framebuffer,
-    //    const ClearColorValue& colorValues,
-    //    const std::optional<ClearDepthStencilValue>& depthValues,
-    //    const Offset2D& offset, 
-    //    const Extent2D& clearArea
-    //) {
-    //    COFFEE_ASSERT(renderPassActive, "No render pass is running. You must run beginRenderPass() before clearAttachments().");
-    //    COFFEE_ASSERT(
-    //        !hasDepthAttachment_ || (hasDepthAttachment_ && depthValues.has_value()),
-    //        "Render pass have a depth attachment, but it wasn't provided.");
+    void VulkanCommandBuffer::setViewport(const Extent2D& area, const Offset2D& offset, float minDepth, float maxDepth) {
+        COFFEE_ASSERT(area.width > 0U, "Width must be more than 0.");
+        COFFEE_ASSERT(area.height > 0U, "Height must be more than 0.");
 
-    //    std::vector<VkClearAttachment> clearValues {};
-    //    clearValues.resize(1ULL + hasDepthAttachment_);
-
-    //    clearValues[0].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    //    clearValues[0].colorAttachment = 0;
-    //    clearValues[0].clearValue.color.float32[0] = colorValues.float32[0];
-    //    clearValues[0].clearValue.color.float32[1] = colorValues.float32[1];
-    //    clearValues[0].clearValue.color.float32[2] = colorValues.float32[2];
-    //    clearValues[0].clearValue.color.float32[3] = colorValues.float32[3];
-
-    //    if (hasDepthAttachment_) {
-    //        clearValues[1].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-    //        clearValues[1].clearValue.depthStencil.depth = depthValues->depth;
-    //        clearValues[1].clearValue.depthStencil.stencil = depthValues->stencil;
-    //    }
-
-    //    std::vector<VkClearRect> rects {};
-    //    rects.resize(1ULL + hasDepthAttachment_);
-
-    //    for (auto& clearRect : rects) {
-    //        clearRect.rect.offset.x = offset.x;
-    //        clearRect.rect.offset.y = offset.y;
-    //        clearRect.rect.extent.width = clearArea.width == 0 ? renderArea_.width : clearArea.width;
-    //        clearRect.rect.extent.height = clearArea.height == 0 ? renderArea_.height : clearArea.height;
-
-    //        clearRect.layerCount = 1;
-    //    }
-
-    //    vkCmdClearAttachments(
-    //        commandBuffer, 
-    //        static_cast<uint32_t>(clearValues.size()),
-    //        clearValues.data(),
-    //        static_cast<uint32_t>(rects.size()),
-    //        rects.data());
-    //}
-
-    void VulkanCommandBuffer::setViewport(float width, float height, float x, float y, float minDepth, float maxDepth) {
-        COFFEE_ASSERT(width > 0.0f, "Width must be more than 0.");
-        COFFEE_ASSERT(height > 0.0f, "Height must be more than 0.");
+        COFFEE_ASSERT(
+            std::numeric_limits<int32_t>::max() - area.width > offset.x, "Addition of width and X will cause an signed integer overflow.");
+        COFFEE_ASSERT(
+            std::numeric_limits<int32_t>::max() - area.height > offset.y, "Addition of height and Y will cause an signed integer overflow.");
 
         VkViewport viewport {}; 
-        viewport.x = x;
-        viewport.y = y;
-        viewport.width = width;
-        viewport.height = height;
+        viewport.x = offset.x;
+        viewport.y = offset.y;
+        viewport.width = area.width;
+        viewport.height = area.height;
         viewport.minDepth = minDepth;
         viewport.maxDepth = maxDepth;
 
         vkCmdSetViewport(commandBuffer, 0U, 1U, &viewport);
     }
 
-    void VulkanCommandBuffer::setScissor(uint32_t width, uint32_t height, uint32_t x, uint32_t y) {
+    void VulkanCommandBuffer::setScissor(const Extent2D& area, const Offset2D& offset) {
+        COFFEE_ASSERT(area.width > 0U, "Width must be more than 0.");
+        COFFEE_ASSERT(area.height > 0U, "Height must be more than 0.");
+
         COFFEE_ASSERT(
-            std::numeric_limits<int32_t>::max() - width > x, "Addition of width and X will cause an signed integer overflow.");
+            std::numeric_limits<int32_t>::max() - area.width > offset.x, "Addition of width and X will cause an signed integer overflow.");
         COFFEE_ASSERT(
-            std::numeric_limits<int32_t>::max() - height > y, "Addition of height and Y will cause an signed integer overflow.");
+            std::numeric_limits<int32_t>::max() - area.height > offset.y, "Addition of height and Y will cause an signed integer overflow.");
 
         VkRect2D scissor {};
-        scissor.offset.x = x;
-        scissor.offset.y = y;
-        scissor.extent.width = width;
-        scissor.extent.height = height;
+        scissor.offset.x = offset.x;
+        scissor.offset.y = offset.y;
+        scissor.extent.width = area.width;
+        scissor.extent.height = area.height;
 
         vkCmdSetScissor(commandBuffer, 0U, 1U, &scissor);
     }

@@ -32,9 +32,8 @@ namespace coffee {
         //    const Offset2D& offset = {},
         //    const Extent2D& clearArea = {}) = 0;
 
-        virtual void setViewport(
-            float width, float height, float x = 0.0f, float y = 0.0f, float minDepth = 0.0f, float maxDepth = 1.0f) = 0;
-        virtual void setScissor(uint32_t width, uint32_t height, uint32_t x = 0U, uint32_t y = 0U) = 0;
+        virtual void setViewport(const Extent2D& area, const Offset2D& offset = {}, float minDepth = 0.0f, float maxDepth = 1.0f) = 0;
+        virtual void setScissor(const Extent2D& area, const Offset2D& offset = {}) = 0;
         virtual void setBlendColors(float red, float green, float blue, float alpha) = 0;
 
         template <typename T, std::enable_if_t<!std::is_pointer_v<T> && !std::is_null_pointer_v<T>, bool> = true>
