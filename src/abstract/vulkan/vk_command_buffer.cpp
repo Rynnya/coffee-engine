@@ -43,11 +43,23 @@ namespace coffee {
         const Extent2D& renderArea,
         const Offset2D& offset
     ) {
-        COFFEE_ASSERT(
-            !renderPassActive, "Vulkan doesn't allow you to nest render passes. You must run endRenderPass() before beginRenderPass().");
+        [[ maybe_unused ]] constexpr auto verifyBounds = [](
+            const Framebuffer& framebuffer,
+            const Extent2D& renderArea,
+            const Offset2D& offset
+        ) noexcept -> bool {
+            uint32_t combinedWidth = renderArea.width + offset.x;
+            uint32_t combinedHeight = renderArea.height + offset.y;
+
+            return combinedWidth <= framebuffer->getWidth() && combinedHeight <= framebuffer->getHeight();
+        };
+
+        COFFEE_ASSERT(!renderPassActive, "Vulkan doesn't allow you to nest render passes. You must run endRenderPass() before beginRenderPass().");
+        COFFEE_ASSERT(renderPass != nullptr, "Invalid RenderPass provided.");
+        COFFEE_ASSERT(framebuffer != nullptr, "Invalid Framebuffer provided.");
         COFFEE_ASSERT(renderArea.width != 0 && renderArea.height != 0, "Invalid renderArea provided, both width and height must be more than 0.");
-        COFFEE_ASSERT(
-            renderArea.width > offset.x && renderArea.height > offset.y, "Both offset x and y must be less than renderArea width and height.");
+        COFFEE_ASSERT(offset.x >= 0 && offset.y >= 0, "Invalid offset provided, both x and y must be more or equal to 0.");
+        COFFEE_ASSERT(verifyBounds(framebuffer, renderArea, offset), "renderArea + offset must be less or equal to framebuffer sizes.");
 
         VulkanRenderPass* renderPassImpl = static_cast<VulkanRenderPass*>(renderPass.get());
         VulkanFramebuffer* framebufferImpl = static_cast<VulkanFramebuffer*>(framebuffer.get());
@@ -81,6 +93,8 @@ namespace coffee {
     }
 
     void VulkanCommandBuffer::bindPipeline(const Pipeline& pipeline) {
+        COFFEE_ASSERT(pipeline != nullptr, "Invalid Pipeline provided.");
+
         VulkanPipeline* pipelineImpl = static_cast<VulkanPipeline*>(pipeline.get());
 
         vkCmdBindPipeline(
@@ -93,6 +107,8 @@ namespace coffee {
 
     void VulkanCommandBuffer::bindDescriptorSet(const DescriptorSet& set) {
         COFFEE_ASSERT(layout != nullptr, "layout was nullptr. Did you forget to bindPipeline()?");
+        COFFEE_ASSERT(set != nullptr, "Invalid DescriptorSet provided.");
+        // TODO: Add assert that checks if current pipeline layout matches provided descriptor set
 
         constexpr auto bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         vkCmdBindDescriptorSets(commandBuffer, bindPoint, layout, 0U, 1U, &static_cast<VulkanDescriptorSet*>(set.get())->set, 0U, nullptr);
@@ -100,6 +116,7 @@ namespace coffee {
 
     void VulkanCommandBuffer::bindDescriptorSets(const std::vector<DescriptorSet>& sets) {
         COFFEE_ASSERT(layout != nullptr, "layout was nullptr. Did you forget to bindPipeline()?");
+        // TODO: Add assert that checks if current pipeline layout matches provided descriptor sets
 
         std::vector<VkDescriptorSet> implSets {};
 

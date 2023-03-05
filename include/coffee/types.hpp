@@ -565,7 +565,7 @@ namespace coffee {
     struct DepthStencilInfo {
         bool depthTestEnable = true;
         bool depthWriteEnable = true;
-        CompareOp depthCompareOp = CompareOp::Less;
+        CompareOp depthCompareOp = CompareOp::LessEqual;
         bool stencilTestEnable = false;
         uint8_t stencilReadMask = 0U;
         uint8_t stencilWriteMask = 0U;
