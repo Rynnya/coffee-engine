@@ -5,21 +5,6 @@
 
 namespace coffee {
 
-    // We don't use GLM because some might prefer other library that can handle math stuff
-
-    struct Vec3 {
-        union { float x, r, s; };
-        union { float y, g, t; };
-        union { float z, b, p; };
-    };
-
-    struct Vec4 {
-        union { float x, r, s; };
-        union { float y, g, t; };
-        union { float z, b, p; };
-        union { float w, a, q; };
-    };
-
     class Math {
     public:
         static constexpr size_t getLowestBit(size_t bitmask) noexcept {

@@ -9,8 +9,9 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-#include <stb_image.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <stb_image.h>
 
 #include <chrono>
 #include <filesystem>
