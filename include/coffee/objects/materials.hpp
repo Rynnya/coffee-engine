@@ -29,12 +29,6 @@ namespace coffee {
             // RGB Formula if specular texture is provided: specularTexture.rgb * specularColor
             // RGB Formula if specular texture isn't provided: specularColor
             glm::vec3 specularColor {};
-            // Ambient color component of mesh
-            // RGB Formula: ambientColor.rgb * ambientColor.a * alreadyCalculatedDiffuseColor
-            // Alpha component used as overall intensity (default value is 0.02, only set when ambient is not provided by model)
-            glm::vec4 ambientColor {};
-            // Shininess must be used as exponent for Blinn-Phong equation
-            float shininessExponent = 1.0f;
             // Metallic factor must be used in PBR equations
             float metallicFactor = 0.0f;
             // Roughness factor must be used in PBR equations
@@ -43,7 +37,7 @@ namespace coffee {
 
         const Texture defaultTexture;
     private:
-        std::array<Texture, 9> textures_;
+        std::array<Texture, 7> textures_;
         TextureType textureFlags_ = TextureType::None;
     };
 

@@ -643,6 +643,8 @@ namespace coffee {
                 return VK_FORMAT_D32_SFLOAT;
             case Format::D32SFloatS8UInt:
                 return VK_FORMAT_D32_SFLOAT_S8_UINT;
+            case Format::R11G11B10UFloat:
+                return VK_FORMAT_B10G11R11_UFLOAT_PACK32;
             default:
                 COFFEE_ASSERT(false, "Invalid Format provided. This should not happen.");
         }
@@ -854,6 +856,8 @@ namespace coffee {
                 return Format::D32SFloat;
             case VK_FORMAT_D32_SFLOAT_S8_UINT:
                 return Format::D32SFloatS8UInt;
+            case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
+                return Format::R11G11B10UFloat;
             default:
                 COFFEE_ASSERT(false, "Invalid Format provided. This should not happen.");
         }

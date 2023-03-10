@@ -37,7 +37,7 @@ namespace coffee {
             instance_, "vkDestroyDebugUtilsMessengerEXT"));
 
         if (func != nullptr) {
-            static_cast<void>(func(instance_, debugMessenger_, nullptr));
+            func(instance_, debugMessenger_, nullptr);
         }
 
         vkDestroyDescriptorPool(logicalDevice_, descriptorPool_, nullptr);
@@ -204,7 +204,7 @@ namespace coffee {
 
     void VulkanDevice::createInstance() {
         VkApplicationInfo appInfo { VK_STRUCTURE_TYPE_APPLICATION_INFO };
-        appInfo.apiVersion = VK_API_VERSION_1_2;
+        appInfo.apiVersion = VK_API_VERSION_1_0;
 
         VkInstanceCreateInfo createInfo { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
         createInfo.pApplicationInfo = &appInfo;

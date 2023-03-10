@@ -80,9 +80,15 @@ namespace coffee {
             (memoryFlags_ & MemoryProperty::HostVisible) == MemoryProperty::HostVisible,
             "Calling write() while buffer isn't host visible is forbidden.");
         COFFEE_ASSERT(data != nullptr, "data was nullptr.");
-        COFFEE_ASSERT(size < std::numeric_limits<size_t>::max() - offset, "Combination of size and offset will cause an overflow.");
+        COFFEE_ASSERT(size < std::numeric_limits<size_t>::max() - offset, "Combination of size and offset will cause an arithmetic overflow.");
+        COFFEE_ASSERT(offset + size <= getTotalSize(), "Combination of size and offset will cause an buffer overflow.");
 
         std::scoped_lock<std::mutex> lock { allocationMutex_ };
+
+        if (alwaysKeepMapped_) {
+            std::memcpy(reinterpret_cast<uint8_t*>(mappedMemory_) + offset, data, size);
+            return;
+        }
 
         if (this->map(size, offset) == VK_SUCCESS) {
             std::memcpy(mappedMemory_, data, size);
@@ -163,9 +169,11 @@ namespace coffee {
     }
 
     VkResult VulkanBuffer::map(size_t size, size_t offset) {
-        if (alwaysKeepMapped_ || (mappedSize_ == size && mappedOffset_ == offset)) {
+        if (mappedSize_ == size && mappedOffset_ == offset) {
             return VK_SUCCESS;
         }
+
+        // TODO: Implement subrange support, so memory won't be reallocated when it's already in range
 
         if (mappedMemory_ != nullptr) {
             vkUnmapMemory(device_.getLogicalDevice(), memory);

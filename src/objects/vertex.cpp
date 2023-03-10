@@ -34,8 +34,7 @@ namespace std {
         hashCombine(normalSeed, hasher(vertex.normal.y));
         hashCombine(normalSeed, hasher(vertex.normal.z));
 
-        hashCombine(texCoordsSeed, hasher(vertex.texCoords.x));
-        hashCombine(texCoordsSeed, hasher(vertex.texCoords.y));
+        hashCombine(texCoordsSeed, hasher(vertex.texCoords));
 
         hashCombine(tangentSeed, hasher(vertex.tangent.x));
         hashCombine(tangentSeed, hasher(vertex.tangent.y));

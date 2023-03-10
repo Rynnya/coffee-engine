@@ -118,13 +118,11 @@ namespace coffee {
         None = 0,
         Diffuse = 1 << 0,
         Specular = 1 << 1,
-        Ambient = 1 << 2,
+        Normals = 1 << 2,
         Emissive = 1 << 3,
-        Height = 1 << 4,
-        Normals = 1 << 5,
-        Roughness = 1 << 6,
-        Metallic = 1 << 7,
-        AmbientOcclusion = 1 << 8
+        Roughness = 1 << 4,
+        Metallic = 1 << 5,
+        AmbientOcclusion = 1 << 6
     };
 
     enum class SamplerFilter : uint32_t {
@@ -234,7 +232,8 @@ namespace coffee {
         D16UNormS8UInt = 97,
         D24UNormS8UInt = 98,
         D32SFloat = 99,
-        D32SFloatS8UInt = 100
+        D32SFloatS8UInt = 100,
+        R11G11B10UFloat = 101
     };
 
     enum class Topology : uint32_t {

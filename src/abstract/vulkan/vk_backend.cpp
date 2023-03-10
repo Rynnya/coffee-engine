@@ -60,6 +60,7 @@ namespace coffee {
     }
 
     void VulkanBackend::sendCommandBuffer(CommandBuffer&& commandBuffer) {
+        std::unique_lock<std::mutex> lock { commandBuffersMutex_ };
         commandBuffers_.push_back(std::move(commandBuffer));
     }
 

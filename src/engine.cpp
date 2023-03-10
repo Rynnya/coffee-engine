@@ -11,13 +11,44 @@
 #include <assimp/postprocess.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/packing.hpp>
 #include <stb_image.h>
 
 #include <chrono>
 #include <filesystem>
 #include <stdexcept>
+#include <fstream>
 
 namespace coffee {
+
+    template <size_t Size>
+    class ReadOnlyStream {
+    public:
+        ReadOnlyStream(std::ifstream& inputStream) : inputStream_ { inputStream } {}
+        ~ReadOnlyStream() noexcept = default;
+
+        template <typename T>
+        inline T read() {
+            static_assert(!std::is_pointer_v<T> && !std::is_null_pointer_v<T>, "Don't use pointers, just use readBuffer.");
+            COFFEE_ASSERT(Size >= sizeof(T), "Insufficient buffer, please increase it's template size.");
+
+            static_cast<void>(inputStream_.read(underlyingBuffer_, sizeof(T)));
+            return *reinterpret_cast<T*>(underlyingBuffer_);
+        }
+
+        template <typename T>
+        inline T* readBuffer(size_t amount) {
+            static_assert(!std::is_pointer_v<T> && !std::is_null_pointer_v<T>, "Don't use pointers");
+            COFFEE_ASSERT(Size >= amount * sizeof(T), "Insufficient buffer, please increase it's template size.");
+
+            static_cast<void>(inputStream_.read(underlyingBuffer_, amount * sizeof(T)));
+            return reinterpret_cast<T*>(underlyingBuffer_);
+        }
+
+    private:
+        char underlyingBuffer_[Size] {};
+        std::ifstream& inputStream_;
+    };
 
     struct Engine::PImpl {
         GLFWmonitor* monitorHandle = nullptr;
@@ -336,8 +367,8 @@ namespace coffee {
             //aiProcess_MakeLeftHanded |
             aiProcess_GenNormals |
             aiProcess_CalcTangentSpace |
-            aiProcess_FlipUVs |
-            aiProcess_PreTransformVertices;
+            //aiProcess_PreTransformVertices |
+            aiProcess_FlipUVs;
 
         const aiScene* scene = importer.ReadFile(filename, processFlags);
 
@@ -356,14 +387,10 @@ namespace coffee {
                     return { TextureType::Diffuse, Format::R8G8B8A8SRGB, STBI_rgb_alpha };
                 case aiTextureType_SPECULAR:
                     return { TextureType::Specular, Format::R8UNorm, STBI_grey };
-                case aiTextureType_AMBIENT:
-                    return { TextureType::Ambient, Format::R8UNorm, STBI_grey };
-                case aiTextureType_EMISSIVE:
-                    return { TextureType::Emissive, Format::R8G8B8A8SRGB, STBI_rgb_alpha };
-                case aiTextureType_HEIGHT:
-                    return { TextureType::Height, Format::R8UNorm, STBI_grey };
                 case aiTextureType_NORMALS:
                     return { TextureType::Normals, Format::R8G8B8A8UNorm, STBI_rgb_alpha };
+                case aiTextureType_EMISSIVE:
+                    return { TextureType::Emissive, Format::R8G8B8A8SRGB, STBI_rgb_alpha };
                 case aiTextureType_DIFFUSE_ROUGHNESS:
                     return { TextureType::Roughness, Format::R8UNorm, STBI_grey };
                 case aiTextureType_METALNESS:
@@ -371,60 +398,6 @@ namespace coffee {
                 case aiTextureType_AMBIENT_OCCLUSION:
                     return { TextureType::AmbientOcclusion, Format::R8UNorm, STBI_grey };
             }
-        };
-
-        auto createNativeBuffers = [this](
-            const std::vector<Vertex>& vertices,
-            const std::vector<uint32_t>& indices
-        ) -> std::pair<Buffer, Buffer> {
-
-            Buffer verticesBuffer = nullptr;
-            Buffer indicesBuffer = nullptr;
-
-            {
-                BufferConfiguration stagingBufferConfiguration{};
-                stagingBufferConfiguration.usage = BufferUsage::TransferSource;
-                stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
-                stagingBufferConfiguration.instanceCount = vertices.size();
-                stagingBufferConfiguration.instanceSize = sizeof(Vertex);
-                Buffer stagingVerticesBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
-
-                stagingVerticesBuffer->write(vertices.data(), vertices.size() * sizeof(Vertex));
-                stagingVerticesBuffer->flush();
-
-                BufferConfiguration verticesBufferConfiguration{};
-                verticesBufferConfiguration.properties = MemoryProperty::DeviceLocal;
-                verticesBufferConfiguration.usage = BufferUsage::Vertex | BufferUsage::TransferDestination;
-                verticesBufferConfiguration.instanceCount = vertices.size();
-                verticesBufferConfiguration.instanceSize = sizeof(Vertex);
-                verticesBuffer = backendImpl_->createBuffer(verticesBufferConfiguration);
-
-                backendImpl_->copyBuffer(verticesBuffer, stagingVerticesBuffer);
-            }
-
-            if (!indices.empty())
-            {
-                BufferConfiguration stagingBufferConfiguration{};
-                stagingBufferConfiguration.usage = BufferUsage::TransferSource;
-                stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
-                stagingBufferConfiguration.instanceCount = indices.size();
-                stagingBufferConfiguration.instanceSize = sizeof(uint32_t);
-                Buffer stagingIndicesBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
-
-                stagingIndicesBuffer->write(indices.data(), indices.size() * sizeof(uint32_t));
-                stagingIndicesBuffer->flush();
-
-                BufferConfiguration verticesBufferConfiguration{};
-                verticesBufferConfiguration.properties = MemoryProperty::DeviceLocal;
-                verticesBufferConfiguration.usage = BufferUsage::Index | BufferUsage::TransferDestination;
-                verticesBufferConfiguration.instanceCount = indices.size();
-                verticesBufferConfiguration.instanceSize = sizeof(uint32_t);
-                indicesBuffer = backendImpl_->createBuffer(verticesBufferConfiguration);
-
-                backendImpl_->copyBuffer(indicesBuffer, stagingIndicesBuffer);
-            }
-
-            return std::make_pair(verticesBuffer, indicesBuffer);
         };
 
         auto loadMaterialTextures = [this, &assimpTypeToEngineType, &parentDirectory](
@@ -435,7 +408,7 @@ namespace coffee {
         ) -> void {
             auto&& [engineType, formatType, stbiType] = assimpTypeToEngineType(textureType);
             uint32_t materialTypeIndex = Math::indexOfHighestBit(static_cast<uint32_t>(engineType));
-            COFFEE_ASSERT(materialTypeIndex >= 0 && materialTypeIndex <= 8, "Invalid TextureType provided.");
+            COFFEE_ASSERT(materialTypeIndex >= 0 && materialTypeIndex <= 6, "Invalid TextureType provided.");
 
             for (uint32_t i = 0; i < material->GetTextureCount(textureType); i++) {
                 aiString nativeMaterialPath {};
@@ -476,7 +449,7 @@ namespace coffee {
             }
         };
 
-        auto loadSubmesh = [this, &assimpTypeToEngineType, &loadMaterialTextures, &createNativeBuffers](
+        auto loadSubmesh = [this, &assimpTypeToEngineType, &loadMaterialTextures](
             const aiScene* scene, 
             aiMesh* mesh
         ) -> Mesh {
@@ -487,18 +460,26 @@ namespace coffee {
             for (uint32_t i = 0; i < mesh->mNumVertices; i++) {
                 Vertex vertex {};
 
-                vertex.position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
+                vertex.position = glm::vec3 { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z } * 0.01f;
 
                 if (mesh->HasNormals()) {
-                    vertex.normal = { mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z };
+                    vertex.normal = {
+                        glm::packHalf1x16(mesh->mNormals[i].x),
+                        glm::packHalf1x16(mesh->mNormals[i].y),
+                        glm::packHalf1x16(mesh->mNormals[i].z)
+                    };
                 }
 
                 if (mesh->HasTextureCoords(0)) {
-                    vertex.texCoords = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
+                    vertex.texCoords = glm::packHalf2x16({ mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y });
                 }
 
                 if (mesh->HasTangentsAndBitangents()) {
-                    vertex.tangent = { mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z };
+                    vertex.tangent = {
+                        glm::packHalf1x16(mesh->mTangents[i].x),
+                        glm::packHalf1x16(mesh->mTangents[i].y),
+                        glm::packHalf1x16(mesh->mTangents[i].z)
+                    };
                 }
 
                 vertices.push_back(std::move(vertex));
@@ -516,10 +497,11 @@ namespace coffee {
 
                 loadMaterialTextures(materials, scene, material, aiTextureType_DIFFUSE);
                 loadMaterialTextures(materials, scene, material, aiTextureType_SPECULAR);
-                loadMaterialTextures(materials, scene, material, aiTextureType_AMBIENT);
                 loadMaterialTextures(materials, scene, material, aiTextureType_NORMALS);
-                loadMaterialTextures(materials, scene, material, aiTextureType_METALNESS);
+                loadMaterialTextures(materials, scene, material, aiTextureType_EMISSIVE);
                 loadMaterialTextures(materials, scene, material, aiTextureType_DIFFUSE_ROUGHNESS);
+                loadMaterialTextures(materials, scene, material, aiTextureType_METALNESS);
+                loadMaterialTextures(materials, scene, material, aiTextureType_AMBIENT_OCCLUSION);
 
                 aiColor3D diffuseColor { 1.0f, 1.0f, 1.0f };
                 materials.modifiers.diffuseColor.r = diffuseColor.r;
@@ -531,24 +513,11 @@ namespace coffee {
                 materials.modifiers.specularColor.g = specularColor.g;
                 materials.modifiers.specularColor.b = specularColor.b;
 
-                aiColor3D ambientColor { 0.0f, 0.0f, 0.0f };
-                if (material->Get(AI_MATKEY_COLOR_AMBIENT, ambientColor) == aiReturn_SUCCESS) {
-                    materials.modifiers.ambientColor.r = ambientColor.r;
-                    materials.modifiers.ambientColor.g = ambientColor.g;
-                    materials.modifiers.ambientColor.b = ambientColor.b;
-                    materials.modifiers.ambientColor.a = 1.0f;
-                }
-                else {
-                    materials.modifiers.ambientColor = { 1.0f, 1.0f, 1.0f, 0.02f };
-                }
-
-                material->Get(AI_MATKEY_SHININESS, materials.modifiers.shininessExponent);
                 material->Get(AI_MATKEY_METALLIC_FACTOR, materials.modifiers.metallicFactor);
                 material->Get(AI_MATKEY_ROUGHNESS_FACTOR, materials.modifiers.roughnessFactor);
             }
-            
-            auto [verticesBuffer, indicesBuffer] = createNativeBuffers(vertices, indices);
-            return std::make_unique<MeshImpl>(std::move(verticesBuffer), std::move(indicesBuffer), std::move(materials));
+
+            return std::make_unique<MeshImpl>(createVerticesBuffer(vertices), createIndicesBuffer(indices), std::move(materials));
         };
 
         std::vector<Mesh> meshes;
@@ -568,11 +537,134 @@ namespace coffee {
         return std::make_shared<ModelImpl>(std::move(meshes));
     }
 
+    Model Engine::importModel(const std::string& modelFile, const Archive& materialsArchive) {
+        COFFEE_THROW_IF(modelFile.empty(), "modelFile is empty!");
+        COFFEE_THROW_IF(!std::filesystem::exists(modelFile), "modelFile ({}) wasn't found!", modelFile);
+        
+        std::ifstream inputStream { modelFile, std::ios::binary | std::ios::in };
+        COFFEE_THROW_IF(!inputStream.is_open(), "Failed to open a stream for file {}!", modelFile);
+
+        constexpr uint8_t headerMagic[4] = { 0xF0, 0x7B, 0xAE, 0x31 };
+        constexpr uint8_t meshMagic[4] = { 0x13, 0xEA, 0xB7, 0xF0 };
+        ReadOnlyStream<32> stream { inputStream };
+
+        COFFEE_THROW_IF(std::memcmp(stream.readBuffer<uint8_t>(4), headerMagic, 4) != 0, "Invalid header magic!");
+        uint32_t meshesSize = stream.read<uint32_t>();
+        std::vector<Mesh> meshes {};
+
+        auto readMaterialName = [&stream]() -> std::string {
+            uint8_t size = stream.read<uint8_t>();
+            return std::string { stream.readBuffer<char>(size), size };
+        };
+
+        for (uint32_t i = 0; i < meshesSize; i++) {
+            COFFEE_THROW_IF(std::memcmp(stream.readBuffer<uint8_t>(4), meshMagic, 4) != 0, "Invalid mesh magic!");
+
+            std::vector<Vertex> vertices {};
+            std::vector<uint32_t> indices {};
+            Materials materials { defaultTexture_ };
+            uint32_t verticesSize = stream.read<uint32_t>();
+            uint32_t indicesSize = stream.read<uint32_t>();
+            uint32_t vertexSize = stream.read<uint32_t>();
+
+            COFFEE_THROW_IF(vertexSize != sizeof(Vertex), "Vertex size isn't matching! Please update your model!");
+
+            vertices.reserve(verticesSize);
+            indices.reserve(indicesSize);
+
+            materials.modifiers.diffuseColor = stream.read<glm::vec3>();
+            materials.modifiers.specularColor = stream.read<glm::vec3>();
+            materials.modifiers.metallicFactor = stream.read<glm::float32>();
+            materials.modifiers.roughnessFactor = stream.read<glm::float32>();
+
+            uint32_t textureFlags = stream.read<uint32_t>();
+
+            std::string diffuseName = readMaterialName();
+            std::string specularName = readMaterialName();
+            std::string normalsName = readMaterialName();
+            std::string emissiveName = readMaterialName();
+            std::string roughnessName = readMaterialName();
+            std::string metallicName = readMaterialName();
+            std::string ambientOcclusionName = readMaterialName();
+
+            if (!materialsArchive.isEmpty()) {
+                auto findOrCreateTexture = [this, &materialsArchive, &materials](const std::string& name, TextureType type) -> void {
+                    if (name.empty()) {
+                        return;
+                    }
+
+                    const std::string completeFilepath = materialsArchive.getPath() + ":" + name;
+
+                    auto& materialMap = loadedTextures_[Math::indexOfHighestBit(static_cast<uint32_t>(type))];
+                    auto it = materialMap.find(completeFilepath);
+
+                    if (it != materialMap.end()) {
+                        materials.write(it->second);
+                        return;
+                    }
+
+                    std::vector<uint8_t> materialData = materialsArchive.loadRawFile(name);
+
+                    if (materialData.size() == 0) {
+                        return;
+                    }
+
+                    [[ maybe_unused ]] auto verifyImageByteSize = [](uint32_t fileSize, TextureType type) {
+                        switch (type) {
+                            default:
+                                return fileSize == 1;
+                            case TextureType::Diffuse:
+                            case TextureType::Emissive:
+                            case TextureType::Normals:
+                                return fileSize == 4;
+                        }
+                    };
+
+                    uint32_t width = *reinterpret_cast<uint32_t*>(materialData.data());
+                    uint32_t height = *reinterpret_cast<uint32_t*>(materialData.data() + sizeof(uint32_t));
+                    uint32_t bytesPerPixel = *reinterpret_cast<uint32_t*>(materialData.data() + 2 * sizeof(uint32_t));
+                    uint8_t* actualData = materialData.data() + 3 * sizeof(uint32_t);
+                    size_t actualSize = materialData.size() - 3 * sizeof(uint32_t);
+
+                    COFFEE_ASSERT(
+                        verifyImageByteSize(bytesPerPixel, type), 
+                        "Image size mismatches with format size. Please repack your archive with correct data.");
+
+                    Texture newTexture = createTexture(
+                        actualData, actualSize, typeToFormat(type), width, height, completeFilepath, type);
+
+                    materialMap.emplace(completeFilepath, newTexture);
+                    materials.write(newTexture);
+                };
+
+                findOrCreateTexture(diffuseName, TextureType::Diffuse);
+                findOrCreateTexture(specularName, TextureType::Specular);
+                findOrCreateTexture(normalsName, TextureType::Normals);
+                findOrCreateTexture(emissiveName, TextureType::Emissive);
+                findOrCreateTexture(roughnessName, TextureType::Roughness);
+                findOrCreateTexture(metallicName, TextureType::Metallic);
+                findOrCreateTexture(ambientOcclusionName, TextureType::AmbientOcclusion);
+            }
+
+            while (verticesSize-- > 0) {
+                vertices.push_back(stream.read<Vertex>());
+            }
+
+            while (indicesSize-- > 0) {
+                indices.push_back(stream.read<uint32_t>());
+            }
+
+            meshes.push_back(std::make_unique<MeshImpl>(createVerticesBuffer(vertices), createIndicesBuffer(indices), std::move(materials)));
+        }
+
+        return std::make_shared<ModelImpl>(std::move(meshes));
+    }
+
     Texture Engine::importTexture(const std::string& filename, TextureType type) {
         uint32_t materialTypeIndex = static_cast<uint32_t>(type) - 1;
         COFFEE_ASSERT(materialTypeIndex >= 0 && materialTypeIndex < 10, "Invalid TextureType provided.");
 
-        std::string absoluteFilePath = std::filesystem::absolute(filename).generic_string();
+        std::string absoluteFilePath = std::filesystem::absolute(filename).string();
         auto& materialMap = loadedTextures_[materialTypeIndex];
         auto iterator = materialMap.find(absoluteFilePath);
 
@@ -1040,6 +1132,66 @@ namespace coffee {
         backendImpl_->copyBufferToImage(textureImage, stagingBuffer);
 
         return std::make_shared<TextureImpl>(std::move(textureImage), filePath, type);
+    }
+
+    Buffer Engine::createVerticesBuffer(const std::vector<Vertex>& vertices) {
+        BufferConfiguration stagingBufferConfiguration {};
+        stagingBufferConfiguration.usage = BufferUsage::TransferSource;
+        stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
+        stagingBufferConfiguration.instanceCount = vertices.size();
+        stagingBufferConfiguration.instanceSize = sizeof(Vertex);
+        Buffer stagingVerticesBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
+
+        stagingVerticesBuffer->write(vertices.data(), vertices.size() * sizeof(Vertex));
+        stagingVerticesBuffer->flush();
+
+        BufferConfiguration verticesBufferConfiguration{};
+        verticesBufferConfiguration.properties = MemoryProperty::DeviceLocal;
+        verticesBufferConfiguration.usage = BufferUsage::Vertex | BufferUsage::TransferDestination;
+        verticesBufferConfiguration.instanceCount = vertices.size();
+        verticesBufferConfiguration.instanceSize = sizeof(Vertex);
+        Buffer verticesBuffer = backendImpl_->createBuffer(verticesBufferConfiguration);
+
+        backendImpl_->copyBuffer(verticesBuffer, stagingVerticesBuffer);
+        return verticesBuffer;
+    }
+
+    Buffer Engine::createIndicesBuffer(const std::vector<uint32_t>& indices) {
+        if (indices.empty()) {
+            return nullptr;
+        }
+
+        BufferConfiguration stagingBufferConfiguration {};
+        stagingBufferConfiguration.usage = BufferUsage::TransferSource;
+        stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
+        stagingBufferConfiguration.instanceCount = indices.size();
+        stagingBufferConfiguration.instanceSize = sizeof(uint32_t);
+        Buffer stagingIndicesBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
+
+        stagingIndicesBuffer->write(indices.data(), indices.size() * sizeof(uint32_t));
+        stagingIndicesBuffer->flush();
+
+        BufferConfiguration verticesBufferConfiguration{};
+        verticesBufferConfiguration.properties = MemoryProperty::DeviceLocal;
+        verticesBufferConfiguration.usage = BufferUsage::Index | BufferUsage::TransferDestination;
+        verticesBufferConfiguration.instanceCount = indices.size();
+        verticesBufferConfiguration.instanceSize = sizeof(uint32_t);
+        Buffer indicesBuffer = backendImpl_->createBuffer(verticesBufferConfiguration);
+
+        backendImpl_->copyBuffer(indicesBuffer, stagingIndicesBuffer);
+        return indicesBuffer;
+    }
+
+    Format Engine::typeToFormat(TextureType type) const noexcept {
+        switch (type) {
+            default:
+                return Format::R8UNorm;
+            case TextureType::Diffuse:
+            case TextureType::Emissive:
+                return Format::R8G8B8A8SRGB;
+            case TextureType::Normals:
+                return Format::R8G8B8A8UNorm;
+        }
     }
 
 }

@@ -69,6 +69,7 @@ namespace coffee {
 
         std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
         std::vector<CommandBuffer> commandBuffers_ {};
+        std::mutex commandBuffersMutex_ {};
 
         uint32_t framebufferWidth_;
         uint32_t framebufferHeight_;

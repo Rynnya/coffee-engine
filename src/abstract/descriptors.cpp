@@ -94,8 +94,6 @@ namespace coffee {
                 default:
                     return true;
             }
-
-            return true;
         };
 
         const auto& bindings = layout_->getBindings();

@@ -9,11 +9,13 @@
 #include <coffee/events/mouse_event.hpp>
 #include <coffee/events/window_event.hpp>
 
+#include <coffee/interfaces/archive.hpp>
 #include <coffee/interfaces/deferred_requests.hpp>
 #include <coffee/interfaces/thread_pool.hpp>
 
 #include <coffee/objects/model.hpp>
 #include <coffee/objects/texture.hpp>
+#include <coffee/objects/vertex.hpp>
 
 #include <coffee/types.hpp>
 
@@ -44,6 +46,7 @@ namespace coffee {
         const std::vector<Image>& getPresentImages() const noexcept;
 
         Model importModel(const std::string& filename);
+        Model importModel(const std::string& modelFile, const Archive& materialsArchive);
         Texture importTexture(const std::string& filename, TextureType type);
 
         Buffer createBuffer(const BufferConfiguration& configuration);
@@ -149,6 +152,10 @@ namespace coffee {
             uint32_t height,
             const std::string& filePath,
             TextureType type);
+        Buffer createVerticesBuffer(const std::vector<Vertex>& vertices);
+        Buffer createIndicesBuffer(const std::vector<uint32_t>& indices);
+
+        Format typeToFormat(TextureType type) const noexcept;
 
         BackendSelect currentBackend_;
         std::unique_ptr<AbstractBackend> backendImpl_ = nullptr;
@@ -168,7 +175,7 @@ namespace coffee {
         std::map<std::string, std::function<void(const PresentModeEvent&)>> presentModeCallbacks_ {};
 
         Texture defaultTexture_;
-        std::array<std::unordered_map<std::string, Texture>, 9> loadedTextures_ {};
+        std::array<std::unordered_map<std::string, Texture>, 7> loadedTextures_ {};
 
         struct PImpl;
         PImpl* pImpl_;

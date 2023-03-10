@@ -17,6 +17,10 @@ namespace coffee {
     }
 
     void Materials::write(const Texture& texture) {
+        if (texture == nullptr) {
+            return;
+        }
+
         TextureType type = texture->getType();
 
         textures_[textureTypeToIndex(type)] = texture;
