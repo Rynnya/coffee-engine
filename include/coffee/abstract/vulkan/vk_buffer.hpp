@@ -25,12 +25,6 @@ namespace coffee {
         VkDeviceSize offsetAlignment = 0;
 
     private:
-        static size_t calculateAlignment(
-            VulkanDevice& device,
-            size_t requestedAlignment,
-            BufferUsage usage,
-            MemoryProperty properties) noexcept;
-
         VkResult map(size_t size, size_t offset);
         void alignOffset(size_t& size, size_t& offset);
 

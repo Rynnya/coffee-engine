@@ -5,7 +5,7 @@
 namespace coffee {
 
     VulkanImage::VulkanImage(VulkanDevice& device, const ImageConfiguration& configuration)
-        : AbstractImage { configuration.type, configuration.width, configuration.height, configuration.depth }
+        : AbstractImage { configuration.type, configuration.extent.width, configuration.extent.height, configuration.extent.depth }
         , swapChainImage { false }
         , device_ { device }
     {
@@ -52,10 +52,10 @@ namespace coffee {
         imageViewCreateInfo.image = image;
         imageViewCreateInfo.viewType = VkUtils::transformImageViewType(configuration.viewType);
         imageViewCreateInfo.format = format;
-        imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        imageViewCreateInfo.components.r = VkUtils::transformSwizzleComponent(configuration.swizzleRed);
+        imageViewCreateInfo.components.g = VkUtils::transformSwizzleComponent(configuration.swizzleGreen);
+        imageViewCreateInfo.components.b = VkUtils::transformSwizzleComponent(configuration.swizzleBlue);
+        imageViewCreateInfo.components.a = VkUtils::transformSwizzleComponent(configuration.swizzleAlpha);
         imageViewCreateInfo.subresourceRange.aspectMask = aspectMask;
         imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
         imageViewCreateInfo.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;

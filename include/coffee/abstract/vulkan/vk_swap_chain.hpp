@@ -20,58 +20,31 @@ namespace coffee {
     public:
         static constexpr size_t maxFramesInFlight = 2;
 
-        VulkanSwapChain(
-            VulkanDevice& device, 
-            VkExtent2D extent,
-            std::optional<VkPresentModeKHR> preferableVerticalSynchronization
-        );
-        VulkanSwapChain(
-            VulkanDevice& device, 
-            VkExtent2D extent,
-            std::optional<VkPresentModeKHR> preferableVerticalSynchronization,
-            std::unique_ptr<VulkanSwapChain>& oldSwapChain
-        );
-        ~VulkanSwapChain();
+        VulkanSwapChain(VulkanDevice& device, VkSurfaceKHR surface, VkExtent2D extent, std::optional<PresentMode> preferablePresentMode = std::nullopt);
+        ~VulkanSwapChain() noexcept;
 
-        bool operator==(const VulkanSwapChain& other) const noexcept;
-        bool operator!=(const VulkanSwapChain& other) const noexcept;
+        bool acquireNextImage() override;
+        bool submitCommandBuffers(const std::vector<CommandBuffer>& commandBuffers) override;
 
-        VkPresentModeKHR getVSyncMode() const noexcept;
-
-        Format getImageFormat() const noexcept;
-        Format getDepthFormat() const noexcept;
-
-        size_t getImagesSize() const noexcept;
-        const std::vector<Image>& getPresentImages() const noexcept;
-
-        VkResult acquireNextImage(uint32_t& imageIndex);
-        VkResult submitCommandBuffers(const std::vector<VkCommandBuffer>& commandBuffers, uint32_t imageIndex);
+        void recreate(uint32_t width, uint32_t height, PresentMode mode) override;
+        void waitIdle() override;
 
     private:
-        void initialize(
-            VkExtent2D extent, std::optional<VkPresentModeKHR> preferableVerticalSynchronization, VkSwapchainKHR oldSwapchain);
-        void createSwapChain(
-            VkExtent2D extent, std::optional<VkPresentModeKHR> preferableVerticalSynchronization, VkSwapchainKHR oldSwapchain);
+        void checkSupportedPresentModes() noexcept;
+        void createSwapChain(VkExtent2D extent, std::optional<PresentMode> preferablePresentMode, VkSwapchainKHR oldSwapchain = nullptr);
         void createSyncObjects();
 
-        // Implementation
         VulkanDevice& device_;
+        VkSurfaceKHR surface_;
+        std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
         VkSwapchainKHR handle_ = nullptr;
 
-        // Images
-        Format imageFormat_ = Format::Undefined;
-        Format depthFormat_ = Format::Undefined;
-        std::vector<Image> images_ {};
-        Extent2D extent_ { 0U, 0U };
-        
-        // Synchronization
-        std::optional<VkPresentModeKHR> verticalSynchronization_ {};
+        bool mailboxSupported_ = false;
+        bool immediateSupported_ = false;
         std::array<VkSemaphore, maxFramesInFlight> imageAvailableSemaphores_ {};
         std::array<VkSemaphore, maxFramesInFlight> renderFinishedSemaphores_ {};
         std::array<VkFence, maxFramesInFlight> inFlightFences_ {};
         std::vector<VkFence> imagesInFlight_ {};
-        uint32_t currentFrame_ = 0;
-
     };
 
 }

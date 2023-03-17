@@ -44,7 +44,7 @@ namespace coffee {
         static SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) noexcept;
         static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) noexcept;
 
-        static uint32_t getOptionalAmountOfFramebuffers(VkPhysicalDevice device, VkSurfaceKHR surface) noexcept;
+        static uint32_t getOptimalAmountOfFramebuffers(VkPhysicalDevice device, VkSurfaceKHR surface) noexcept;
 
         static VkDescriptorType getBufferDescriptorType(VkBufferUsageFlags bufferFlags, bool isDynamic = false) noexcept;
         static VkDescriptorType getImageDescriptorType(VkImageUsageFlags imageFlags, bool withSampler = false) noexcept;
@@ -71,6 +71,7 @@ namespace coffee {
         static VkAttachmentLoadOp       transformAttachmentLoadOp(AttachmentLoadOp op) noexcept;
         static VkAttachmentStoreOp      transformAttachmentStoreOp(AttachmentStoreOp op) noexcept;
         static VkColorComponentFlags    transformColorComponents(ColorComponent components) noexcept;
+        static VkComponentSwizzle       transformSwizzleComponent(SwizzleComponent component) noexcept;
         static VkCompareOp              transformCompareOp(CompareOp op) noexcept;
         static VkStencilOp              transformStencilOp(StencilOp op) noexcept;
         static VkCullModeFlags          transformCullMode(CullMode mode) noexcept;

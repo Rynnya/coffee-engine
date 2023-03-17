@@ -1,6 +1,7 @@
 #include <coffee/utils/log.hpp>
 
 #include <fmt/chrono.h>
+#include <fmt/color.h>
 
 #ifdef COFFEE_WINDOWS
 #   include <Windows.h>
@@ -26,6 +27,21 @@ namespace coffee {
             return path;
         }
 
+        constexpr fmt::text_style toColor(MessageSeverity severity) {
+            switch (severity) {
+                case MessageSeverity::Info:
+                    return fmt::fg(fmt::color::white_smoke);
+                case MessageSeverity::Warning:
+                    return fmt::fg(fmt::color::yellow);
+                case MessageSeverity::Error:
+                    return fmt::fg(fmt::color::crimson);
+                case MessageSeverity::Critical:
+                    return (fmt::fg(fmt::color::red) | fmt::emphasis::bold);
+                default:
+                    return fmt::fg(fmt::color::white_smoke);
+            }
+        }
+
         constexpr std::string_view toString(MessageSeverity severity) {
             switch (severity) {
                 case MessageSeverity::Info:
@@ -34,6 +50,8 @@ namespace coffee {
                     return "WARNING";
                 case MessageSeverity::Error:
                     return "ERROR";
+                case MessageSeverity::Critical:
+                    return "UNRECOVERABLE";
                 default: 
                     return "UNKNOWN";
             }
@@ -66,8 +84,14 @@ namespace coffee {
             return;
         }
 
-        fmt::print("ASSERTION FAILED: {} IN FILE {}:{}\n", detail::escape(exprString), detail::getFileName(filePath), line);
-        fmt::print(" => {}", detail::escape(message.data()));
+        fmt::print(
+            fg(fmt::color::red) | fmt::emphasis::bold,
+            "ASSERTION FAILED: {} IN FILE {}:{}\n",
+            detail::escape(exprString),
+            detail::getFileName(filePath),
+            line);
+
+        fmt::print(fg(fmt::color::red), " => {}", detail::escape(message.data()));
         ::abort();
     }
 
@@ -87,7 +111,7 @@ namespace coffee {
             OutputDebugStringA(formatted.c_str());
 #       endif
 
-        fmt::print(formatted);
+        fmt::print(detail::toColor(severity), formatted);
     }
 
 }

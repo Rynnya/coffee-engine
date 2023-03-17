@@ -5,6 +5,7 @@
 #include <coffee/abstract/vulkan/vk_shader.hpp>
 
 #include <coffee/utils/log.hpp>
+#include <coffee/utils/math.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
 #include <array>
@@ -14,45 +15,41 @@ namespace coffee {
     VulkanPipeline::VulkanPipeline(
         VulkanDevice& device,
         const RenderPass& renderPass,
-        const PushConstants& pushConstants,
         const std::vector<DescriptorLayout>& descriptorLayouts,
-        const ShaderProgram& shaderProgram,
+        const std::vector<Shader>& shaderPrograms,
         const PipelineConfiguration& configuration
-    ) 
-        : device_ { device }
-    {
-        createPipelineLayout(pushConstants, descriptorLayouts);
-        createPipeline(renderPass, shaderProgram, configuration);
-    }
-
-    VulkanPipeline::~VulkanPipeline() noexcept {
-        vkDestroyPipeline(device_.getLogicalDevice(), pipeline, nullptr);
-        vkDestroyPipelineLayout(device_.getLogicalDevice(), layout, nullptr);
-    }
-
-    void VulkanPipeline::createPipelineLayout(
-        const PushConstants& pushConstants,
-        const std::vector<DescriptorLayout>& descriptorLayouts
-    ) {
+    ) : device_ { device } {
         VkPipelineLayoutCreateInfo createInfo { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
 
         std::vector<VkDescriptorSetLayout> setLayouts {};
         std::vector<VkPushConstantRange> pushConstantsRanges {};
-        uint32_t offset = 0;
 
         for (const auto& descriptorLayout : descriptorLayouts) {
             setLayouts.push_back(static_cast<VulkanDescriptorLayout*>(descriptorLayout.get())->layout);
         }
 
-        for (const auto& range : getPushConstantRanges(pushConstants)) {
+        for (const auto& range : configuration.ranges) {
             VkPushConstantRange rangeImpl {};
 
-            rangeImpl.stageFlags = VkUtils::transformShaderStages(range.stage);
-            rangeImpl.offset = offset;
-            rangeImpl.size = static_cast<uint32_t>(range.size);
+            uint32_t roundedOffset = Math::roundToMultiple(range.offset, 4ULL);
+            uint32_t roundedSize = Math::roundToMultiple(range.size, 4ULL);
+
+            rangeImpl.stageFlags = VkUtils::transformShaderStages(range.shaderStages);
+            rangeImpl.offset = roundedOffset;
+            rangeImpl.size = roundedSize;
+
+            auto validateSize = [](const char* name, uint32_t originalSize, uint32_t roundedSize) {
+                if (originalSize != roundedSize) {
+                    COFFEE_WARNING(
+                        "Provided {} {} isn't multiple of 4 and was rounded up to {}. This might cause a strange behaviour in your shaders.",
+                        name, originalSize, roundedSize);
+                }
+            };
+
+            validateSize("size", range.size, roundedSize);
+            validateSize("offset", range.offset, roundedOffset);
 
             pushConstantsRanges.push_back(std::move(rangeImpl));
-            offset += static_cast<uint32_t>(range.size);
         }
 
         createInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
@@ -63,13 +60,7 @@ namespace coffee {
         COFFEE_THROW_IF(
             vkCreatePipelineLayout(device_.getLogicalDevice(), &createInfo, nullptr, &layout) != VK_SUCCESS,
             "Failed to create a pipeline layout!");
-    }
 
-    void VulkanPipeline::createPipeline(
-        const RenderPass& renderPass,
-        const ShaderProgram& shaderProgram,
-        const PipelineConfiguration& configuration
-    ) {
         std::vector<VkVertexInputBindingDescription> bindingDescriptions {};
         std::vector<VkVertexInputAttributeDescription> attributeDescriptions {};
 
@@ -122,7 +113,7 @@ namespace coffee {
         rasterizationInfo.lineWidth = 1.0f;
 
         VkPipelineMultisampleStateCreateInfo multisampleInfo { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-        multisampleInfo.rasterizationSamples = 
+        multisampleInfo.rasterizationSamples =
             VkUtils::getUsableSampleCount(configuration.multisampleInfo.sampleCount, device_.getProperties());
         multisampleInfo.sampleShadingEnable = configuration.multisampleInfo.sampleRateShading ? VK_TRUE : VK_FALSE;
         multisampleInfo.minSampleShading = configuration.multisampleInfo.minSampleShading;
@@ -173,7 +164,7 @@ namespace coffee {
         depthStencilInfo.minDepthBounds = 0.0f;
         depthStencilInfo.maxDepthBounds = 1.0f;
 
-        const std::array<VkDynamicState, 3> dynamicStates = {
+        constexpr std::array<VkDynamicState, 3> dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
             VK_DYNAMIC_STATE_BLEND_CONSTANTS
@@ -185,10 +176,10 @@ namespace coffee {
 
         std::vector<VkPipelineShaderStageCreateInfo> shaderStages {};
 
-        for (const auto& [shaderStage, shader] : getShaders(shaderProgram)) {
+        for (const auto& shader : shaderPrograms) {
             VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
-            shaderCreateInfo.stage = VkUtils::transformShaderStage(shaderStage);
+            shaderCreateInfo.stage = VkUtils::transformShaderStage(shader->getStage());
             shaderCreateInfo.module = static_cast<VulkanShader*>(shader.get())->shader;
             shaderCreateInfo.pName = shader->getEntrypointName().data();
             shaderCreateInfo.pSpecializationInfo = nullptr;
@@ -218,6 +209,11 @@ namespace coffee {
         COFFEE_THROW_IF(
             vkCreateGraphicsPipelines(device_.getLogicalDevice(), nullptr, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS,
             "Failed to create graphics pipeline!");
+    }
+
+    VulkanPipeline::~VulkanPipeline() noexcept {
+        vkDestroyPipeline(device_.getLogicalDevice(), pipeline, nullptr);
+        vkDestroyPipelineLayout(device_.getLogicalDevice(), layout, nullptr);
     }
 
 }

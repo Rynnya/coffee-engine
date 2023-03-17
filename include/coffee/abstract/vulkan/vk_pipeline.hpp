@@ -4,9 +4,10 @@
 #include <coffee/abstract/vulkan/vk_device.hpp>
 #include <coffee/abstract/descriptors.hpp>
 #include <coffee/abstract/pipeline.hpp>
-#include <coffee/abstract/push_constant.hpp>
 #include <coffee/abstract/render_pass.hpp>
-#include <coffee/abstract/shader_program.hpp>
+#include <coffee/abstract/shader.hpp>
+
+#include <set>
 
 namespace coffee {
 
@@ -15,9 +16,8 @@ namespace coffee {
         VulkanPipeline(
             VulkanDevice& device,
             const RenderPass& renderPass,
-            const PushConstants& pushConstants,
             const std::vector<DescriptorLayout>& descriptorLayouts,
-            const ShaderProgram& shaderProgram,
+            const std::vector<Shader>& shaderPrograms,
             const PipelineConfiguration& configuration);
         ~VulkanPipeline() noexcept;
 
@@ -25,14 +25,6 @@ namespace coffee {
         VkPipeline pipeline;
 
     private:
-        void createPipelineLayout(
-            const PushConstants& pushConstants,
-            const std::vector<DescriptorLayout>& descriptorLayouts);
-        void createPipeline(
-            const RenderPass& renderPass,
-            const ShaderProgram& shaderProgram,
-            const PipelineConfiguration& configuration);
-
         VulkanDevice& device_;
     };
 

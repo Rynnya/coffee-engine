@@ -38,6 +38,10 @@ namespace coffee {
 #endif
 
 #define COFFEE_THROW_IF(expr, formatting, ...) \
-    { if (static_cast<bool>(expr)) { throw std::runtime_error(fmt::format(formatting, ##__VA_ARGS__)); } }
+    { if (static_cast<bool>(expr)) { \
+        const std::string formatted = fmt::format(formatting, ##__VA_ARGS__); \
+        coffee::log(coffee::MessageSeverity::Critical, __FILE__, __LINE__, formatted); \
+        throw std::runtime_error(formatted); \
+    } }
 
 #endif

@@ -106,7 +106,7 @@ namespace coffee {
                     info.sampler = static_cast<VulkanSampler*>(writeInfo.sampler.get())->sampler;
                     imageInfos.push_back(std::move(info));
 
-                    writeImpl.pImageInfo = &imageInfos[imageInfos.size() - 1];
+                    writeImpl.pImageInfo = &imageInfos.back();
                     break;
                 }
                 case DescriptorType::ImageAndSampler:
@@ -120,7 +120,7 @@ namespace coffee {
                     info.imageLayout = VkUtils::transformResourceStateToLayout(writeInfo.imageState);
                     imageInfos.push_back(std::move(info));
 
-                    writeImpl.pImageInfo = &imageInfos[imageInfos.size() - 1];
+                    writeImpl.pImageInfo = &imageInfos.back();
                     break;
                 }
                 case DescriptorType::StorageImage:
@@ -132,7 +132,7 @@ namespace coffee {
                     info.imageLayout = VkUtils::transformResourceStateToLayout(writeInfo.imageState);
                     imageInfos.push_back(std::move(info));
 
-                    writeImpl.pImageInfo = &imageInfos[imageInfos.size() - 1];
+                    writeImpl.pImageInfo = &imageInfos.back();
                     break;
                 }
                 case DescriptorType::UniformBuffer:
@@ -145,7 +145,7 @@ namespace coffee {
                     info.range = writeInfo.bufferSize;
                     bufferInfos.push_back(std::move(info));
 
-                    writeImpl.pBufferInfo = &bufferInfos[bufferInfos.size() - 1];
+                    writeImpl.pBufferInfo = &bufferInfos.back();
                     break;
                 }
                 default: {

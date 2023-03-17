@@ -10,19 +10,14 @@ namespace coffee {
 
     class VulkanBackend : public AbstractBackend {
     public:
-        VulkanBackend(void* windowHandle, uint32_t windowWidth, uint32_t windowHeight);
-        ~VulkanBackend();
+        VulkanBackend() noexcept;
+        ~VulkanBackend() noexcept = default;
 
-        bool acquireFrame() override;
-        void sendCommandBuffer(CommandBuffer&& commandBuffer) override;
-        void endFrame() override;
+        Window createWindow(WindowSettings settings, const std::string& windowName) override;
 
-        void changeFramebufferSize(uint32_t width, uint32_t height) override;
-        void changePresentMode(uint32_t width, uint32_t height, PresentMode newMode) override;
-
-        std::unique_ptr<AbstractBuffer> createBuffer(const BufferConfiguration& configuration) override;
-        std::shared_ptr<AbstractImage> createImage(const ImageConfiguration& configuration) override;
-        std::shared_ptr<AbstractSampler> createSampler(const SamplerConfiguration& configuration) override;
+        Buffer createBuffer(const BufferConfiguration& configuration) override;
+        Image createImage(const ImageConfiguration& configuration) override;
+        Sampler createSampler(const SamplerConfiguration& configuration) override;
 
         std::unique_ptr<AbstractShader> createShader(
             const std::string& fileName,
@@ -42,9 +37,8 @@ namespace coffee {
             const RenderPass& parent, const RenderPassConfiguration& configuration) override;
         std::unique_ptr<AbstractPipeline> createPipeline(
             const RenderPass& renderPass,
-            const PushConstants& pushConstants,
             const std::vector<DescriptorLayout>& descriptorLayouts,
-            const ShaderProgram& shaderProgram,
+            const std::vector<Shader>& shaderPrograms,
             const PipelineConfiguration& configuration) override;
         std::unique_ptr<AbstractFramebuffer> createFramebuffer(
             const RenderPass& renderPass,
@@ -54,29 +48,9 @@ namespace coffee {
         void copyBuffer(Buffer& dstBuffer, const Buffer& srcBuffer) override;
         void copyBufferToImage(Image& dstImage, const Buffer& srcBuffer) override;
 
-        Format getColorFormat() const noexcept override;
-        Format getDepthFormat() const noexcept override;
-        uint32_t getCurrentImageIndex() const noexcept override;
-        const std::vector<Image>& getPresentImages() const noexcept override;
-
         void waitDevice() override;
 
-    private:
-        void checkSupportedPresentModes() noexcept;
-
-        VulkanDevice device_;
-        std::unique_ptr<VulkanSwapChain> swapChain_;
-
-        std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
-        std::vector<CommandBuffer> commandBuffers_ {};
-        std::mutex commandBuffersMutex_ {};
-
-        uint32_t framebufferWidth_;
-        uint32_t framebufferHeight_;
-        uint32_t currentImage_ = 0U;
-
-        bool mailboxSupported_ = false;
-        bool immediateSupported_ = false;
+        VulkanDevice device_ {};
     };
 
 }

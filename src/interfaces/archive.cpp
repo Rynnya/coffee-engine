@@ -11,11 +11,11 @@ namespace coffee {
     constexpr uint8_t archiveMagic[4] = { 0xD2, 0x8A, 0x3C, 0xB7 };
 
     struct Archive::PImpl {
-        PImpl::PImpl()
+        PImpl()
             : decompressorContext { ZSTD_createDCtx() }
         {}
 
-        PImpl::~PImpl() {
+        ~PImpl() {
             ZSTD_freeDCtx(decompressorContext);
         }
 

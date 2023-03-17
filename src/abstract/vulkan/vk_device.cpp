@@ -14,18 +14,17 @@
 
 namespace coffee {
 
-    VulkanDevice::VulkanDevice(void* windowHandle) {
-        COFFEE_ASSERT(windowHandle != nullptr, "Invalid window handle provided.");
-
+    VulkanDevice::VulkanDevice() {
         createInstance();
         createDebugMessenger();
-        createSurface(windowHandle);
+        createTemporarySurface();
         pickPhysicalDevice();
 
         createLogicalDevice();
         createCommandPool();
 
         createDescriptorPool();
+        destroyTemporarySurface();
     }
 
     VulkanDevice::~VulkanDevice() {
@@ -43,7 +42,6 @@ namespace coffee {
         vkDestroyDescriptorPool(logicalDevice_, descriptorPool_, nullptr);
         vkDestroyCommandPool(logicalDevice_, deviceCommandPool_, nullptr);
         vkDestroyDevice(logicalDevice_, nullptr);
-        vkDestroySurfaceKHR(instance_, surface_, nullptr);
         vkDestroyInstance(instance_, nullptr);
     }
 
@@ -97,7 +95,7 @@ namespace coffee {
         VkCommandPool pool = nullptr;
 
         VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        poolInfo.flags = 0;
         poolInfo.queueFamilyIndex = indices_.graphicsFamily.value();
 
         COFFEE_THROW_IF(
@@ -176,10 +174,6 @@ namespace coffee {
 
     VkPhysicalDevice VulkanDevice::getPhysicalDevice() const noexcept {
         return physicalDevice_;
-    }
-
-    VkSurfaceKHR VulkanDevice::getSurface() const noexcept {
-        return surface_;
     }
 
     VkDevice VulkanDevice::getLogicalDevice() const noexcept {
@@ -307,10 +301,18 @@ namespace coffee {
 #       endif
     }
 
-    void VulkanDevice::createSurface(void* windowHandle) {
+    void VulkanDevice::createTemporarySurface() {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
+        window_ = static_cast<void*>(glfwCreateWindow(1, 1, "Temp", nullptr, nullptr));
+        COFFEE_THROW_IF(window_ == nullptr, "Failed to create temporary window for surface!");
+
         COFFEE_THROW_IF(
-            glfwCreateWindowSurface(instance_, static_cast<GLFWwindow*>(windowHandle), nullptr, &surface_) != VK_SUCCESS, 
-            "Failed to create window surface!");
+            glfwCreateWindowSurface(instance_, reinterpret_cast<GLFWwindow*>(window_), nullptr, &surface_) != VK_SUCCESS, 
+            "Failed to create temporary surface!");
+
+        glfwDefaultWindowHints();
     }
 
     void VulkanDevice::pickPhysicalDevice() {
@@ -420,6 +422,11 @@ namespace coffee {
         COFFEE_THROW_IF(
             vkCreateDescriptorPool(logicalDevice_, &descriptorPoolInfo, nullptr, &descriptorPool_) != VK_SUCCESS, 
             "Failed to create descriptor pool!");
+    }
+
+    void VulkanDevice::destroyTemporarySurface() {
+        vkDestroySurfaceKHR(instance_, surface_, nullptr);
+        glfwDestroyWindow(reinterpret_cast<GLFWwindow*>(window_));
     }
 
     VkCommandBuffer VulkanDevice::beginSingleTimeCommands() {

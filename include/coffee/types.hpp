@@ -18,7 +18,7 @@ namespace coffee {
     using Image = std::shared_ptr<AbstractImage>;
     using Sampler = std::shared_ptr<AbstractSampler>;
 
-    enum class BackendSelect : uint32_t {
+    enum class BackendAPI : uint32_t {
         // Available everywhere
         Vulkan = 0,
         // Will only work if OS is Windows, always present for backward-compatability
@@ -309,6 +309,16 @@ namespace coffee {
         Alpha = 1 << 3
     };
 
+    enum class SwizzleComponent : uint32_t {
+        Identity = 0,
+        Zero = 1,
+        One = 2,
+        Red = 3,
+        Green = 4,
+        Blue = 5,
+        Alpha = 6
+    };
+
     enum class CompareOp : uint32_t {
         Never = 0,
         Less = 1,
@@ -401,24 +411,92 @@ namespace coffee {
     enum class MessageSeverity : uint32_t {
         Info = 1 << 0,
         Warning = 1 << 1,
-        Error = 1 << 2
+        Error = 1 << 2,
+        Critical = 1 << 3
     };
 
     struct Offset2D {
         int32_t x = 0;
         int32_t y = 0;
+
+        constexpr Offset2D operator+(const Offset2D& other);
+        constexpr Offset2D operator-(const Offset2D& other);
+
+        constexpr Offset2D& operator+=(const Offset2D& other);
+        constexpr Offset2D& operator-=(const Offset2D& other);
+
     };
+
+    struct Float2D;
+    struct Extent3D;
 
     struct Extent2D {
         uint32_t width = 0U;
         uint32_t height = 0U;
+
+        constexpr Extent2D operator+(const Extent2D& other) const noexcept;
+        constexpr Extent2D operator-(const Extent2D& other) const noexcept;
+
+        constexpr Extent2D operator+(const Offset2D& other) const noexcept;
+        constexpr Extent2D operator-(const Offset2D& other) const noexcept;
+
+        constexpr Extent2D operator+(const Float2D& other) const noexcept;
+        constexpr Extent2D operator-(const Float2D& other) const noexcept;
+
+        constexpr Extent2D& operator+=(const Extent2D& other) noexcept;
+        constexpr Extent2D& operator-=(const Extent2D& other) noexcept;
+
+        constexpr Extent2D& operator+=(const Offset2D& other) noexcept;
+        constexpr Extent2D& operator-=(const Offset2D& other) noexcept;
+
+        constexpr Extent2D& operator+=(const Float2D& other) noexcept;
+        constexpr Extent2D& operator-=(const Float2D& other) noexcept;
+
+        constexpr operator Float2D() const noexcept;
+        constexpr operator Extent3D() const noexcept;
+
+    };
+
+    struct Extent3D {
+        uint32_t width = 0U;
+        uint32_t height = 0U;
+        uint32_t depth = 0U;
+    };
+
+    struct WorkArea2D {
+        Offset2D offset {};
+        Extent2D extent {};
+    };
+
+    struct Float2D {
+        float x = 0U;
+        float y = 0U;
+
+        constexpr Float2D operator+(const Float2D& other) const noexcept;
+        constexpr Float2D operator-(const Float2D& other) const noexcept;
+
+        constexpr Float2D operator+(const Offset2D& other) const noexcept;
+        constexpr Float2D operator-(const Offset2D& other) const noexcept;
+
+        constexpr Float2D operator+(const Extent2D& other) const noexcept;
+        constexpr Float2D operator-(const Extent2D& other) const noexcept;
+
+        constexpr Float2D& operator+=(const Float2D& other) noexcept;
+        constexpr Float2D& operator-=(const Float2D& other) noexcept;
+
+        constexpr Float2D& operator+=(const Offset2D& other) noexcept;
+        constexpr Float2D& operator-=(const Offset2D& other) noexcept;
+
+        constexpr Float2D& operator+=(const Extent2D& other) noexcept;
+        constexpr Float2D& operator-=(const Extent2D& other) noexcept;
+
+        constexpr operator Extent2D() const noexcept;
+
     };
 
     struct WindowSettings {
-        // Leave this as 0 for automatic selection
-        uint32_t width = 0U;
-        // Leave this as 0 for automatic selection
-        uint32_t height = 0U;
+        // Leave as 0 to automatic selection
+        Extent2D extent {};
         // Window will be hidden when created, so you can do actual things before presenting anything to user
         // Works only if windowed mode is used
         bool hiddenOnStart = true;
@@ -442,9 +520,7 @@ namespace coffee {
     struct ImageConfiguration {
         ImageType type = ImageType::OneDimensional;
         Format format = Format::Undefined;
-        uint32_t width = 0U;
-        uint32_t height = 1U;
-        uint32_t depth = 1U;
+        Extent3D extent {};
         uint32_t mipLevels = 1U;
         uint32_t arrayLayers = 1U;
         // Must be power of 2, otherwise will be round up to nearest power of 2
@@ -453,6 +529,10 @@ namespace coffee {
         ImageUsage usage = ImageUsage::None;
         ResourceState initialState = ResourceState::CopyDestination;
         ImageViewType viewType = ImageViewType::OneDimensional;
+        SwizzleComponent swizzleRed = SwizzleComponent::Identity;
+        SwizzleComponent swizzleGreen = SwizzleComponent::Identity;
+        SwizzleComponent swizzleBlue = SwizzleComponent::Identity;
+        SwizzleComponent swizzleAlpha = SwizzleComponent::Identity;
         ImageAspect aspects = ImageAspect::Color;
     };
 
@@ -507,11 +587,16 @@ namespace coffee {
     };
 
     struct FramebufferConfiguration {
-        uint32_t width = 0U;
-        uint32_t height = 0U;
+        Extent2D extent {};
         std::vector<Image> colorViews {};
         Image depthStencilView = nullptr;
         Image resolveView = nullptr;
+    };
+
+    struct PushConstantsRange {
+        ShaderStage shaderStages = ShaderStage::None;
+        uint32_t offset = 0U;
+        uint32_t size = 0U;
     };
 
     struct InputAssembly {
@@ -603,6 +688,7 @@ namespace coffee {
         ColorBlendAttachment colorBlendAttachment {};
         DepthStencilInfo depthStencilInfo {};
         std::vector<InputBinding> inputBindings {};
+        std::vector<PushConstantsRange> ranges {};
     };
 
     struct SamplerConfiguration {
@@ -623,72 +709,8 @@ namespace coffee {
         float maxLod = 0.0f;
     };
 
-    // Custom operators for types
-
-    constexpr ShaderStage operator|(ShaderStage this_, ShaderStage other_) {
-        return static_cast<ShaderStage>(static_cast<uint32_t>(this_) | static_cast<uint32_t>(other_));
-    }
-
-    constexpr ShaderStage operator&(ShaderStage this_, ShaderStage other_) {
-        return static_cast<ShaderStage>(static_cast<uint32_t>(this_) & static_cast<uint32_t>(other_));
-    }
-
-    constexpr bool operator>(ShaderStage this_, ShaderStage other_) {
-        return static_cast<uint32_t>(this_) > static_cast<uint32_t>(other_);
-    }
-
-    constexpr bool operator<(ShaderStage this_, ShaderStage other_) {
-        return static_cast<uint32_t>(this_) < static_cast<uint32_t>(other_);
-    }
-
-    constexpr BufferUsage operator|(BufferUsage this_, BufferUsage other_) {
-        return static_cast<BufferUsage>(static_cast<uint32_t>(this_) | static_cast<uint32_t>(other_));
-    }
-
-    constexpr BufferUsage operator&(BufferUsage this_, BufferUsage other_) {
-        return static_cast<BufferUsage>(static_cast<uint32_t>(this_) & static_cast<uint32_t>(other_));
-    }
-
-    constexpr MemoryProperty operator|(MemoryProperty this_, MemoryProperty other_) {
-        return static_cast<MemoryProperty>(static_cast<uint32_t>(this_) | static_cast<uint32_t>(other_));
-    }
-
-    constexpr MemoryProperty operator&(MemoryProperty this_, MemoryProperty other_) {
-        return static_cast<MemoryProperty>(static_cast<uint32_t>(this_) & static_cast<uint32_t>(other_));
-    }
-
-    constexpr ImageUsage operator|(ImageUsage this_, ImageUsage other_) {
-        return static_cast<ImageUsage>(static_cast<uint32_t>(this_) | static_cast<uint32_t>(other_));
-    }
-
-    constexpr ImageUsage operator&(ImageUsage this_, ImageUsage other_) {
-        return static_cast<ImageUsage>(static_cast<uint32_t>(this_) & static_cast<uint32_t>(other_));
-    }
-
-    constexpr ImageAspect operator|(ImageAspect this_, ImageAspect other_) {
-        return static_cast<ImageAspect>(static_cast<uint32_t>(this_) | static_cast<uint32_t>(other_));
-    }
-
-    constexpr ImageAspect operator&(ImageAspect this_, ImageAspect other_) {
-        return static_cast<ImageAspect>(static_cast<uint32_t>(this_) & static_cast<uint32_t>(other_));
-    }
-
-    constexpr ColorComponent operator|(ColorComponent this_, ColorComponent other_) {
-        return static_cast<ColorComponent>(static_cast<uint32_t>(this_) | static_cast<uint32_t>(other_));
-    }
-
-    constexpr ColorComponent operator&(ColorComponent this_, ColorComponent other_) {
-        return static_cast<ColorComponent>(static_cast<uint32_t>(this_) & static_cast<uint32_t>(other_));
-    }
-
-    constexpr ResourceState operator|(ResourceState this_, ResourceState other_) {
-        return static_cast<ResourceState>(static_cast<uint32_t>(this_) | static_cast<uint32_t>(other_));
-    }
-
-    constexpr ResourceState operator&(ResourceState this_, ResourceState other_) {
-        return static_cast<ResourceState>(static_cast<uint32_t>(this_) & static_cast<uint32_t>(other_));
-    }
-
 }
+
+#include <coffee/types.inl>
 
 #endif

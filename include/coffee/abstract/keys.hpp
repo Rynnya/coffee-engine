@@ -135,7 +135,9 @@ namespace coffee {
 		RightControl = 345,
 		RightAlt = 346,
 		RightSuper = 347,
-		Menu = 348
+		Menu = 348,
+
+		Last = Menu + 1
 	};
 
 	enum class MouseButton : uint8_t {

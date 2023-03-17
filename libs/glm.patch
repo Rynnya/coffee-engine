@@ -1,0 +1,12 @@
+diff --git a/glm/gtc/quaternion.inl b/glm/gtc/quaternion.inl
+index e1ef0321..97416fa7 100644
+--- a/glm/gtc/quaternion.inl
++++ b/glm/gtc/quaternion.inl
+@@ -117,7 +117,6 @@ namespace glm
+ 		case 3:
+ 			return qua<T, Q>((m[0][1] - m[1][0]) * mult, (m[2][0] + m[0][2]) * mult, (m[1][2] + m[2][1]) * mult, biggestVal);
+ 		default: // Silence a -Wswitch-default warning in GCC. Should never actually get here. Assert is just for sanity.
+-			assert(false);
+ 			return qua<T, Q>(1, 0, 0, 0);
+ 		}
+ 	}

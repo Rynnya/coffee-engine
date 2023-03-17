@@ -14,9 +14,9 @@ namespace coffee {
         ~VulkanImage() noexcept;
 
         const bool swapChainImage = false;
-        VkImage image;
-        VkDeviceMemory memory;
-        VkImageView imageView;
+        VkImage image = nullptr;
+        VkDeviceMemory memory = nullptr;
+        VkImageView imageView = nullptr;
 
         VkSampleCountFlagBits sampleCount;
         VkImageAspectFlags aspectMask;

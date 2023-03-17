@@ -12,7 +12,7 @@ namespace coffee {
         const RenderPass& renderPass,
         const FramebufferConfiguration& configuration
     ) 
-        : AbstractFramebuffer { configuration.width, configuration.height }
+        : AbstractFramebuffer { configuration.extent.width, configuration.extent.height }
         , device_ { device }
     {
         std::vector<VkImageView> imageViewsImpl {};

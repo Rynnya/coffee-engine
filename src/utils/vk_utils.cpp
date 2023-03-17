@@ -153,7 +153,7 @@ namespace coffee {
         return indices;
     }
 
-    uint32_t VkUtils::getOptionalAmountOfFramebuffers(VkPhysicalDevice device, VkSurfaceKHR surface) noexcept {
+    uint32_t VkUtils::getOptimalAmountOfFramebuffers(VkPhysicalDevice device, VkSurfaceKHR surface) noexcept {
         VkSurfaceCapabilitiesKHR capabilities {};
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &capabilities);
 
@@ -1033,6 +1033,29 @@ namespace coffee {
         }
 
         return flagsImpl;
+    }
+
+    VkComponentSwizzle VkUtils::transformSwizzleComponent(SwizzleComponent component) noexcept {
+        switch (component) {
+            case SwizzleComponent::Identity:
+                return VK_COMPONENT_SWIZZLE_IDENTITY;
+            case SwizzleComponent::Zero:
+                return VK_COMPONENT_SWIZZLE_ZERO;
+            case SwizzleComponent::One:
+                return VK_COMPONENT_SWIZZLE_ONE;
+            case SwizzleComponent::Red:
+                return VK_COMPONENT_SWIZZLE_R;
+            case SwizzleComponent::Green:
+                return VK_COMPONENT_SWIZZLE_G;
+            case SwizzleComponent::Blue:
+                return VK_COMPONENT_SWIZZLE_B;
+            case SwizzleComponent::Alpha:
+                return VK_COMPONENT_SWIZZLE_A;
+            default:
+                COFFEE_ASSERT(false, "Invalid SwizzleComponent provided. This should not happen.");
+        }
+
+        return VK_COMPONENT_SWIZZLE_IDENTITY;
     }
 
     VkCompareOp VkUtils::transformCompareOp(CompareOp op) noexcept {

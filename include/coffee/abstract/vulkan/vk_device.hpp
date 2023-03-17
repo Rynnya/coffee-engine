@@ -12,7 +12,7 @@ namespace coffee {
 
     class VulkanDevice : public AbstractDevice {
     public:
-        VulkanDevice(void* windowHandle);
+        VulkanDevice();
         ~VulkanDevice();
 
         bool isDeviceSuitable(VkPhysicalDevice device, const std::vector<const char*>& additionalExtensions = {});
@@ -26,7 +26,6 @@ namespace coffee {
 
         VkInstance getInstance() const noexcept;
         VkPhysicalDevice getPhysicalDevice() const noexcept;
-        VkSurfaceKHR getSurface() const noexcept;
         VkDevice getLogicalDevice() const noexcept;
         VkQueue getGraphicsQueue() const noexcept;
         VkQueue getPresentQueue() const noexcept;
@@ -36,16 +35,18 @@ namespace coffee {
     private:
         void createInstance();
         void createDebugMessenger();
-        void createSurface(void* windowHandle);
+        void createTemporarySurface();
         void pickPhysicalDevice();
         void createLogicalDevice();
         void createCommandPool();
         void createDescriptorPool();
+        void destroyTemporarySurface();
 
         VkCommandBuffer beginSingleTimeCommands();
         void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 
         VkInstance instance_ = nullptr;
+        void* window_ = nullptr;
         VkSurfaceKHR surface_ = nullptr;
         VkDebugUtilsMessengerEXT debugMessenger_ = nullptr;
 

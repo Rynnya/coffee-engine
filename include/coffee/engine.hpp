@@ -1,8 +1,10 @@
-#ifndef COFFEE_ENGINE_CORE
-#define COFFEE_ENGINE_CORE
+#ifndef COFFEE_ENGINE_FACTORY
+#define COFFEE_ENGINE_FACTORY
 
 #include <coffee/abstract/backend.hpp>
 #include <coffee/abstract/keys.hpp>
+#include <coffee/abstract/monitor.hpp>
+#include <coffee/abstract/window.hpp>
 
 #include <coffee/events/application_event.hpp>
 #include <coffee/events/key_event.hpp>
@@ -10,8 +12,6 @@
 #include <coffee/events/window_event.hpp>
 
 #include <coffee/interfaces/archive.hpp>
-#include <coffee/interfaces/deferred_requests.hpp>
-#include <coffee/interfaces/thread_pool.hpp>
 
 #include <coffee/objects/model.hpp>
 #include <coffee/objects/texture.hpp>
@@ -24,127 +24,79 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 
 namespace coffee {
 
-    class Engine : DeferredRequests {
+    class Engine {
     public:
-        Engine(BackendSelect backend, WindowSettings settings = {}, const std::string& applicationName = "Coffee Engine");
-        ~Engine();
+        static void initialize(BackendAPI backend);
+        static void destroy() noexcept;
 
-        void pollEvents();
-        bool acquireFrame();
-        void sendCommandBuffer(CommandBuffer&& commandBuffer);
-        void endFrame();
-        void wait();
+        static BackendAPI getBackendType() noexcept;
+        static Monitor getPrimaryMonitor() noexcept;
+        static const std::vector<Monitor>& getMonitors() noexcept;
 
-        BackendSelect getBackendSelect() const noexcept;
-        Format getColorFormat() const noexcept;
-        Format getDepthFormat() const noexcept;
-        uint32_t getCurrentImageIndex() const noexcept;
-        const std::vector<Image>& getPresentImages() const noexcept;
+        static void pollEvents();
+        static void wait();
 
-        Model importModel(const std::string& filename);
-        Model importModel(const std::string& modelFile, const Archive& materialsArchive);
-        Texture importTexture(const std::string& filename, TextureType type);
+        static float getDeltaTime() noexcept;
+        static float getFramerateLimit() noexcept;
+        static void setFramerateLimit(float framerateLimit) noexcept;
 
-        Buffer createBuffer(const BufferConfiguration& configuration);
-        Image createImage(const ImageConfiguration& configuration);
-        Sampler createSampler(const SamplerConfiguration& configuration);
+        static Model importModel(const std::string& filename);
+        static Model importModel(const std::string& modelFile, const Archive& materialsArchive);
+        static Texture importTexture(const std::string& filename, TextureType type);
 
-        Shader createShader(const std::string& fileName, ShaderStage stage, const std::string& entrypoint = "main");
-        Shader createShader(const std::vector<uint8_t>& bytes, ShaderStage stage, const std::string& entrypoint = "main");
+        static void copyBuffer(Buffer& dstBuffer, const Buffer& srcBuffer);
+        static void copyBufferToImage(Image& dstImage, const Buffer& srcBuffer);
+        static void waitDeviceIdle();
 
-        DescriptorLayout createDescriptorLayout(const std::map<uint32_t, DescriptorBindingInfo>& bindings);
-        DescriptorSet createDescriptorSet(const DescriptorWriter& writer);
+        static std::string_view getClipboard() noexcept;
+        static void setClipboard(const std::string& clipboard) noexcept;
 
-        RenderPass createRenderPass(
-            const RenderPassConfiguration& configuration);
-        RenderPass createRenderPass(
-            const RenderPass& parent, const RenderPassConfiguration& configuration);
-        Pipeline createPipeline(
-            const RenderPass& renderPass,
-            const PushConstants& pushConstants,
-            const std::vector<DescriptorLayout>& descriptorLayouts,
-            const ShaderProgram& shaderProgram,
-            const PipelineConfiguration& configuration);
-        Framebuffer createFramebuffer(
-            const RenderPass& renderPass,
-            const FramebufferConfiguration& configuration);
-        CommandBuffer createCommandBuffer();
+        static void addMonitorConnectedCallback(const std::string& name, const std::function<void(const MonitorImpl&)>& callback);
+        static void removeMonitorConnectedCallback(const std::string& name);
+        static void addMonitorDisconnectedCallback(const std::string& name, const std::function<void(const MonitorImpl&)>& callback);
+        static void removeMonitorDisconnectedCallback(const std::string& name);
 
-        void copyBuffer(Buffer& dstBuffer, const Buffer& srcBuffer);
-        void copyBufferToImage(Image& dstImage, const Buffer& srcBuffer);
+        class Factory {
+        public:
+            static Window createWindow(WindowSettings settings = {}, const std::string& windowName = "Coffee Engine");
 
-        void changePresentMode(PresentMode newMode);
-        void waitDeviceIdle();
+            static Buffer createBuffer(const BufferConfiguration& configuration);
+            static Image createImage(const ImageConfiguration& configuration);
+            static Sampler createSampler(const SamplerConfiguration& configuration);
 
-        bool isWindowFocused() const noexcept;
-        void hideWindow() const noexcept;
-        void showWindow() const noexcept;
+            static Shader createShader(const std::string& fileName, ShaderStage stage, const std::string& entrypoint = "main");
+            static Shader createShader(const std::vector<uint8_t>& bytes, ShaderStage stage, const std::string& entrypoint = "main");
 
-        std::string_view getClipboard() const noexcept;
-        void setClipboard(const std::string& clipboard);
+            static DescriptorLayout createDescriptorLayout(const std::map<uint32_t, DescriptorBindingInfo>& bindings);
+            static DescriptorSet createDescriptorSet(const DescriptorWriter& writer);
 
-        uint32_t getWindowWidth() const noexcept;
-        uint32_t getWindowHeight() const noexcept;
+            static RenderPass createRenderPass(
+                const RenderPassConfiguration& configuration);
+            static Pipeline createPipeline(
+                const RenderPass& renderPass,
+                const std::vector<DescriptorLayout>& descriptorLayouts,
+                const std::vector<Shader>& shaderPrograms,
+                const PipelineConfiguration& configuration);
+            static Framebuffer createFramebuffer(
+                const RenderPass& renderPass,
+                const FramebufferConfiguration& configuration);
+            static CommandBuffer createCommandBuffer();
 
-        uint32_t getFramebufferWidth() const noexcept;
-        uint32_t getFramebufferHeight() const noexcept;
-
-        float getMouseX() const noexcept;
-        float getMouseY() const noexcept;
-
-        bool isButtonPressed(Keys key) const noexcept;
-        bool isButtonPressed(MouseButton mouseButton) const noexcept;
-
-        CursorState getCursorState() const noexcept;
-        void showCursor();
-        void hideCursor();
-        void disableCursor();
-        void setCursorPosition(float x, float y) const noexcept;
-
-        bool isTextMode() const noexcept;
-        void enableTextMode();
-        void disableTextMode();
-
-        float getDeltaTime() const noexcept;
-        float getFrameLimit() const noexcept;
-        void setFrameLimit(float newFrameLimit) noexcept;
-
-        bool shouldExit() const noexcept;
-
-        void addPresentModeCallback(const std::string& name, const std::function<void(const PresentModeEvent)>& callback);
-
-        void addWindowFocusCallback(const std::string& name, const std::function<void(const WindowFocusEvent&)>& callback);
-        void addWindowResizeCallback(const std::string& name, const std::function<void(const ResizeEvent&)>& callback);
-        void addWindowEnterCallback(const std::string& name, const std::function<void(const WindowEnterEvent&)>& callback);
-
-        void addMouseClickCallback(const std::string& name, const std::function<void(const MouseClickEvent&)>& callback);
-        void addMousePositionCallback(const std::string& name, const std::function<void(const MouseMoveEvent&)>& callback);
-        void addMouseWheelCallback(const std::string& name, const std::function<void(const MouseWheelEvent&)>& callback);
-
-        void addKeyCallback(const std::string& name, const std::function<void(const KeyEvent&)>& callback);
-        void addCharCallback(const std::string& name, const std::function<void(char32_t)>& callback);
-
-        void removePresentModeCallback(const std::string& name);
-
-        void removeWindowFocusCallback(const std::string& name);
-        void removeWindowResizeCallback(const std::string& name);
-        void removeWindowEnterCallback(const std::string& name);
-
-        void removeMouseClickCallback(const std::string& name);
-        void removeMousePositionCallback(const std::string& name);
-        void removeMouseWheelCallback(const std::string& name);
-
-        void removeKeyCallback(const std::string& name);
-        void removeCharCallback(const std::string& name);
+        private:
+            constexpr Factory() noexcept = default;
+        };
 
     private:
-        void createNullTexture();
+        constexpr Engine() noexcept = default;
 
-        Texture createTexture(
+        static void createNullTexture();
+
+        static Texture createTexture(
             const uint8_t* rawBytes,
             size_t bufferSize,
             Format format,
@@ -152,36 +104,13 @@ namespace coffee {
             uint32_t height,
             const std::string& filePath,
             TextureType type);
-        Buffer createVerticesBuffer(const std::vector<Vertex>& vertices);
-        Buffer createIndicesBuffer(const std::vector<uint32_t>& indices);
+        static Buffer createVerticesBuffer(const std::vector<Vertex>& vertices);
+        static Buffer createIndicesBuffer(const std::vector<uint32_t>& indices);
 
-        Format typeToFormat(TextureType type) const noexcept;
-
-        BackendSelect currentBackend_;
-        std::unique_ptr<AbstractBackend> backendImpl_ = nullptr;
-
-        float framerateLimit_ = 60.0f;
-        float deltaTime_ = 0.0f;
-        std::chrono::high_resolution_clock::time_point lastPollTime_ {};
-
-        std::map<std::string, std::function<void(const WindowFocusEvent&)>> windowFocusCallbacks_ {};
-        std::map<std::string, std::function<void(const ResizeEvent&)>> windowResizeCallbacks_ {};
-        std::map<std::string, std::function<void(const WindowEnterEvent&)>> windowEnterCallbacks_ {};
-        std::map<std::string, std::function<void(const MouseClickEvent&)>> mouseClickCallbacks_ {};
-        std::map<std::string, std::function<void(const MouseMoveEvent&)>> mousePositionCallbacks_ {};
-        std::map<std::string, std::function<void(const MouseWheelEvent&)>> mouseWheelCallbacks_ {};
-        std::map<std::string, std::function<void(const KeyEvent&)>> keyCallbacks_ {};
-        std::map<std::string, std::function<void(char32_t)>> charCallbacks_ {};
-        std::map<std::string, std::function<void(const PresentModeEvent&)>> presentModeCallbacks_ {};
-
-        Texture defaultTexture_;
-        std::array<std::unordered_map<std::string, Texture>, 7> loadedTextures_ {};
-
-        struct PImpl;
-        PImpl* pImpl_;
-
-        friend struct Engine::PImpl;
+        static Format typeToFormat(TextureType type) noexcept;
     };
+
+    using Factory = Engine::Factory;
 
 }
 

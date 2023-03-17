@@ -12,16 +12,6 @@ namespace coffee {
         return height_;
     }
 
-    WindowFocusEvent::WindowFocusEvent(bool lost) noexcept : lost_ { lost } {}
-
-    bool WindowFocusEvent::isLostFocus() const noexcept {
-        return lost_;
-    }
-
-    bool WindowFocusEvent::isFocusGained() const noexcept {
-        return !lost_;
-    }
-
     WindowEnterEvent::WindowEnterEvent(bool entered) noexcept : entered_ { entered } {}
 
     bool WindowEnterEvent::entered() const noexcept {
@@ -30,6 +20,26 @@ namespace coffee {
 
     bool WindowEnterEvent::exited() const noexcept {
         return !entered_;
+    }
+
+    WindowPositionEvent::WindowPositionEvent(int32_t xpos, int32_t ypos) noexcept : xPosition_ { xpos }, yPosition_ { ypos } {}
+
+    int32_t WindowPositionEvent::getXPosition() const noexcept {
+        return xPosition_;
+    }
+
+    int32_t WindowPositionEvent::getYPosition() const noexcept {
+        return yPosition_;
+    }
+
+    WindowFocusEvent::WindowFocusEvent(bool lost) noexcept : lost_ { lost } {}
+
+    bool WindowFocusEvent::isLostFocus() const noexcept {
+        return lost_;
+    }
+
+    bool WindowFocusEvent::isFocusGained() const noexcept {
+        return !lost_;
     }
 
 }

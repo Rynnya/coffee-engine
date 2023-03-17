@@ -1,5 +1,6 @@
 #include <coffee/abstract/vulkan/vk_swap_chain.hpp>
 
+#include <coffee/abstract/vulkan/vk_command_buffer.hpp>
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
@@ -9,25 +10,27 @@
 namespace coffee {
 
     VulkanSwapChain::VulkanSwapChain(
-        VulkanDevice& device, 
-        VkExtent2D extent,
-        std::optional<VkPresentModeKHR> preferableVerticalSynchronization
-    ) : device_ { device } {
-        initialize(extent, preferableVerticalSynchronization, nullptr);
-    }
-
-    VulkanSwapChain::VulkanSwapChain(
         VulkanDevice& device,
+        VkSurfaceKHR surface,
         VkExtent2D extent,
-        std::optional<VkPresentModeKHR> preferableVerticalSynchronization,
-        std::unique_ptr<VulkanSwapChain>& oldSwapChain
-    ) : device_ { device } {
-        verticalSynchronization_ = std::move(oldSwapChain->verticalSynchronization_);
-        initialize(extent, preferableVerticalSynchronization, oldSwapChain->handle_);
+        std::optional<PresentMode> preferablePresentMode
+    ) 
+        : device_ { device }
+        , surface_ { surface }
+    {
+        createSwapChain(extent, preferablePresentMode);
+        createSyncObjects();
     }
 
-    VulkanSwapChain::~VulkanSwapChain() {
-        images_.clear();
+    VulkanSwapChain::~VulkanSwapChain() noexcept {
+        for (const auto& framePoolsAndBuffers : poolsAndBuffers_) {
+            for (auto& [pool, commandBuffer] : framePoolsAndBuffers) {
+                vkFreeCommandBuffers(device_.getLogicalDevice(), pool, 1U, &commandBuffer);
+                device_.returnCommandPool(pool);
+            }
+        }
+
+        images.clear();
 
         vkDestroySwapchainKHR(device_.getLogicalDevice(), handle_, nullptr);
         handle_ = nullptr;
@@ -39,67 +42,88 @@ namespace coffee {
         }
     }
 
-    bool VulkanSwapChain::operator==(const VulkanSwapChain& other) const noexcept {
-        return static_cast<uint32_t>(imageFormat_) == static_cast<uint32_t>(other.imageFormat_);
-    }
+    bool VulkanSwapChain::acquireNextImage() {
+        vkWaitForFences(
+            device_.getLogicalDevice(),
+            1,
+            &inFlightFences_[currentFrameInFlight],
+            VK_TRUE,
+            std::numeric_limits<uint64_t>::max());
+        VkResult result = vkAcquireNextImageKHR(
+            device_.getLogicalDevice(), 
+            handle_, 
+            std::numeric_limits<uint64_t>::max(), 
+            imageAvailableSemaphores_[currentFrameInFlight], 
+            nullptr,
+            &currentFrame);
 
-    bool VulkanSwapChain::operator!=(const VulkanSwapChain& other) const noexcept {
-        return !(*this == other);
-    }
-
-    VkPresentModeKHR VulkanSwapChain::getVSyncMode() const noexcept {
-        return verticalSynchronization_.value();
-    }
-
-    Format VulkanSwapChain::getImageFormat() const noexcept {
-        return imageFormat_;
-    }
-
-    Format VulkanSwapChain::getDepthFormat() const noexcept {
-        return depthFormat_;
-    }
-
-    size_t VulkanSwapChain::getImagesSize() const noexcept {
-        return images_.size();
-    }
-
-    const std::vector<Image>& VulkanSwapChain::getPresentImages() const noexcept {
-        return images_;
-    }
-
-    VkResult VulkanSwapChain::acquireNextImage(uint32_t& imageIndex) {
-        vkWaitForFences(device_.getLogicalDevice(), 1, &inFlightFences_[currentFrame_], VK_TRUE, std::numeric_limits<uint64_t>::max());
-        return vkAcquireNextImageKHR(device_.getLogicalDevice(), handle_, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores_[currentFrame_], nullptr, &imageIndex);
-    }
-
-    VkResult VulkanSwapChain::submitCommandBuffers(const std::vector<VkCommandBuffer>& commandBuffers, uint32_t imageIndex) {
-        if (imagesInFlight_[imageIndex] != nullptr) {
-            vkWaitForFences(device_.getLogicalDevice(), 1, &imagesInFlight_[imageIndex], VK_TRUE, std::numeric_limits<uint64_t>::max());
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            return false;
         }
 
-        imagesInFlight_[imageIndex] = inFlightFences_[currentFrame_];
+        COFFEE_THROW_IF(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR, "Failed to acquire swap chain image!");
+
+        for (auto& [pool, commandBuffer] : poolsAndBuffers_[currentFrame]) {
+            vkFreeCommandBuffers(device_.getLogicalDevice(), pool, 1U, &commandBuffer);
+            device_.returnCommandPool(pool);
+        }
+
+        poolsAndBuffers_[currentFrame].clear();
+
+        return true;
+    }
+
+    bool VulkanSwapChain::submitCommandBuffers(const std::vector<CommandBuffer>& commandBuffers) {
+        std::vector<VkCommandBuffer> commandBuffersToUpload {};
+
+        for (auto& commandBuffer : commandBuffers) {
+            if (commandBuffer == nullptr) {
+                continue;
+            }
+
+            VulkanCommandBuffer* commandBufferImpl = static_cast<VulkanCommandBuffer*>(commandBuffer.get());
+
+            if (commandBufferImpl->renderPassActive) {
+                commandBufferImpl->endRenderPass();
+            }
+
+            COFFEE_THROW_IF(
+                vkEndCommandBuffer(commandBufferImpl->commandBuffer) != VK_SUCCESS, "Failed to end command buffer recording!");
+
+            commandBuffersToUpload.push_back(commandBufferImpl->commandBuffer);
+            poolsAndBuffers_[currentFrame].push_back({ commandBufferImpl->pool, commandBufferImpl->commandBuffer });
+
+            // Take ownership of pool
+            commandBufferImpl->pool = nullptr;
+        }
+
+        if (imagesInFlight_[currentFrame] != nullptr) {
+            vkWaitForFences(device_.getLogicalDevice(), 1, &imagesInFlight_[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+        }
+
+        imagesInFlight_[currentFrame] = inFlightFences_[currentFrameInFlight];
         VkSubmitInfo submitInfo { VK_STRUCTURE_TYPE_SUBMIT_INFO };
 
-        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores_[currentFrame_] };
+        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores_[currentFrameInFlight] };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = waitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
 
-        submitInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
-        submitInfo.pCommandBuffers = commandBuffers.data();
+        submitInfo.commandBufferCount = static_cast<uint32_t>(commandBuffersToUpload.size());
+        submitInfo.pCommandBuffers = commandBuffersToUpload.data();
 
-        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores_[currentFrame_] };
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores_[currentFrameInFlight] };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        vkResetFences(device_.getLogicalDevice(), 1, &inFlightFences_[currentFrame_]);
+        vkResetFences(device_.getLogicalDevice(), 1, &inFlightFences_[currentFrameInFlight]);
         COFFEE_THROW_IF(
-            vkQueueSubmit(device_.getGraphicsQueue(), 1, &submitInfo, inFlightFences_[currentFrame_]) != VK_SUCCESS,
+            vkQueueSubmit(device_.getGraphicsQueue(), 1, &submitInfo, inFlightFences_[currentFrameInFlight]) != VK_SUCCESS,
             "Failed to submit draw command buffers!");
 
         VkPresentInfoKHR presentInfo { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
-        presentInfo.pImageIndices = &imageIndex;
+        presentInfo.pImageIndices = &currentFrame;
 
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = signalSemaphores;
@@ -107,42 +131,65 @@ namespace coffee {
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = &handle_;
 
-        currentFrame_ = (currentFrame_ + 1) % maxFramesInFlight;
-        return vkQueuePresentKHR(device_.getPresentQueue(), &presentInfo);
+        VkResult result = vkQueuePresentKHR(device_.getPresentQueue(), &presentInfo);
+
+        // We don't care about resizing here because on next loop we will ask about poll and poll will resize images for us
+        COFFEE_THROW_IF(
+            result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR && result != VK_ERROR_OUT_OF_DATE_KHR, "Failed to present swap chain image!");
+
+        currentFrameInFlight = (currentFrameInFlight + 1) % maxFramesInFlight;
+        currentFrame = (currentFrame + 1) % images.size();
+
+        return true;
     }
 
-    void VulkanSwapChain::initialize(
-        VkExtent2D extent,
-        std::optional<VkPresentModeKHR> preferableVerticalSynchronization,
-        VkSwapchainKHR oldSwapchain
-    ) {
-        createSwapChain(extent, preferableVerticalSynchronization, oldSwapchain);
-        createSyncObjects();
+    void VulkanSwapChain::recreate(uint32_t width, uint32_t height, PresentMode mode) {
+        images.clear();
+
+        VkSwapchainKHR oldSwapChain = handle_;
+        createSwapChain({ width, height }, mode, oldSwapChain);
+
+        vkDestroySwapchainKHR(device_.getLogicalDevice(), oldSwapChain, nullptr);
+    }
+
+    void VulkanSwapChain::waitIdle() {
+        vkWaitForFences(device_.getLogicalDevice(), maxFramesInFlight, inFlightFences_.data(), VK_TRUE, std::numeric_limits<uint64_t>::max());
+    }
+
+    void VulkanSwapChain::checkSupportedPresentModes() noexcept {
+        VkUtils::SwapChainSupportDetails swapChainSupport = VkUtils::querySwapChainSupport(device_.getPhysicalDevice(), surface_);
+
+        mailboxSupported_ =
+            (VkUtils::choosePresentMode(swapChainSupport.presentModes, VK_PRESENT_MODE_MAILBOX_KHR) == VK_PRESENT_MODE_MAILBOX_KHR);
+        immediateSupported_ =
+            (VkUtils::choosePresentMode(swapChainSupport.presentModes, VK_PRESENT_MODE_IMMEDIATE_KHR) == VK_PRESENT_MODE_IMMEDIATE_KHR);
     }
 
     void VulkanSwapChain::createSwapChain(
         VkExtent2D extent,
-        std::optional<VkPresentModeKHR> preferableVerticalSynchronization, 
+        std::optional<PresentMode> preferablePresentMode,
         VkSwapchainKHR oldSwapchain
     ) {
-        std::optional<VkPresentModeKHR> preferablePresentMode {};
+        std::optional<VkPresentModeKHR> preferableVSync { VK_PRESENT_MODE_FIFO_KHR };
 
-        if (verticalSynchronization_.has_value()) {
-            preferablePresentMode = verticalSynchronization_;
+        if (presentMode == PresentMode::Immediate || (preferablePresentMode.has_value() && preferablePresentMode.value() == PresentMode::Immediate)) {
+            if (immediateSupported_) {
+                preferableVSync = VK_PRESENT_MODE_IMMEDIATE_KHR;
+            }
+
+            if (mailboxSupported_) {
+                preferableVSync = VK_PRESENT_MODE_MAILBOX_KHR;
+            }
         }
 
-        if (preferableVerticalSynchronization.has_value()) {
-            preferablePresentMode = preferableVerticalSynchronization;
-        }
-
-        VkUtils::SwapChainSupportDetails swapChainSupport = VkUtils::querySwapChainSupport(device_.getPhysicalDevice(), device_.getSurface());
+        VkUtils::SwapChainSupportDetails swapChainSupport = VkUtils::querySwapChainSupport(device_.getPhysicalDevice(), surface_);
         VkSurfaceFormatKHR surfaceFormat = VkUtils::chooseSurfaceFormat(swapChainSupport.formats);
-        VkPresentModeKHR presentMode = VkUtils::choosePresentMode(swapChainSupport.presentModes, preferablePresentMode);
+        VkPresentModeKHR nativePresentMode = VkUtils::choosePresentMode(swapChainSupport.presentModes, preferableVSync);
         VkExtent2D selectedExtent = VkUtils::chooseExtent(extent, swapChainSupport.capabilities);
-        uint32_t imageCount = VkUtils::getOptionalAmountOfFramebuffers(device_.getPhysicalDevice(), device_.getSurface());
+        uint32_t imageCount = VkUtils::getOptimalAmountOfFramebuffers(device_.getPhysicalDevice(), surface_);
 
         VkSwapchainCreateInfoKHR createInfo { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
-        createInfo.surface = device_.getSurface();
+        createInfo.surface = surface_;
         createInfo.minImageCount = imageCount;
         createInfo.imageFormat = surfaceFormat.format;
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
@@ -150,7 +197,7 @@ namespace coffee {
         createInfo.imageArrayLayers = 1;
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        VkUtils::QueueFamilyIndices indices = VkUtils::findQueueFamilies(device_.getPhysicalDevice(), device_.getSurface());
+        VkUtils::QueueFamilyIndices indices = VkUtils::findQueueFamilies(device_.getPhysicalDevice(), surface_);
         uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
         // If objects were in same family, then we must set permissions to explicit, otherwise to relaxed
@@ -169,7 +216,7 @@ namespace coffee {
         
         createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
         createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        createInfo.presentMode = presentMode;
+        createInfo.presentMode = nativePresentMode;
         createInfo.clipped = VK_TRUE;
 
         createInfo.oldSwapchain = oldSwapchain;
@@ -179,24 +226,25 @@ namespace coffee {
 
         vkGetSwapchainImagesKHR(device_.getLogicalDevice(), handle_, &imageCount, nullptr);
 
-        std::vector<VkImage> images {};
-        images.resize(imageCount);
-        images_.reserve(imageCount);
+        std::vector<VkImage> swapChainImages {};
+        swapChainImages.resize(imageCount);
+        poolsAndBuffers_.resize(imageCount);
+        images.reserve(imageCount);
 
-        vkGetSwapchainImagesKHR(device_.getLogicalDevice(), handle_, &imageCount, images.data());
+        vkGetSwapchainImagesKHR(device_.getLogicalDevice(), handle_, &imageCount, swapChainImages.data());
 
-        for (size_t i = 0; i < images.size(); i++) {
-            images_.emplace_back(
-                std::make_shared<VulkanImage>(device_, selectedExtent.width, selectedExtent.height, surfaceFormat.format, images[i]));
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
+            images.emplace_back(
+                std::make_shared<VulkanImage>(device_, selectedExtent.width, selectedExtent.height, surfaceFormat.format, swapChainImages[i]));
         }
 
-        verticalSynchronization_ = std::make_optional(presentMode);
-        imageFormat_ = VkUtils::transformFormat(surfaceFormat.format);
-        depthFormat_ = VkUtils::transformFormat(VkUtils::findDepthFormat(device_.getPhysicalDevice()));
+        presentMode = nativePresentMode == VK_PRESENT_MODE_FIFO_KHR ? PresentMode::FIFO : PresentMode::Immediate;
+        imageFormat = VkUtils::transformFormat(surfaceFormat.format);
+        depthFormat = VkUtils::transformFormat(VkUtils::findDepthFormat(device_.getPhysicalDevice()));
     }
 
     void VulkanSwapChain::createSyncObjects() {
-        imagesInFlight_.resize(images_.size());
+        imagesInFlight_.resize(images.size());
 
         VkSemaphoreCreateInfo semaphoreInfo { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
         VkFenceCreateInfo fenceInfo { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
