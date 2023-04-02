@@ -17,6 +17,6 @@ namespace coffee {
         VulkanDevice& device_;
     };
 
-}
+} // namespace coffee
 
 #endif

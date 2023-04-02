@@ -1,7 +1,7 @@
 #ifndef COFFEE_UTILS_VK_UTILS
 #define COFFEE_UTILS_VK_UTILS
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 #include <coffee/types.hpp>
 
@@ -13,17 +13,19 @@ namespace coffee {
     class VkUtils {
     public:
         static VkFormat findSupportedFormat(
-            VkPhysicalDevice device, 
-            const std::vector<VkFormat>& candidates, 
-            VkImageTiling tiling, 
-            VkFormatFeatureFlags features);
+            VkPhysicalDevice device,
+            const std::vector<VkFormat>& candidates,
+            VkImageTiling tiling,
+            VkFormatFeatureFlags features
+        );
         static VkFormat findDepthFormat(VkPhysicalDevice device);
         static uint32_t findMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
         static VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) noexcept;
         static VkPresentModeKHR choosePresentMode(
             const std::vector<VkPresentModeKHR>& availablePresentModes,
-            const std::optional<VkPresentModeKHR>& preferable = {}) noexcept;
+            VkPresentModeKHR preferable
+        ) noexcept;
         static VkExtent2D chooseExtent(const VkExtent2D& extent, const VkSurfaceCapabilitiesKHR& capabilities) noexcept;
 
         struct SwapChainSupportDetails {
@@ -33,8 +35,8 @@ namespace coffee {
         };
 
         struct QueueFamilyIndices {
-            std::optional<uint32_t> graphicsFamily;
-            std::optional<uint32_t> presentFamily;
+            std::optional<uint32_t> graphicsFamily = std::nullopt;
+            std::optional<uint32_t> presentFamily = std::nullopt;
 
             bool isComplete() const noexcept {
                 return graphicsFamily.has_value() && presentFamily.has_value();
@@ -50,6 +52,8 @@ namespace coffee {
         static VkDescriptorType getImageDescriptorType(VkImageUsageFlags imageFlags, bool withSampler = false) noexcept;
 
         static VkSampleCountFlagBits getUsableSampleCount(uint32_t sampleCount, const VkPhysicalDeviceProperties& properties) noexcept;
+
+        // clang-format off
 
         static VkShaderStageFlagBits    transformShaderStage(ShaderStage stage) noexcept;
         static VkShaderStageFlags       transformShaderStages(ShaderStage stages) noexcept;
@@ -86,8 +90,10 @@ namespace coffee {
 
         static VkAccessFlags            imageLayoutToAccessFlags(VkImageLayout layout) noexcept;
         static VkPipelineStageFlags     accessFlagsToPipelineStages(VkAccessFlags flags) noexcept;
+
+        // clang-format on
     };
 
-}
+} // namespace coffee
 
 #endif

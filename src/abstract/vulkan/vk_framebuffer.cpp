@@ -7,14 +7,9 @@
 
 namespace coffee {
 
-    VulkanFramebuffer::VulkanFramebuffer(
-        VulkanDevice& device,
-        const RenderPass& renderPass,
-        const FramebufferConfiguration& configuration
-    ) 
-        : AbstractFramebuffer { configuration.extent.width, configuration.extent.height }
-        , device_ { device }
-    {
+    VulkanFramebuffer::VulkanFramebuffer(VulkanDevice& device, const RenderPass& renderPass, const FramebufferConfiguration& configuration)
+            : AbstractFramebuffer { configuration.extent.width, configuration.extent.height }
+            , device_ { device } {
         std::vector<VkImageView> imageViewsImpl {};
 
         for (const auto& imageView : configuration.colorViews) {
@@ -46,4 +41,4 @@ namespace coffee {
         vkDestroyFramebuffer(device_.getLogicalDevice(), framebuffer, nullptr);
     }
 
-}
+} // namespace coffee

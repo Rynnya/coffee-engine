@@ -36,11 +36,12 @@ namespace coffee {
         } modifiers {};
 
         const Texture defaultTexture;
+
     private:
         std::array<Texture, 7> textures_;
         TextureType textureFlags_ = TextureType::None;
     };
 
-}
+} // namespace coffee
 
 #endif

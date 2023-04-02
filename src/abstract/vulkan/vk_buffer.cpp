@@ -7,9 +7,8 @@
 namespace coffee {
 
     VulkanBuffer::VulkanBuffer(VulkanDevice& device, const BufferConfiguration& configuration)
-        : AbstractBuffer { configuration.instanceCount, configuration.instanceSize, configuration.usage, configuration.properties }
-        , device_ { device }
-    {
+            : AbstractBuffer { configuration.instanceCount, configuration.instanceSize, configuration.usage, configuration.properties }
+            , device_ { device } {
         instanceCount_ = configuration.instanceCount;
         instanceSize_ = configuration.instanceSize;
         alwaysKeepMapped_ = (static_cast<size_t>(configuration.instanceCount) * configuration.instanceSize) <= alwaysMappedThreshold;
@@ -47,8 +46,9 @@ namespace coffee {
         allocateInfo.allocationSize = memoryRequirements.size;
         allocateInfo.memoryTypeIndex = VkUtils::findMemoryType(
             device_.getPhysicalDevice(),
-            memoryRequirements.memoryTypeBits, 
-            VkUtils::transformMemoryFlags(memoryFlags_));
+            memoryRequirements.memoryTypeBits,
+            VkUtils::transformMemoryFlags(memoryFlags_)
+        );
 
         COFFEE_THROW_IF(
             vkAllocateMemory(device_.getLogicalDevice(), &allocateInfo, nullptr, &memory) != VK_SUCCESS, 
@@ -78,9 +78,13 @@ namespace coffee {
     void VulkanBuffer::write(const void* data, size_t size, size_t offset) {
         COFFEE_ASSERT(
             (memoryFlags_ & MemoryProperty::HostVisible) == MemoryProperty::HostVisible,
-            "Calling write() while buffer isn't host visible is forbidden.");
+            "Calling write() while buffer isn't host visible is forbidden."
+        );
         COFFEE_ASSERT(data != nullptr, "data was nullptr.");
-        COFFEE_ASSERT(size < std::numeric_limits<size_t>::max() - offset, "Combination of size and offset will cause an arithmetic overflow.");
+        COFFEE_ASSERT(
+            size < std::numeric_limits<size_t>::max() - offset,
+            "Combination of size and offset will cause an arithmetic overflow."
+        );
         COFFEE_ASSERT(offset + size <= getTotalSize(), "Combination of size and offset will cause an buffer overflow.");
 
         std::scoped_lock<std::mutex> lock { allocationMutex_ };
@@ -173,7 +177,8 @@ namespace coffee {
             return VK_SUCCESS;
         }
 
-        // TODO: Implement subrange support, so memory won't be reallocated when it's already in range
+        // TODO: Implement subrange support, so memory won't be reallocated when it's already in
+        // range
 
         if (mappedMemory_ != nullptr) {
             vkUnmapMemory(device_.getLogicalDevice(), memory);
@@ -198,4 +203,4 @@ namespace coffee {
         }
     }
 
-}
+} // namespace coffee

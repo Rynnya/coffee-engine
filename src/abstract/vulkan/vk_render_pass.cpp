@@ -8,12 +8,11 @@
 namespace coffee {
 
     VulkanRenderPass::VulkanRenderPass(
-        VulkanDevice& device, 
+        VulkanDevice& device,
         const RenderPassConfiguration& configuration,
         const RenderPass& parentRenderPass
     )
-        : device_ { device }
-    {
+            : device_ { device } {
         VkRenderPassCreateInfo renderPassInfo { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
         VkAttachmentReference depthAttachmentRef {};
         std::vector<VkAttachmentReference> colorAttachmentRefs {};
@@ -26,7 +25,7 @@ namespace coffee {
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 
         for (size_t i = 0; i < configuration.colorAttachments.size(); i++) {
-            VkSampleCountFlagBits sampleCountImpl = 
+            VkSampleCountFlagBits sampleCountImpl =
                 VkUtils::getUsableSampleCount(configuration.colorAttachments[i].sampleCount, device_.getProperties());
             bool resolveRequired = sampleCountImpl != VK_SAMPLE_COUNT_1_BIT;
             bool resolveInPlace = resolveRequired && (configuration.colorAttachments[i].resolveImage != nullptr);
@@ -35,30 +34,34 @@ namespace coffee {
             if (configuration.colorAttachments[i].loadOp == AttachmentLoadOp::Clear) {
                 COFFEE_ASSERT(
                     std::get_if<std::monostate>(&configuration.colorAttachments[i].clearValue) == nullptr,
-                    "Color attachment require clear value, but it wasn't provided.");
+                    "Color attachment require clear value, but it wasn't provided."
+                );
 
-                std::visit([&clearValue](auto&& colorClearValue) {
-                    using T = std::decay_t<decltype(colorClearValue)>;
+                std::visit(
+                    [&clearValue](auto&& colorClearValue) {
+                        using T = std::decay_t<decltype(colorClearValue)>;
 
-                    if constexpr (std::is_same_v<T, std::array<float, 4>>) {
-                        clearValue.color.float32[0] = colorClearValue[0];
-                        clearValue.color.float32[1] = colorClearValue[1];
-                        clearValue.color.float32[2] = colorClearValue[2];
-                        clearValue.color.float32[3] = colorClearValue[3];
-                    }
-                    else if constexpr (std::is_same_v<T, std::array<int32_t, 4>>) {
-                        clearValue.color.int32[0] = colorClearValue[0];
-                        clearValue.color.int32[1] = colorClearValue[1];
-                        clearValue.color.int32[2] = colorClearValue[2];
-                        clearValue.color.int32[3] = colorClearValue[3];
-                    }
-                    else if constexpr (std::is_same_v<T, std::array<uint32_t, 4>>) {
-                        clearValue.color.uint32[0] = colorClearValue[0];
-                        clearValue.color.uint32[1] = colorClearValue[1];
-                        clearValue.color.uint32[2] = colorClearValue[2];
-                        clearValue.color.uint32[3] = colorClearValue[3];
-                    }
-                }, configuration.colorAttachments[i].clearValue);
+                        if constexpr (std::is_same_v<T, std::array<float, 4>>) {
+                            clearValue.color.float32[0] = colorClearValue[0];
+                            clearValue.color.float32[1] = colorClearValue[1];
+                            clearValue.color.float32[2] = colorClearValue[2];
+                            clearValue.color.float32[3] = colorClearValue[3];
+                        }
+                        else if constexpr (std::is_same_v<T, std::array<int32_t, 4>>) {
+                            clearValue.color.int32[0] = colorClearValue[0];
+                            clearValue.color.int32[1] = colorClearValue[1];
+                            clearValue.color.int32[2] = colorClearValue[2];
+                            clearValue.color.int32[3] = colorClearValue[3];
+                        }
+                        else if constexpr (std::is_same_v<T, std::array<uint32_t, 4>>) {
+                            clearValue.color.uint32[0] = colorClearValue[0];
+                            clearValue.color.uint32[1] = colorClearValue[1];
+                            clearValue.color.uint32[2] = colorClearValue[2];
+                            clearValue.color.uint32[3] = colorClearValue[3];
+                        }
+                    },
+                    configuration.colorAttachments[i].clearValue
+                );
 
                 useClearValues |= true;
             }
@@ -71,9 +74,9 @@ namespace coffee {
             colorAttachment.stencilLoadOp = VkUtils::transformAttachmentLoadOp(configuration.colorAttachments[i].stencilLoadOp);
             colorAttachment.stencilStoreOp = VkUtils::transformAttachmentStoreOp(configuration.colorAttachments[i].stencilStoreOp);
             colorAttachment.initialLayout = VkUtils::transformResourceStateToLayout(configuration.colorAttachments[i].initialState);
-            colorAttachment.finalLayout = resolveInPlace
-                ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-                : VkUtils::transformResourceStateToLayout(configuration.colorAttachments[i].finalState);
+            colorAttachment.finalLayout =
+                resolveInPlace ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                               : VkUtils::transformResourceStateToLayout(configuration.colorAttachments[i].finalState);
             attachments.push_back(std::move(colorAttachment));
 
             auto& colorRef = colorAttachmentRefs.emplace_back();
@@ -126,8 +129,7 @@ namespace coffee {
 
             VkAttachmentDescription depthAttachment {};
             depthAttachment.format = VkUtils::transformFormat(depthStencilAttachment->format);
-            depthAttachment.samples =
-                VkUtils::getUsableSampleCount(depthStencilAttachment->sampleCount, device_.getProperties());
+            depthAttachment.samples = VkUtils::getUsableSampleCount(depthStencilAttachment->sampleCount, device_.getProperties());
             depthAttachment.loadOp = VkUtils::transformAttachmentLoadOp(depthStencilAttachment->loadOp);
             depthAttachment.storeOp = VkUtils::transformAttachmentStoreOp(depthStencilAttachment->storeOp);
             depthAttachment.stencilLoadOp = VkUtils::transformAttachmentLoadOp(depthStencilAttachment->stencilLoadOp);
@@ -147,8 +149,8 @@ namespace coffee {
             subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
             subpassDependencies[0].dstSubpass = 0;
             subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-            subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
             subpassDependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
             subpassDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             subpassDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
@@ -187,6 +189,4 @@ namespace coffee {
         vkDestroyRenderPass(device_.getLogicalDevice(), renderPass, nullptr);
     }
 
-}
-
-
+} // namespace coffee

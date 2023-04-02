@@ -54,6 +54,6 @@ namespace coffee {
         const bool lost_;
     };
 
-}
+} // namespace coffee
 
 #endif

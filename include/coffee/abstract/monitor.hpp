@@ -1,8 +1,8 @@
 #ifndef COFFEE_ABSTRACT_MONITOR
 #define COFFEE_ABSTRACT_MONITOR
 
-#include <coffee/utils/non_moveable.hpp>
 #include <coffee/types.hpp>
+#include <coffee/utils/non_moveable.hpp>
 
 #include <any>
 
@@ -46,6 +46,6 @@ namespace coffee {
 
     using Monitor = std::shared_ptr<const MonitorImpl>;
 
-}
+} // namespace coffee
 
 #endif

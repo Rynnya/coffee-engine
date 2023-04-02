@@ -26,4 +26,4 @@ namespace coffee {
         return currentFrame;
     }
 
-}
+} // namespace coffee

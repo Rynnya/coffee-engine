@@ -39,7 +39,10 @@ namespace coffee {
         static const std::vector<Monitor>& getMonitors() noexcept;
 
         static void pollEvents();
-        static void wait();
+        static void waitFramelimit();
+        // This call must be used only for debugging and closing down the application
+        // It will shread your performance if you use it in main loop
+        static void waitDeviceIdle();
 
         static float getDeltaTime() noexcept;
         static float getFramerateLimit() noexcept;
@@ -51,7 +54,6 @@ namespace coffee {
 
         static void copyBuffer(Buffer& dstBuffer, const Buffer& srcBuffer);
         static void copyBufferToImage(Image& dstImage, const Buffer& srcBuffer);
-        static void waitDeviceIdle();
 
         static std::string_view getClipboard() noexcept;
         static void setClipboard(const std::string& clipboard) noexcept;
@@ -61,9 +63,25 @@ namespace coffee {
         static void addMonitorDisconnectedCallback(const std::string& name, const std::function<void(const MonitorImpl&)>& callback);
         static void removeMonitorDisconnectedCallback(const std::string& name);
 
+        static void sendCommandBuffer(GraphicsCommandBuffer&& commandBuffer);
+        static void sendCommandBuffers(std::vector<GraphicsCommandBuffer>&& commandBuffers);
+        static void submitPendingWork();
+
         class Factory {
         public:
+            static size_t getSwapChainImageCount() noexcept;
+            static Format getSurfaceColorFormat() noexcept;
+            static Format getOptimalDepthFormat() noexcept;
+
             static Window createWindow(WindowSettings settings = {}, const std::string& windowName = "Coffee Engine");
+
+            static Cursor createCursor(CursorType type) noexcept;
+            static Cursor createCursorFromImage(
+                const std::vector<uint8_t>& rawImage,
+                uint32_t width,
+                uint32_t height,
+                CursorType type
+            ) noexcept;
 
             static Buffer createBuffer(const BufferConfiguration& configuration);
             static Image createImage(const ImageConfiguration& configuration);
@@ -75,17 +93,15 @@ namespace coffee {
             static DescriptorLayout createDescriptorLayout(const std::map<uint32_t, DescriptorBindingInfo>& bindings);
             static DescriptorSet createDescriptorSet(const DescriptorWriter& writer);
 
-            static RenderPass createRenderPass(
-                const RenderPassConfiguration& configuration);
+            static RenderPass createRenderPass(const RenderPassConfiguration& configuration);
             static Pipeline createPipeline(
                 const RenderPass& renderPass,
                 const std::vector<DescriptorLayout>& descriptorLayouts,
                 const std::vector<Shader>& shaderPrograms,
-                const PipelineConfiguration& configuration);
-            static Framebuffer createFramebuffer(
-                const RenderPass& renderPass,
-                const FramebufferConfiguration& configuration);
-            static CommandBuffer createCommandBuffer();
+                const PipelineConfiguration& configuration
+            );
+            static Framebuffer createFramebuffer(const RenderPass& renderPass, const FramebufferConfiguration& configuration);
+            static GraphicsCommandBuffer createCommandBuffer();
 
         private:
             constexpr Factory() noexcept = default;
@@ -103,15 +119,16 @@ namespace coffee {
             uint32_t width,
             uint32_t height,
             const std::string& filePath,
-            TextureType type);
-        static Buffer createVerticesBuffer(const std::vector<Vertex>& vertices);
-        static Buffer createIndicesBuffer(const std::vector<uint32_t>& indices);
+            TextureType type
+        );
+        static Buffer createVerticesBuffer(const Vertex* vertices, size_t amount);
+        static Buffer createIndicesBuffer(const uint32_t* indices, size_t amount);
 
         static Format typeToFormat(TextureType type) noexcept;
     };
 
     using Factory = Engine::Factory;
 
-}
+} // namespace coffee
 
 #endif

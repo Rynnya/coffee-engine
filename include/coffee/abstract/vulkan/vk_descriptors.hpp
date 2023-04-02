@@ -1,8 +1,8 @@
 #ifndef COFFEE_VK_DESCRIPTORS
 #define COFFEE_VK_DESCRIPTORS
 
-#include <coffee/abstract/vulkan/vk_device.hpp>
 #include <coffee/abstract/descriptors.hpp>
+#include <coffee/abstract/vulkan/vk_device.hpp>
 
 namespace coffee {
 
@@ -30,6 +30,6 @@ namespace coffee {
         VulkanDevice& device_;
     };
 
-}
+} // namespace coffee
 
 #endif

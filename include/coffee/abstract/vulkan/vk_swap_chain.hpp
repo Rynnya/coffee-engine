@@ -18,35 +18,32 @@ namespace coffee {
 
     class VulkanSwapChain : public AbstractSwapChain {
     public:
-        static constexpr size_t maxFramesInFlight = 2;
-
-        VulkanSwapChain(VulkanDevice& device, VkSurfaceKHR surface, VkExtent2D extent, std::optional<PresentMode> preferablePresentMode = std::nullopt);
+        VulkanSwapChain(VulkanDevice& device, VkSurfaceKHR surface, VkExtent2D extent, PresentMode preferablePresentMode);
         ~VulkanSwapChain() noexcept;
 
         bool acquireNextImage() override;
-        bool submitCommandBuffers(const std::vector<CommandBuffer>& commandBuffers) override;
+        void submitCommandBuffers(std::vector<GraphicsCommandBuffer>&& commandBuffers) override;
 
         void recreate(uint32_t width, uint32_t height, PresentMode mode) override;
         void waitIdle() override;
 
     private:
         void checkSupportedPresentModes() noexcept;
-        void createSwapChain(VkExtent2D extent, std::optional<PresentMode> preferablePresentMode, VkSwapchainKHR oldSwapchain = nullptr);
+        void createSwapChain(VkExtent2D extent, PresentMode preferablePresentMode, VkSwapchainKHR oldSwapchain = nullptr);
         void createSyncObjects();
 
         VulkanDevice& device_;
         VkSurfaceKHR surface_;
-        std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
         VkSwapchainKHR handle_ = nullptr;
+        std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
+
+        std::array<VkSemaphore, AbstractDevice::maxOperationsInFlight> imageAvailableSemaphores_ {};
+        std::array<VkSemaphore, AbstractDevice::maxOperationsInFlight> renderFinishedSemaphores_ {};
 
         bool mailboxSupported_ = false;
         bool immediateSupported_ = false;
-        std::array<VkSemaphore, maxFramesInFlight> imageAvailableSemaphores_ {};
-        std::array<VkSemaphore, maxFramesInFlight> renderFinishedSemaphores_ {};
-        std::array<VkFence, maxFramesInFlight> inFlightFences_ {};
-        std::vector<VkFence> imagesInFlight_ {};
     };
 
-}
+} // namespace coffee
 
 #endif

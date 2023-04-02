@@ -18,6 +18,9 @@ namespace coffee {
     using Image = std::shared_ptr<AbstractImage>;
     using Sampler = std::shared_ptr<AbstractSampler>;
 
+    // clang-format off
+    // this documentation must be done manually
+
     enum class BackendAPI : uint32_t {
         // Available everywhere
         Vulkan = 0,
@@ -37,7 +40,8 @@ namespace coffee {
     enum class PresentMode : uint32_t {
         // Default present mode, always supported
         FIFO = 0,
-        // No synchronization mode, if Mailbox supported by implementation and GPU, it will be used instead of Immediate
+        // No synchronization mode, if Mailbox supported by implementation and GPU, it will be used
+        // instead of Immediate
         Immediate = 1
     };
 
@@ -105,14 +109,10 @@ namespace coffee {
     enum class ImageAspect : uint32_t {
         Color = 1 << 0,
         Depth = 1 << 1,
-        Stencil = 1 << 2,
-        Metadata = 1 << 3
+        Stencil = 1 << 2
     };
 
-    enum class ImageTiling : uint32_t {
-        Optimal = 0,
-        Linear = 1
-    };
+    enum class ImageTiling : uint32_t { Optimal = 0, Linear = 1 };
 
     enum class TextureType : uint32_t {
         None = 0,
@@ -228,19 +228,17 @@ namespace coffee {
         R64G64B64A64SInt = 93,
         R64G64B64A64SFloat = 94,
         S8UInt = 95,
+        // Depth formats
         D16UNorm = 96,
         D16UNormS8UInt = 97,
         D24UNormS8UInt = 98,
         D32SFloat = 99,
         D32SFloatS8UInt = 100,
+        // Compressed formats
         R11G11B10UFloat = 101
     };
 
-    enum class Topology : uint32_t {
-        Point = 0,
-        Line = 1,
-        Triangle = 2
-    };
+    enum class Topology : uint32_t { Point = 0, Line = 1, Triangle = 2 };
 
     enum class BlendFactor : uint32_t {
         Zero = 0,
@@ -264,13 +262,7 @@ namespace coffee {
         OneMinusSrc1Alpha = 18
     };
 
-    enum class BlendOp : uint32_t {
-        Add = 0,
-        Subtract = 1,
-        ReverseSubtract = 2,
-        Min = 4,
-        Max = 5
-    };
+    enum class BlendOp : uint32_t { Add = 0, Subtract = 1, ReverseSubtract = 2, Min = 4, Max = 5 };
 
     enum class LogicOp : uint32_t {
         Clear = 0,
@@ -291,16 +283,9 @@ namespace coffee {
         Set = 15
     };
 
-    enum class AttachmentLoadOp : uint32_t {
-        Load = 0,
-        Clear = 1,
-        DontCare = 2
-    };
+    enum class AttachmentLoadOp : uint32_t { Load = 0, Clear = 1, DontCare = 2 };
 
-    enum class AttachmentStoreOp : uint32_t {
-        Store = 0,
-        DontCare = 1
-    };
+    enum class AttachmentStoreOp : uint32_t { Store = 0, DontCare = 1 };
 
     enum class ColorComponent : uint32_t {
         Red = 1 << 0,
@@ -341,29 +326,17 @@ namespace coffee {
         DecreaseAndWrap = 7
     };
 
-    enum class CullMode : uint32_t {
-        None = 0,
-        Front = 1,
-        Back = 2
-    };
+    enum class CullMode : uint32_t { None = 0, Front = 1, Back = 2 };
 
-    enum class FrontFace : uint32_t {
-        Clockwise = 0,
-        CounterClockwise = 1
-    };
+    enum class FrontFace : uint32_t { Clockwise = 0, CounterClockwise = 1 };
 
-    enum class PolygonMode : uint32_t {
-        Wireframe = 0,
-        Solid = 1
-    };
+    enum class PolygonMode : uint32_t { Wireframe = 0, Solid = 1 };
 
-    enum class InputRate : uint32_t {
-        PerVertex = 0,
-        PerInstance = 1
-    };
+    enum class InputRate : uint32_t { PerVertex = 0, PerInstance = 1 };
 
     enum class AddressMode : uint32_t {
-        // Will tile texture at every U, V values. For example, with U = 3, texture will repeat 3 times
+        // Will tile texture at every U, V values. For example, with U = 3, texture will repeat 3
+        // times
         Repeat = 0,
         // Same as Repeat, but mirrored
         MirroredRepeat = 1,
@@ -415,20 +388,24 @@ namespace coffee {
         Critical = 1 << 3
     };
 
+    struct Offset2D;
+    struct Extent2D;
+    struct Float2D;
+
+    struct Offset3D;
+    struct Extent3D;
+    struct Float3D;
+
     struct Offset2D {
         int32_t x = 0;
         int32_t y = 0;
 
-        constexpr Offset2D operator+(const Offset2D& other);
-        constexpr Offset2D operator-(const Offset2D& other);
+        constexpr Offset2D operator+(const Offset2D& other) const noexcept;
+        constexpr Offset2D operator-(const Offset2D& other) const noexcept;
 
-        constexpr Offset2D& operator+=(const Offset2D& other);
-        constexpr Offset2D& operator-=(const Offset2D& other);
-
+        constexpr Offset2D& operator+=(const Offset2D& other) noexcept;
+        constexpr Offset2D& operator-=(const Offset2D& other) noexcept;
     };
-
-    struct Float2D;
-    struct Extent3D;
 
     struct Extent2D {
         uint32_t width = 0U;
@@ -453,19 +430,6 @@ namespace coffee {
         constexpr Extent2D& operator-=(const Float2D& other) noexcept;
 
         constexpr operator Float2D() const noexcept;
-        constexpr operator Extent3D() const noexcept;
-
-    };
-
-    struct Extent3D {
-        uint32_t width = 0U;
-        uint32_t height = 0U;
-        uint32_t depth = 0U;
-    };
-
-    struct WorkArea2D {
-        Offset2D offset {};
-        Extent2D extent {};
     };
 
     struct Float2D {
@@ -491,18 +455,90 @@ namespace coffee {
         constexpr Float2D& operator-=(const Extent2D& other) noexcept;
 
         constexpr operator Extent2D() const noexcept;
+    };
 
+    struct Offset3D {
+        int32_t x = 0;
+        int32_t y = 0;
+        int32_t z = 0;
+
+        constexpr Offset3D operator+(const Offset3D& other);
+        constexpr Offset3D operator-(const Offset3D& other);
+
+        constexpr Offset3D& operator+=(const Offset3D& other);
+        constexpr Offset3D& operator-=(const Offset3D& other);
+    };
+
+    struct Extent3D {
+        uint32_t width = 0U;
+        uint32_t height = 0U;
+        uint32_t depth = 0U;
+
+        constexpr Extent3D operator+(const Extent3D& other) const noexcept;
+        constexpr Extent3D operator-(const Extent3D& other) const noexcept;
+
+        constexpr Extent3D operator+(const Offset3D& other) const noexcept;
+        constexpr Extent3D operator-(const Offset3D& other) const noexcept;
+
+        constexpr Extent3D operator+(const Float3D& other) const noexcept;
+        constexpr Extent3D operator-(const Float3D& other) const noexcept;
+
+        constexpr Extent3D& operator+=(const Extent3D& other) noexcept;
+        constexpr Extent3D& operator-=(const Extent3D& other) noexcept;
+
+        constexpr Extent3D& operator+=(const Offset3D& other) noexcept;
+        constexpr Extent3D& operator-=(const Offset3D& other) noexcept;
+
+        constexpr Extent3D& operator+=(const Float3D& other) noexcept;
+        constexpr Extent3D& operator-=(const Float3D& other) noexcept;
+
+        constexpr operator Float3D() const noexcept;
+    };
+
+    struct Float3D {
+        float x = 0U;
+        float y = 0U;
+        float z = 0U;
+
+        constexpr Float3D operator+(const Float3D& other) const noexcept;
+        constexpr Float3D operator-(const Float3D& other) const noexcept;
+
+        constexpr Float3D operator+(const Offset3D& other) const noexcept;
+        constexpr Float3D operator-(const Offset3D& other) const noexcept;
+
+        constexpr Float3D operator+(const Extent3D& other) const noexcept;
+        constexpr Float3D operator-(const Extent3D& other) const noexcept;
+
+        constexpr Float3D& operator+=(const Float3D& other) noexcept;
+        constexpr Float3D& operator-=(const Float3D& other) noexcept;
+
+        constexpr Float3D& operator+=(const Offset3D& other) noexcept;
+        constexpr Float3D& operator-=(const Offset3D& other) noexcept;
+
+        constexpr Float3D& operator+=(const Extent3D& other) noexcept;
+        constexpr Float3D& operator-=(const Extent3D& other) noexcept;
+
+        constexpr operator Extent3D() const noexcept;
+    };
+
+    struct WorkArea2D {
+        Offset2D offset {};
+        Extent2D extent {};
     };
 
     struct WindowSettings {
         // Leave as 0 to automatic selection
         Extent2D extent {};
-        // Window will be hidden when created, so you can do actual things before presenting anything to user
-        // Works only if windowed mode is used
+        // Present mode will be selected by it's availability, if this type isn't available - it
+        // will selected default one
+        PresentMode presentMode = PresentMode::FIFO;
+        // Window will be hidden when created, so you can do actual things before presenting
+        // anything to user Works only if windowed mode is used
         bool hiddenOnStart = true;
         // Defines if window should have borders (not recommended with fullscreen mode)
         bool borderless = false;
-        // Defines if window should take full monitor resolution size (not recommended with borderless mode)
+        // Defines if window should take full monitor resolution size (not recommended with
+        // borderless mode)
         bool fullscreen = false;
         // Allows cursor to have unlimited bounds, which is perfect solution for 3D
         bool cursorDisabled = false;
@@ -527,13 +563,36 @@ namespace coffee {
         uint32_t samples = 1U;
         ImageTiling tiling = ImageTiling::Optimal;
         ImageUsage usage = ImageUsage::None;
-        ResourceState initialState = ResourceState::CopyDestination;
+        ResourceState initialState = ResourceState::Undefined;
         ImageViewType viewType = ImageViewType::OneDimensional;
         SwizzleComponent swizzleRed = SwizzleComponent::Identity;
         SwizzleComponent swizzleGreen = SwizzleComponent::Identity;
         SwizzleComponent swizzleBlue = SwizzleComponent::Identity;
         SwizzleComponent swizzleAlpha = SwizzleComponent::Identity;
         ImageAspect aspects = ImageAspect::Color;
+    };
+
+    struct BufferCopyRegion {
+        size_t srcOffset = 0;
+        size_t dstOffset = 0;
+        size_t totalSize = std::numeric_limits<size_t>::max();
+    };
+
+    struct ImageCopyRegion {
+        ImageAspect srcAspects = ImageAspect::Color;
+        Offset3D srcOffset {};
+        ImageAspect dstAspects = ImageAspect::Color;
+        Offset3D dstOffset {};
+        Extent3D extent {};
+    };
+
+    struct BufferImageCopyRegion {
+        size_t bufferOffset = 0;
+        uint32_t bufferRowLength = 0;   // Width of image, stored in buffer
+        uint32_t bufferImageHeight = 0; // Height of image, stored in buffer
+        ImageAspect aspects = ImageAspect::Color;
+        Offset3D imageOffset {};
+        Extent3D imageExtent {};
     };
 
     struct DescriptorBindingInfo {
@@ -557,7 +616,11 @@ namespace coffee {
         uint32_t stencil = 0U;
     };
 
-    using ColorClearValue = std::variant<std::array<float, 4>, std::array<int32_t, 4>, std::array<uint32_t, 4>, std::monostate>;
+    using ColorClearValue = std::variant<
+        std::array<float, 4>,
+        std::array<int32_t, 4>,
+        std::array<uint32_t, 4>,
+        std::monostate>;
     using DepthStencilClearValue = std::variant<ClearDepthStencilValue, std::monostate>;
 
     struct AttachmentConfiguration {
@@ -579,10 +642,12 @@ namespace coffee {
 
     struct RenderPassConfiguration {
         std::vector<AttachmentConfiguration> colorAttachments {};
-        std::variant<AttachmentConfiguration, std::monostate> depthStencilAttachment = std::monostate {};
-        // By default, render pass automatically sets barriers and dependencies, when parent is provided
-        // You can change this behaviour and it will be YOUR responsibility to set barriers and resolve dependencies
-        // It's not recommended to mix behaviours as it will lead to undefined behaviours
+        std::variant<AttachmentConfiguration, std::monostate> depthStencilAttachment =
+            std::monostate {};
+        // By default, render pass automatically sets barriers and dependencies, when parent is
+        // provided You can change this behaviour and it will be YOUR responsibility to set barriers
+        // and resolve dependencies It's not recommended to mix behaviours as it will lead to
+        // undefined behaviours
         bool automaticBarriersRequired = true;
     };
 
@@ -601,7 +666,8 @@ namespace coffee {
 
     struct InputAssembly {
         Topology topology = Topology::Triangle;
-        // On every implementation only 32-bit indices allowed. Using 16-bit indices is undefined behaviour
+        // On every implementation only 32-bit indices allowed. Using 16-bit indices is undefined
+        // behaviour
         bool primitiveRestartEnable = false;
     };
 
@@ -634,7 +700,8 @@ namespace coffee {
         bool logicOpEnable = false;
         LogicOp logicOp = LogicOp::Copy;
         ColorComponent colorWriteMask = static_cast<ColorComponent>(15U);
-        // ^ Same as coffee::ColorComponent::Red | coffee::ColorComponent::Green | coffee::ColorComponent::Blue | coffee::ColorComponent::Alpha
+        // ^ Same as coffee::ColorComponent::Red | coffee::ColorComponent::Green |
+        // coffee::ColorComponent::Blue | coffee::ColorComponent::Alpha
     };
 
     struct StencilOpState {
@@ -709,7 +776,9 @@ namespace coffee {
         float maxLod = 0.0f;
     };
 
-}
+    // clang-format on
+
+} // namespace coffee
 
 #include <coffee/types.inl>
 

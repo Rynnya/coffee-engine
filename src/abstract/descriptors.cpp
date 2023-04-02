@@ -5,28 +5,21 @@
 namespace coffee {
 
     AbstractDescriptorLayout::AbstractDescriptorLayout(const std::map<uint32_t, DescriptorBindingInfo>& bindings)
-        : bindings_ { bindings }
-    {}
+            : bindings_ { bindings } {}
 
     const std::map<uint32_t, DescriptorBindingInfo>& AbstractDescriptorLayout::getBindings() const noexcept {
         return bindings_;
     }
 
-    DescriptorWriter::DescriptorWriter(const DescriptorLayout& layout)
-        : layout_ { layout }
-    {
+    DescriptorWriter::DescriptorWriter(const DescriptorLayout& layout) : layout_ { layout } {
         COFFEE_ASSERT(layout_ != nullptr, "Invalid layout provided.");
     }
 
-    DescriptorWriter::DescriptorWriter(const DescriptorWriter& other)
-        : layout_ { other.layout_ }
-        , writes_ { other.writes_ }
-    {}
+    DescriptorWriter::DescriptorWriter(const DescriptorWriter& other) : layout_ { other.layout_ }, writes_ { other.writes_ } {}
 
     DescriptorWriter::DescriptorWriter(DescriptorWriter&& other) noexcept
-        : layout_ { std::move(other.layout_) }
-        , writes_ { std::exchange(other.writes_, {}) }
-    {}
+            : layout_ { std::move(other.layout_) }
+            , writes_ { std::exchange(other.writes_, {}) } {}
 
     DescriptorWriter& DescriptorWriter::operator=(const DescriptorWriter& other) {
         if (this == &other) {
@@ -50,12 +43,7 @@ namespace coffee {
         return *this;
     }
 
-    DescriptorWriter& DescriptorWriter::addBuffer(
-        uint32_t bindingIndex, 
-        const Buffer& buffer,
-        size_t offset,
-        size_t totalSize
-    ) {
+    DescriptorWriter& DescriptorWriter::addBuffer(uint32_t bindingIndex, const Buffer& buffer, size_t offset, size_t totalSize) {
         COFFEE_ASSERT(buffer != nullptr, "Invalid buffer provided.");
 
         const auto& bindings = layout_->getBindings();
@@ -75,15 +63,10 @@ namespace coffee {
         return *this;
     }
 
-    DescriptorWriter& DescriptorWriter::addImage(
-        uint32_t bindingIndex,
-        ResourceState state,
-        const Image& image, 
-        const Sampler& sampler
-    ) {
+    DescriptorWriter& DescriptorWriter::addImage(uint32_t bindingIndex, ResourceState state, const Image& image, const Sampler& sampler) {
         COFFEE_ASSERT(image != nullptr, "Invalid image provided.");
 
-        [[ maybe_unused ]] constexpr auto verifyLayout = [](ResourceState layout) noexcept -> bool {
+        [[maybe_unused]] constexpr auto verifyLayout = [](ResourceState layout) noexcept -> bool {
             switch (layout) {
                 case ResourceState::VertexBuffer:
                 case ResourceState::UniformBuffer:
@@ -142,9 +125,7 @@ namespace coffee {
         return *this;
     }
 
-    AbstractDescriptorSet::AbstractDescriptorSet(const DescriptorLayout& layout) noexcept
-        : descriptorLayout_ { layout }
-    {}
+    AbstractDescriptorSet::AbstractDescriptorSet(const DescriptorLayout& layout) noexcept : descriptorLayout_ { layout } {}
 
     DescriptorLayout AbstractDescriptorSet::copyLayout() const noexcept {
         return descriptorLayout_;
@@ -162,4 +143,4 @@ namespace coffee {
         return writer.writes_;
     }
 
-}
+} // namespace coffee

@@ -15,6 +15,6 @@ namespace coffee {
 
     using Sampler = std::shared_ptr<AbstractSampler>;
 
-}
+} // namespace coffee
 
 #endif

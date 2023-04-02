@@ -9,10 +9,9 @@
 
 namespace coffee {
 
-    VulkanDescriptorLayout::VulkanDescriptorLayout(VulkanDevice& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings) 
-        : AbstractDescriptorLayout { bindings }
-        , device_ { device }
-    {
+    VulkanDescriptorLayout::VulkanDescriptorLayout(VulkanDevice& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings)
+            : AbstractDescriptorLayout { bindings }
+            , device_ { device } {
         std::vector<VkDescriptorSetLayoutBinding> bindingsImpl {};
 
         for (const auto& [index, bindingInfo] : bindings) {
@@ -41,20 +40,20 @@ namespace coffee {
     }
 
     VulkanDescriptorSet::VulkanDescriptorSet(VulkanDevice& device, const DescriptorWriter& writer)
-        : AbstractDescriptorSet { getWriterLayout(writer) }
-        , device_ { device }
-    {
+            : AbstractDescriptorSet { getWriterLayout(writer) }
+            , device_ { device } {
         COFFEE_ASSERT(
             getWriterLayout(writer)->getBindings().size() == getWriterWrites(writer).size(),
             "Layout bindings size ({}) differs from writer bindings size ({}).",
             getWriterLayout(writer)->getBindings().size(),
-            getWriterWrites(writer).size());
+            getWriterWrites(writer).size()
+        );
 
         VkDescriptorSetAllocateInfo descriptorAllocInfo { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
         descriptorAllocInfo.descriptorPool = device_.getDescriptorPool();
         descriptorAllocInfo.descriptorSetCount = 1;
         descriptorAllocInfo.pSetLayouts = &static_cast<VulkanDescriptorLayout*>(getWriterLayout(writer).get())->layout;
-        
+
         COFFEE_THROW_IF(
             vkAllocateDescriptorSets(device_.getLogicalDevice(), &descriptorAllocInfo, &set) != VK_SUCCESS,
             "Failed to allocate descriptor set!");
@@ -75,7 +74,8 @@ namespace coffee {
             bindings.size() == writes.size(),
             "Layout bindings size ({}) differs from writer bindings size ({}).",
             bindings.size(),
-            writes.size());
+            writes.size()
+        );
 
         std::vector<VkWriteDescriptorSet> writesImpl {};
         std::vector<VkDescriptorBufferInfo> bufferInfos {};
@@ -160,4 +160,4 @@ namespace coffee {
         vkUpdateDescriptorSets(device_.getLogicalDevice(), static_cast<uint32_t>(writesImpl.size()), writesImpl.data(), 0, nullptr);
     }
 
-}
+} // namespace coffee

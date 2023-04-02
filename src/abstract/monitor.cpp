@@ -7,10 +7,7 @@
 namespace coffee {
 
     struct MonitorImpl::PImpl {
-        PImpl(void* nativeHandle, uint32_t uniqueID) 
-            : monitorHandle { static_cast<GLFWmonitor*>(nativeHandle) }
-            , uniqueID { uniqueID }
-        {
+        PImpl(void* nativeHandle, uint32_t uniqueID) : monitorHandle { static_cast<GLFWmonitor*>(nativeHandle) }, uniqueID { uniqueID } {
             int32_t count = 0;
             const GLFWvidmode* videoModes = glfwGetVideoModes(monitorHandle, &count);
 
@@ -43,9 +40,14 @@ namespace coffee {
         std::string name {};
     };
 
-    MonitorImpl::MonitorImpl(void* nativeHandle, uint32_t uniqueID) : pImpl_ { new MonitorImpl::PImpl { nativeHandle, uniqueID } } {
+    // clang-format off
+
+    MonitorImpl::MonitorImpl(void* nativeHandle, uint32_t uniqueID)
+            : pImpl_ { new MonitorImpl::PImpl { nativeHandle, uniqueID } } {
         COFFEE_ASSERT(nativeHandle != nullptr, "Invalid monitor handle provided.");
     }
+
+    // clang-format on
 
     MonitorImpl::~MonitorImpl() noexcept {
         delete pImpl_;
@@ -55,7 +57,8 @@ namespace coffee {
         VideoMode videoMode {};
         const GLFWvidmode* nativeMode = glfwGetVideoMode(pImpl_->monitorHandle);
 
-        // Cannot throw here, so will just return 0 values, which basically means we cannot get result from monitor
+        // Cannot throw here, so will just return 0 values, which basically means we cannot get
+        // result from monitor
         if (nativeMode != nullptr) {
             videoMode.width = nativeMode->width;
             videoMode.height = nativeMode->height;
@@ -91,7 +94,10 @@ namespace coffee {
     WorkArea2D MonitorImpl::getWorkArea() const noexcept {
         int32_t nativeXOffset {}, nativeYOffset {}, nativeWidth {}, nativeHeight {};
         glfwGetMonitorWorkarea(pImpl_->monitorHandle, &nativeXOffset, &nativeYOffset, &nativeWidth, &nativeHeight);
-        return { { nativeXOffset, nativeYOffset }, { static_cast<uint32_t>(nativeWidth), static_cast<uint32_t>(nativeHeight) }};
+        return {
+            {nativeXOffset,                       nativeYOffset                      },
+            { static_cast<uint32_t>(nativeWidth), static_cast<uint32_t>(nativeHeight)}
+        };
     }
 
     uint32_t MonitorImpl::getUniqueID() const noexcept {
@@ -102,4 +108,4 @@ namespace coffee {
         return pImpl_->name;
     }
 
-}
+} // namespace coffee

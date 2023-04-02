@@ -22,6 +22,6 @@ namespace coffee {
 
     using Framebuffer = std::unique_ptr<AbstractFramebuffer>;
 
-}
+} // namespace coffee
 
 #endif

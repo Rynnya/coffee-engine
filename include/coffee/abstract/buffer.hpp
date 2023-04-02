@@ -1,8 +1,8 @@
 #ifndef COFFEE_ABSTRACT_BUFFER
 #define COFFEE_ABSTRACT_BUFFER
 
-#include <coffee/utils/non_moveable.hpp>
 #include <coffee/types.hpp>
+#include <coffee/utils/non_moveable.hpp>
 
 namespace coffee {
 
@@ -46,6 +46,6 @@ namespace coffee {
 
     using Buffer = std::shared_ptr<AbstractBuffer>;
 
-}
+} // namespace coffee
 
 #endif

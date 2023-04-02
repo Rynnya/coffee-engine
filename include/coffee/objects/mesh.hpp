@@ -6,14 +6,18 @@
 
 namespace coffee {
 
-    class MeshImpl : public Drawable, NonMoveable {
+    class MeshImpl
+            : public Drawable
+            , NonMoveable {
     public:
+        friend class ModelImpl;
+
         MeshImpl(Buffer&& verticesBuffer, Buffer&& indicesBuffer, Materials&& materials);
         virtual ~MeshImpl() noexcept = default;
 
         Materials materials;
 
-        void draw(const CommandBuffer& commandBuffer) override;
+        void draw(const GraphicsCommandBuffer& commandBuffer) override;
 
     private:
         Buffer verticesBuffer_;
@@ -22,6 +26,6 @@ namespace coffee {
 
     using Mesh = std::unique_ptr<MeshImpl>;
 
-}
+} // namespace coffee
 
 #endif

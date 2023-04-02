@@ -1,8 +1,8 @@
 #ifndef COFFEE_VK_WINDOW
 #define COFFEE_VK_WINDOW
 
-#include <coffee/abstract/window.hpp>
 #include <coffee/abstract/vulkan/vk_device.hpp>
+#include <coffee/abstract/window.hpp>
 
 namespace coffee {
 
@@ -17,6 +17,6 @@ namespace coffee {
         VulkanDevice& device_;
     };
 
-}
+} // namespace coffee
 
 #endif

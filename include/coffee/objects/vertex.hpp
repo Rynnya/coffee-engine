@@ -29,7 +29,7 @@ namespace coffee {
         bool operator!=(const Vertex& other);
     };
 
-}
+} // namespace coffee
 
 namespace std {
 
@@ -38,6 +38,6 @@ namespace std {
         size_t operator()(const coffee::Vertex& vertex) const;
     };
 
-}
+} // namespace std
 
 #endif

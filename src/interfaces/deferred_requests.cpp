@@ -36,4 +36,4 @@ namespace coffee {
         return requests_.size();
     }
 
-}
+} // namespace coffee

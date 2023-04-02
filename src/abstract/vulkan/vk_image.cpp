@@ -5,10 +5,11 @@
 namespace coffee {
 
     VulkanImage::VulkanImage(VulkanDevice& device, const ImageConfiguration& configuration)
-        : AbstractImage { configuration.type, configuration.extent.width, configuration.extent.height, configuration.extent.depth }
-        , swapChainImage { false }
-        , device_ { device }
-    {
+            : AbstractImage { configuration.type,         configuration.aspects,      configuration.usage,
+                              configuration.initialState, configuration.extent.width, configuration.extent.height,
+                              configuration.extent.depth }
+            , swapChainImage { false }
+            , device_ { device } {
         VkFormat format = VkUtils::transformFormat(configuration.format);
         sampleCount = VkUtils::getUsableSampleCount(configuration.samples, device_.getProperties());
 
@@ -24,8 +25,8 @@ namespace coffee {
         imageCreateInfo.tiling = VkUtils::transformImageTiling(configuration.tiling);
         imageCreateInfo.usage = VkUtils::transformImageUsage(configuration.usage);
         imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageCreateInfo.queueFamilyIndexCount = 0;      // Ignored when sharingMode is set to exclusive
-        imageCreateInfo.pQueueFamilyIndices = nullptr;  // Ignored when sharingMode is set to exclusive
+        imageCreateInfo.queueFamilyIndexCount = 0;     // Ignored when sharingMode is set to exclusive
+        imageCreateInfo.pQueueFamilyIndices = nullptr; // Ignored when sharingMode is set to exclusive
         imageCreateInfo.initialLayout = VkUtils::transformResourceStateToLayout(configuration.initialState);
 
         COFFEE_THROW_IF(
@@ -36,10 +37,8 @@ namespace coffee {
 
         VkMemoryAllocateInfo allocateInfo { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         allocateInfo.allocationSize = memoryRequirements.size;
-        allocateInfo.memoryTypeIndex = VkUtils::findMemoryType(
-            device_.getPhysicalDevice(),
-            memoryRequirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        allocateInfo.memoryTypeIndex =
+            VkUtils::findMemoryType(device_.getPhysicalDevice(), memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
         COFFEE_THROW_IF(
             vkAllocateMemory(device_.getLogicalDevice(), &allocateInfo, nullptr, &memory) != VK_SUCCESS, "Failed to allocate memory for image!");
@@ -68,10 +67,15 @@ namespace coffee {
     }
 
     VulkanImage::VulkanImage(VulkanDevice& device, uint32_t width, uint32_t height, VkFormat imageFormat, VkImage imageImpl)
-        : AbstractImage { ImageType::TwoDimensional, width, height, 1 }
-        , swapChainImage { true }
-        , device_ { device }
-    {
+            : AbstractImage { ImageType::TwoDimensional,
+                              ImageAspect::Color,
+                              ImageUsage::ColorAttachment,
+                              ResourceState::Undefined,
+                              width,
+                              height,
+                              1 }
+            , swapChainImage { true }
+            , device_ { device } {
         image = imageImpl;
         sampleCount = VK_SAMPLE_COUNT_1_BIT;
         aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -105,4 +109,8 @@ namespace coffee {
         }
     }
 
-}
+    void VulkanImage::setNewLayout(ResourceState newLayout) noexcept {
+        AbstractImage::layout = newLayout;
+    }
+
+} // namespace coffee

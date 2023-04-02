@@ -42,4 +42,4 @@ namespace coffee {
         return !lost_;
     }
 
-}
+} // namespace coffee

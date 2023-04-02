@@ -9,7 +9,8 @@
 
 namespace coffee {
 
-    // Interface that allows derived classes to use deferred requests system (requests will wait until apply is called)
+    // Interface that allows derived classes to use deferred requests system
+    // Requests will wait until apply is called
     class DeferredRequests : NonMoveable {
     protected:
         DeferredRequests() noexcept = default;
@@ -28,6 +29,6 @@ namespace coffee {
         mutable std::mutex mtx_ {};
     };
 
-}
+} // namespace coffee
 
 #endif

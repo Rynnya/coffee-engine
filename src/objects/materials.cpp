@@ -43,4 +43,4 @@ namespace coffee {
         return textureFlags_;
     }
 
-}
+} // namespace coffee

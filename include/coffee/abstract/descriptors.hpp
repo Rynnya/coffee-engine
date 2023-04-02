@@ -31,7 +31,12 @@ namespace coffee {
         DescriptorWriter& operator=(const DescriptorWriter&);
         DescriptorWriter& operator=(DescriptorWriter&&) noexcept;
 
-        DescriptorWriter& addBuffer(uint32_t bindingIndex, const Buffer& buffer, size_t offset = 0, size_t totalSize = std::numeric_limits<size_t>::max());
+        DescriptorWriter& addBuffer(
+            uint32_t bindingIndex,
+            const Buffer& buffer,
+            size_t offset = 0,
+            size_t totalSize = std::numeric_limits<size_t>::max()
+        );
         DescriptorWriter& addImage(uint32_t bindingIndex, ResourceState state, const Image& image, const Sampler& sampler = nullptr);
         DescriptorWriter& addTexture(uint32_t bindingIndex, ResourceState state, const Texture& texture, const Sampler& sampler = nullptr);
         DescriptorWriter& addSampler(uint32_t bindingIndex, const Sampler& sampler);
@@ -63,6 +68,6 @@ namespace coffee {
 
     using DescriptorSet = std::shared_ptr<AbstractDescriptorSet>;
 
-}
+} // namespace coffee
 
 #endif

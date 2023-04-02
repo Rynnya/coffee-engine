@@ -35,6 +35,6 @@ namespace coffee {
         PImpl* pImpl_;
     };
 
-}
+} // namespace coffee
 
 #endif

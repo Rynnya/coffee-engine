@@ -10,7 +10,7 @@ namespace coffee {
         return !operator==(other);
     }
 
-}
+} // namespace coffee
 
 namespace std {
 
@@ -51,4 +51,4 @@ namespace std {
         return finalSeed;
     }
 
-}
+} // namespace std

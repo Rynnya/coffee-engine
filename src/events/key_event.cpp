@@ -4,17 +4,16 @@
 
 namespace coffee {
 
-    KeyEvent::KeyEvent(State state, Keys key, uint32_t scancode, uint32_t mods) noexcept 
-        : state_ { state }
-        , key_ { key }
-        , scancode_ { scancode }
-        , control_ { static_cast<bool>(mods & GLFW_MOD_SHIFT) }
-        , shift_ { static_cast<bool>(mods & GLFW_MOD_CONTROL) }
-        , alt_ { static_cast<bool>(mods & GLFW_MOD_ALT) }
-        , super_ { static_cast<bool>(mods & GLFW_MOD_SUPER) }
-        , capsLock_ { static_cast<bool>(mods & GLFW_MOD_CAPS_LOCK) }
-        , numLock_ { static_cast<bool>(mods & GLFW_MOD_NUM_LOCK) }
-    {}
+    KeyEvent::KeyEvent(State state, Keys key, uint32_t scancode, uint32_t mods) noexcept
+            : state_ { state }
+            , key_ { key }
+            , scancode_ { scancode }
+            , control_ { static_cast<bool>(mods & GLFW_MOD_SHIFT) }
+            , shift_ { static_cast<bool>(mods & GLFW_MOD_CONTROL) }
+            , alt_ { static_cast<bool>(mods & GLFW_MOD_ALT) }
+            , super_ { static_cast<bool>(mods & GLFW_MOD_SUPER) }
+            , capsLock_ { static_cast<bool>(mods & GLFW_MOD_CAPS_LOCK) }
+            , numLock_ { static_cast<bool>(mods & GLFW_MOD_NUM_LOCK) } {}
 
     State KeyEvent::getState() const noexcept {
         return state_;
@@ -52,4 +51,4 @@ namespace coffee {
         return numLock_;
     }
 
-}
+} // namespace coffee

@@ -16,11 +16,16 @@ namespace coffee {
         ThreadPool(uint32_t amountOfThreads = std::thread::hardware_concurrency());
         ~ThreadPool();
 
-        void push(std::function<void()>&& func);
+        template <typename F, typename... Args, typename = std::enable_if_t<std::is_invocable_v<F, Args...>>>
+        void push(F&& callable, Args&&... args) {
+            this->pushTask(std::bind(std::forward<F>(callable), std::forward<Args>(args)...));
+        }
+
         void waitForTasks();
 
     private:
         void createThreads(uint32_t amountOfThreads);
+        void pushTask(std::function<void()>&& func);
         void destroyThreads();
 
         void worker();
@@ -38,6 +43,6 @@ namespace coffee {
         std::vector<std::thread> threads_ {};
     };
 
-}
+} // namespace coffee
 
 #endif

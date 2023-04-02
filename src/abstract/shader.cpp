@@ -5,10 +5,9 @@
 namespace coffee {
 
     AbstractShader::AbstractShader(ShaderStage stage, const std::string& entrypoint) noexcept
-        : stage_ { stage }
-        , entrypoint_ { entrypoint.empty() ? "main" : entrypoint }
-    {
-        [[ maybe_unused ]] constexpr auto verifyStage = [](ShaderStage stageToCheck) -> bool {
+            : stage_ { stage }
+            , entrypoint_ { entrypoint.empty() ? "main" : entrypoint } {
+        [[maybe_unused]] constexpr auto verifyStage = [](ShaderStage stageToCheck) -> bool {
             switch (stageToCheck) {
                 case ShaderStage::Vertex:
                 case ShaderStage::Geometry:
@@ -25,8 +24,10 @@ namespace coffee {
         };
 
         COFFEE_ASSERT(
-            verifyStage(stage), 
-            "Invalid ShaderStage provided. It must be single input, and must be not ShaderStage::None or ShaderStage::All.");
+            verifyStage(stage),
+            "Invalid ShaderStage provided. It must be single input, and must be not "
+            "ShaderStage::None or ShaderStage::All."
+        );
     }
 
     ShaderStage AbstractShader::getStage() const noexcept {
@@ -37,4 +38,4 @@ namespace coffee {
         return entrypoint_;
     }
 
-}
+} // namespace coffee

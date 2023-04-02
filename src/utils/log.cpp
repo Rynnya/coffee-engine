@@ -4,8 +4,8 @@
 #include <fmt/color.h>
 
 #ifdef COFFEE_WINDOWS
-#   include <Windows.h>
-#   include <debugapi.h>
+#    include <Windows.h>
+#    include <debugapi.h>
 #endif
 
 #include <iomanip>
@@ -52,7 +52,7 @@ namespace coffee {
                     return "ERROR";
                 case MessageSeverity::Critical:
                     return "UNRECOVERABLE";
-                default: 
+                default:
                     return "UNKNOWN";
             }
         }
@@ -77,7 +77,7 @@ namespace coffee {
             return ret;
         }
 
-    }
+    } // namespace detail
 
     void mustBe(bool exprResult, const char* exprString, const char* filePath, const unsigned line, const std::string& message) {
         if (exprResult) {
@@ -89,7 +89,8 @@ namespace coffee {
             "ASSERTION FAILED: {} IN FILE {}:{}\n",
             detail::escape(exprString),
             detail::getFileName(filePath),
-            line);
+            line
+        );
 
         fmt::print(fg(fmt::color::red), " => {}", detail::escape(message.data()));
         ::abort();
@@ -99,19 +100,20 @@ namespace coffee {
         const auto now = std::chrono::system_clock::now();
         const auto diff = std::chrono::duration_cast<std::chrono::seconds>(now - detail::startupTime).count();
         const auto formatted = fmt::format(
-            "{:%Y-%m-%d %H:%M:%S} [{:>8d}s] | {:>24}:{:<4d} | {}: {}\n", 
-            fmt::localtime(std::chrono::system_clock::to_time_t(now)), 
-            diff, 
-            detail::getFileName(filePath), 
-            line, 
-            detail::toString(severity), 
-            detail::escape(message.data()));
+            "{:%Y-%m-%d %H:%M:%S} [{:>8d}s] | {:>24}:{:<4d} | {}: {}\n",
+            fmt::localtime(std::chrono::system_clock::to_time_t(now)),
+            diff,
+            detail::getFileName(filePath),
+            line,
+            detail::toString(severity),
+            detail::escape(message.data())
+        );
 
-#       ifdef COFFEE_WINDOWS
-            OutputDebugStringA(formatted.c_str());
-#       endif
+#ifdef COFFEE_WINDOWS
+        OutputDebugStringA(formatted.c_str());
+#endif
 
         fmt::print(detail::toColor(severity), formatted);
     }
 
-}
+} // namespace coffee

@@ -21,4 +21,4 @@ namespace coffee {
         return buffer;
     }
 
-}
+} // namespace coffee

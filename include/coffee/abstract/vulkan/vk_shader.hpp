@@ -1,8 +1,8 @@
 #ifndef COFFEE_VK_SHADER
 #define COFFEE_VK_SHADER
 
-#include <coffee/abstract/vulkan/vk_device.hpp>
 #include <coffee/abstract/shader.hpp>
+#include <coffee/abstract/vulkan/vk_device.hpp>
 
 namespace coffee {
 
@@ -17,6 +17,6 @@ namespace coffee {
         VulkanDevice& device_;
     };
 
-}
+} // namespace coffee
 
 #endif

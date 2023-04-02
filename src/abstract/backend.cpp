@@ -8,4 +8,4 @@ namespace coffee {
         return backend_;
     }
 
-}
+} // namespace coffee

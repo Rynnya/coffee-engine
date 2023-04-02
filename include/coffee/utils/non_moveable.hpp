@@ -16,6 +16,6 @@ namespace coffee {
         NonMoveable& operator=(NonMoveable&&) noexcept = delete;
     };
 
-}
+} // namespace coffee
 
 #endif

@@ -17,7 +17,9 @@ namespace coffee {
         createInfo.mipLodBias = configuration.mipLodBias;
         createInfo.anisotropyEnable = configuration.anisotropyEnable ? VK_TRUE : VK_FALSE;
         createInfo.maxAnisotropy = std::min(
-            static_cast<float>(Math::roundToPowerOf2(configuration.maxAnisotropy)), device_.getProperties().limits.maxSamplerAnisotropy);
+            static_cast<float>(Math::roundToPowerOf2(configuration.maxAnisotropy)),
+            device_.getProperties().limits.maxSamplerAnisotropy
+        );
         createInfo.compareEnable = configuration.compareOp != CompareOp::Never ? VK_TRUE : VK_FALSE;
         createInfo.compareOp = VkUtils::transformCompareOp(configuration.compareOp);
         createInfo.mipmapMode = VkUtils::transformSamplerMipmap(configuration.mipmapMode);
@@ -33,4 +35,4 @@ namespace coffee {
         vkDestroySampler(device_.getLogicalDevice(), sampler, nullptr);
     }
 
-}
+} // namespace coffee

@@ -15,6 +15,6 @@ namespace coffee {
 
     using RenderPass = std::unique_ptr<AbstractRenderPass>;
 
-}
+} // namespace coffee
 
 #endif

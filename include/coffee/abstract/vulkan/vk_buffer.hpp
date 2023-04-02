@@ -1,11 +1,11 @@
 #ifndef COFFEE_VK_BUFFER
 #define COFFEE_VK_BUFFER
 
-#include <coffee/abstract/vulkan/vk_device.hpp>
 #include <coffee/abstract/buffer.hpp>
+#include <coffee/abstract/vulkan/vk_device.hpp>
 
-#include <coffee/utils/non_copyable.hpp>
 #include <coffee/types.hpp>
+#include <coffee/utils/non_copyable.hpp>
 
 namespace coffee {
 
@@ -39,6 +39,6 @@ namespace coffee {
         std::mutex allocationMutex_ {};
     };
 
-}
+} // namespace coffee
 
 #endif

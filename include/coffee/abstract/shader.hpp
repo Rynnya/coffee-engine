@@ -1,8 +1,8 @@
 #ifndef COFFEE_ABSTRACT_SHADER
 #define COFFEE_ABSTRACT_SHADER
 
-#include <coffee/utils/non_moveable.hpp>
 #include <coffee/types.hpp>
+#include <coffee/utils/non_moveable.hpp>
 
 namespace coffee {
 
@@ -21,6 +21,6 @@ namespace coffee {
 
     using Shader = std::unique_ptr<AbstractShader>;
 
-}
+} // namespace coffee
 
 #endif

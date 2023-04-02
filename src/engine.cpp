@@ -6,25 +6,25 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 
-#include <assimp/Importer.hpp>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
 #include <GLFW/glfw3.h>
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/packing.hpp>
 #include <stb_image.h>
 
 #include <chrono>
 #include <filesystem>
-#include <stdexcept>
 #include <fstream>
+#include <stdexcept>
 
 namespace coffee {
 
     static std::unique_ptr<AbstractBackend> backendImpl_ = nullptr;
 
     static float framerateLimit_ = 60.0f;
-    static float deltaTime_ = 1.0f / 60.0f;
+    static float deltaTime_ = 60.0f / 1000.0f;
     static std::chrono::high_resolution_clock::time_point lastPollTime_ {};
 
     static Texture defaultTexture_ = nullptr;
@@ -37,10 +37,37 @@ namespace coffee {
     static std::mutex monitorConnectedMutex_ {};
     static std::mutex monitorDisconnectedMutex_ {};
 
+    int cursorTypeToGLFWtype(CursorType type) {
+        switch (type) {
+            default:
+            case CursorType::Arrow:
+                return GLFW_ARROW_CURSOR;
+            case CursorType::TextInput:
+                return GLFW_IBEAM_CURSOR;
+            case CursorType::CrossHair:
+                return GLFW_CROSSHAIR_CURSOR;
+            case CursorType::Hand:
+                return GLFW_HAND_CURSOR;
+            case CursorType::ResizeEW:
+                return GLFW_RESIZE_EW_CURSOR;
+            case CursorType::ResizeNS:
+                return GLFW_RESIZE_NS_CURSOR;
+            case CursorType::ResizeNWSE:
+                return GLFW_RESIZE_NWSE_CURSOR;
+            case CursorType::ResizeNESW:
+                return GLFW_RESIZE_NESW_CURSOR;
+            case CursorType::ResizeAll:
+                return GLFW_RESIZE_ALL_CURSOR;
+            case CursorType::NotAllowed:
+                return GLFW_NOT_ALLOWED_CURSOR;
+        }
+    }
+
     template <size_t Size>
     class ReadOnlyStream {
     public:
         ReadOnlyStream(std::ifstream& inputStream) : inputStream_ { inputStream } {}
+
         ~ReadOnlyStream() noexcept = default;
 
         template <typename T>
@@ -59,6 +86,13 @@ namespace coffee {
 
             static_cast<void>(inputStream_.read(underlyingBuffer_, amount * sizeof(T)));
             return reinterpret_cast<T*>(underlyingBuffer_);
+        }
+
+        template <typename T>
+        inline void readDirectly(T* dstMemory, size_t amount = 1) {
+            static_assert(!std::is_pointer_v<T> && !std::is_null_pointer_v<T>, "Don't use pointers");
+
+            static_cast<void>(inputStream_.read(reinterpret_cast<char*>(dstMemory), amount * sizeof(T)));
         }
 
     private:
@@ -101,7 +135,7 @@ namespace coffee {
             }
             else if (event == GLFW_DISCONNECTED) {
                 uint32_t monitorID = *static_cast<uint32_t*>(glfwGetMonitorUserPointer(monitor));
-                
+
                 for (auto it = monitors_.begin(); it != monitors_.end(); it++) {
                     if ((*it)->getUniqueID() == monitorID) {
                         std::scoped_lock<std::mutex> lock { monitorDisconnectedMutex_ };
@@ -178,19 +212,26 @@ namespace coffee {
         glfwPollEvents();
     }
 
-    void Engine::wait() {
-        float frameTime = std::chrono::duration<float, std::chrono::seconds::period>(
-            std::chrono::high_resolution_clock::now() - lastPollTime_).count();
+    void Engine::waitFramelimit() {
+        using period = std::chrono::seconds::period;
+
+        float frameTime = std::chrono::duration<float, period>(std::chrono::high_resolution_clock::now() - lastPollTime_).count();
         float waitForSeconds = std::max(1.0f / framerateLimit_ - frameTime, 0.0f);
 
         if (waitForSeconds > 0.0f) {
             auto spinStart = std::chrono::high_resolution_clock::now();
-            while ((std::chrono::high_resolution_clock::now() - spinStart).count() / 1e9 < waitForSeconds);
+            while ((std::chrono::high_resolution_clock::now() - spinStart).count() / 1e9 < waitForSeconds)
+                ;
         }
 
         auto currentTime = std::chrono::high_resolution_clock::now();
-        deltaTime_ = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastPollTime_).count();
+        deltaTime_ = std::chrono::duration<float, period>(currentTime - lastPollTime_).count();
         lastPollTime_ = currentTime;
+    }
+
+    void Engine::waitDeviceIdle() {
+        COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
+        backendImpl_->waitDevice();
     }
 
     float Engine::getDeltaTime() noexcept {
@@ -210,13 +251,10 @@ namespace coffee {
 
         Assimp::Importer importer {};
         uint32_t processFlags =
-            aiProcess_Triangulate |
-            aiProcess_OptimizeMeshes |
-            aiProcess_JoinIdenticalVertices |
-            //aiProcess_MakeLeftHanded |
-            aiProcess_GenNormals |
-            aiProcess_CalcTangentSpace |
-            //aiProcess_PreTransformVertices |
+            aiProcess_Triangulate | aiProcess_OptimizeMeshes | aiProcess_JoinIdenticalVertices |
+            // aiProcess_MakeLeftHanded |
+            aiProcess_GenNormals | aiProcess_CalcTangentSpace |
+            // aiProcess_PreTransformVertices |
             aiProcess_FlipUVs;
 
         const aiScene* scene = importer.ReadFile(filename, processFlags);
@@ -249,12 +287,9 @@ namespace coffee {
             }
         };
 
-        auto loadMaterialTextures = [&assimpTypeToEngineType, &parentDirectory](
-            Materials& materials,
-            const aiScene* scene,
-            aiMaterial* material,
-            aiTextureType textureType
-        ) -> void {
+        auto loadMaterialTextures =
+            [&assimpTypeToEngineType,
+             &parentDirectory](Materials& materials, const aiScene* scene, aiMaterial* material, aiTextureType textureType) -> void {
             auto&& [engineType, formatType, stbiType] = assimpTypeToEngineType(textureType);
             uint32_t materialTypeIndex = Math::indexOfHighestBit(static_cast<uint32_t>(engineType));
             COFFEE_ASSERT(materialTypeIndex >= 0 && materialTypeIndex <= 6, "Invalid TextureType provided.");
@@ -277,11 +312,24 @@ namespace coffee {
                     }
 
                     uint8_t* rawBytes = stbi_load_from_memory(
-                        reinterpret_cast<const uint8_t*>(embeddedTexture->pcData), bufferSize, &width, &height, &numberOfChannels, stbiType);
+                        reinterpret_cast<const uint8_t*>(embeddedTexture->pcData),
+                        bufferSize,
+                        &width,
+                        &height,
+                        &numberOfChannels,
+                        stbiType
+                    );
                     COFFEE_THROW_IF(rawBytes == nullptr, "STBI failed with reason: {}", stbi_failure_reason());
 
                     newTexture = createTexture(
-                        rawBytes, static_cast<size_t>(stbiType) * width * height, formatType, width, height, materialPath, engineType);
+                        rawBytes,
+                        static_cast<size_t>(stbiType) * width * height,
+                        formatType,
+                        width,
+                        height,
+                        materialPath,
+                        engineType
+                    );
                     stbi_image_free(rawBytes);
                 }
                 else {
@@ -289,7 +337,14 @@ namespace coffee {
                     COFFEE_THROW_IF(rawBytes == nullptr, "STBI failed with reason: {}", stbi_failure_reason());
 
                     newTexture = createTexture(
-                        rawBytes, static_cast<size_t>(stbiType) * width * height, formatType, width, height, materialPath, engineType);
+                        rawBytes,
+                        static_cast<size_t>(stbiType) * width * height,
+                        formatType,
+                        width,
+                        height,
+                        materialPath,
+                        engineType
+                    );
                     stbi_image_free(rawBytes);
                 }
 
@@ -298,10 +353,7 @@ namespace coffee {
             }
         };
 
-        auto loadSubmesh = [&assimpTypeToEngineType, &loadMaterialTextures](
-            const aiScene* scene, 
-            aiMesh* mesh
-        ) -> Mesh {
+        auto loadSubmesh = [&assimpTypeToEngineType, &loadMaterialTextures](const aiScene* scene, aiMesh* mesh) -> Mesh {
             std::vector<Vertex> vertices {};
             std::vector<uint32_t> indices {};
             Materials materials { defaultTexture_ };
@@ -312,11 +364,9 @@ namespace coffee {
                 vertex.position = glm::vec3 { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z } * 0.01f;
 
                 if (mesh->HasNormals()) {
-                    vertex.normal = {
-                        glm::packHalf1x16(mesh->mNormals[i].x),
-                        glm::packHalf1x16(mesh->mNormals[i].y),
-                        glm::packHalf1x16(mesh->mNormals[i].z)
-                    };
+                    vertex.normal = { glm::packHalf1x16(mesh->mNormals[i].x),
+                                      glm::packHalf1x16(mesh->mNormals[i].y),
+                                      glm::packHalf1x16(mesh->mNormals[i].z) };
                 }
 
                 if (mesh->HasTextureCoords(0)) {
@@ -324,11 +374,9 @@ namespace coffee {
                 }
 
                 if (mesh->HasTangentsAndBitangents()) {
-                    vertex.tangent = {
-                        glm::packHalf1x16(mesh->mTangents[i].x),
-                        glm::packHalf1x16(mesh->mTangents[i].y),
-                        glm::packHalf1x16(mesh->mTangents[i].z)
-                    };
+                    vertex.tangent = { glm::packHalf1x16(mesh->mTangents[i].x),
+                                       glm::packHalf1x16(mesh->mTangents[i].y),
+                                       glm::packHalf1x16(mesh->mTangents[i].z) };
                 }
 
                 vertices.push_back(std::move(vertex));
@@ -366,7 +414,11 @@ namespace coffee {
                 material->Get(AI_MATKEY_ROUGHNESS_FACTOR, materials.modifiers.roughnessFactor);
             }
 
-            return std::make_unique<MeshImpl>(createVerticesBuffer(vertices), createIndicesBuffer(indices), std::move(materials));
+            return std::make_unique<MeshImpl>(
+                createVerticesBuffer(vertices.data(), vertices.size()),
+                createIndicesBuffer(indices.data(), indices.size()),
+                std::move(materials)
+            );
         };
 
         std::vector<Mesh> meshes;
@@ -391,7 +443,7 @@ namespace coffee {
 
         COFFEE_THROW_IF(modelFile.empty(), "modelFile is empty!");
         COFFEE_THROW_IF(!std::filesystem::exists(modelFile), "modelFile ({}) wasn't found!", modelFile);
-        
+
         std::ifstream inputStream { modelFile, std::ios::binary | std::ios::in };
         COFFEE_THROW_IF(!inputStream.is_open(), "Failed to open a stream for file {}!", modelFile);
 
@@ -405,14 +457,17 @@ namespace coffee {
 
         auto readMaterialName = [&stream]() -> std::string {
             uint8_t size = stream.read<uint8_t>();
-            return std::string { stream.readBuffer<char>(size), size };
+
+            std::string outputString {};
+            outputString.resize(size);
+
+            stream.readDirectly(outputString.data(), size);
+            return outputString;
         };
 
         for (uint32_t i = 0; i < meshesSize; i++) {
             COFFEE_THROW_IF(std::memcmp(stream.readBuffer<uint8_t>(4), meshMagic, 4) != 0, "Invalid mesh magic!");
 
-            std::vector<Vertex> vertices {};
-            std::vector<uint32_t> indices {};
             Materials materials { defaultTexture_ };
             uint32_t verticesSize = stream.read<uint32_t>();
             uint32_t indicesSize = stream.read<uint32_t>();
@@ -420,13 +475,13 @@ namespace coffee {
 
             COFFEE_THROW_IF(vertexSize != sizeof(Vertex), "Vertex size isn't matching! Please update your model!");
 
-            vertices.reserve(verticesSize);
-            indices.reserve(indicesSize);
+            std::unique_ptr<Vertex[]> vertices = std::make_unique<Vertex[]>(verticesSize);
+            std::unique_ptr<uint32_t[]> indices = std::make_unique<uint32_t[]>(indicesSize);
 
-            materials.modifiers.diffuseColor = stream.read<glm::vec3>();
-            materials.modifiers.specularColor = stream.read<glm::vec3>();
-            materials.modifiers.metallicFactor = stream.read<glm::float32>();
-            materials.modifiers.roughnessFactor = stream.read<glm::float32>();
+            stream.readDirectly(&materials.modifiers.diffuseColor);
+            stream.readDirectly(&materials.modifiers.specularColor);
+            stream.readDirectly(&materials.modifiers.metallicFactor);
+            stream.readDirectly(&materials.modifiers.roughnessFactor);
 
             uint32_t textureFlags = stream.read<uint32_t>();
 
@@ -460,7 +515,7 @@ namespace coffee {
                         return;
                     }
 
-                    [[ maybe_unused ]] auto verifyImageByteSize = [](uint32_t fileSize, TextureType type) {
+                    [[maybe_unused]] auto verifyImageByteSize = [](uint32_t fileSize, TextureType type) {
                         switch (type) {
                             default:
                                 return fileSize == 1;
@@ -478,11 +533,12 @@ namespace coffee {
                     size_t actualSize = materialData.size() - 3 * sizeof(uint32_t);
 
                     COFFEE_ASSERT(
-                        verifyImageByteSize(bytesPerPixel, type), 
-                        "Image size mismatches with format size. Please repack your archive with correct data.");
+                        verifyImageByteSize(bytesPerPixel, type),
+                        "Image size mismatches with format size. Please repack your archive with "
+                        "correct data."
+                    );
 
-                    Texture newTexture = createTexture(
-                        actualData, actualSize, typeToFormat(type), width, height, completeFilepath, type);
+                    Texture newTexture = createTexture(actualData, actualSize, typeToFormat(type), width, height, completeFilepath, type);
 
                     materialMap.emplace(completeFilepath, newTexture);
                     materials.write(newTexture);
@@ -497,15 +553,14 @@ namespace coffee {
                 findOrCreateTexture(ambientOcclusionName, TextureType::AmbientOcclusion);
             }
 
-            while (verticesSize-- > 0) {
-                vertices.push_back(stream.read<Vertex>());
-            }
+            stream.readDirectly(vertices.get(), verticesSize);
+            stream.readDirectly(indices.get(), indicesSize);
 
-            while (indicesSize-- > 0) {
-                indices.push_back(stream.read<uint32_t>());
-            }
-
-            meshes.push_back(std::make_unique<MeshImpl>(createVerticesBuffer(vertices), createIndicesBuffer(indices), std::move(materials)));
+            meshes.push_back(std::make_unique<MeshImpl>(
+                createVerticesBuffer(vertices.get(), verticesSize),
+                createIndicesBuffer(indices.get(), indicesSize),
+                std::move(materials)
+            ));
         }
 
         return std::make_shared<ModelImpl>(std::move(meshes));
@@ -530,8 +585,8 @@ namespace coffee {
         uint8_t* rawBytes = stbi_load(absoluteFilePath.c_str(), &width, &height, &numberOfChannels, STBI_rgb_alpha);
         COFFEE_THROW_IF(rawBytes == nullptr, "STBI failed with reason: {}", stbi_failure_reason());
 
-        Texture loadedTexture = createTexture(
-            rawBytes, static_cast<size_t>(width) * height * 4, Format::R8G8B8A8SRGB, width, height, absoluteFilePath, type);
+        Texture loadedTexture =
+            createTexture(rawBytes, static_cast<size_t>(width) * height * 4, Format::R8G8B8A8SRGB, width, height, absoluteFilePath, type);
         materialMap.emplace(absoluteFilePath, loadedTexture);
 
         stbi_image_free(rawBytes);
@@ -546,11 +601,6 @@ namespace coffee {
     void Engine::copyBufferToImage(Image& dstImage, const Buffer& srcBuffer) {
         COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
         backendImpl_->copyBufferToImage(dstImage, srcBuffer);
-    }
-
-    void Engine::waitDeviceIdle() {
-        COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
-        backendImpl_->waitDevice();
     }
 
     std::string_view Engine::getClipboard() noexcept {
@@ -611,9 +661,77 @@ namespace coffee {
         monitorDisconnectedCallbacks_.erase(name);
     }
 
+    void Engine::sendCommandBuffer(GraphicsCommandBuffer&& commandBuffer) {
+        std::vector<GraphicsCommandBuffer> commandBuffers {};
+        commandBuffers.push_back(std::move(commandBuffer));
+        backendImpl_->sendCommandBuffers(std::move(commandBuffers));
+    }
+
+    void Engine::sendCommandBuffers(std::vector<GraphicsCommandBuffer>&& commandBuffers) {
+        backendImpl_->sendCommandBuffers(std::move(commandBuffers));
+    }
+
+    void Engine::submitPendingWork() {
+        backendImpl_->submitPendingWork();
+    }
+
+    size_t Engine::Factory::getSwapChainImageCount() noexcept {
+        COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
+        return backendImpl_->getSwapChainImageCount();
+    }
+
+    Format Engine::Factory::getSurfaceColorFormat() noexcept {
+        COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
+        return backendImpl_->getSurfaceColorFormat();
+    }
+
+    Format Engine::Factory::getOptimalDepthFormat() noexcept {
+        COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
+        return backendImpl_->getOptimalDepthFormat();
+    }
+
     Window Engine::Factory::createWindow(WindowSettings settings, const std::string& windowName) {
         COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
         return backendImpl_->createWindow(settings, windowName);
+    }
+
+    Cursor Engine::Factory::createCursor(CursorType type) noexcept {
+        COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
+
+        if (GLFWcursor* cursor = glfwCreateStandardCursor(cursorTypeToGLFWtype(type))) {
+            return std::make_shared<CursorImpl>(cursor, type);
+        }
+
+        return nullptr;
+    }
+
+    Cursor Engine::Factory::createCursorFromImage(
+        const std::vector<uint8_t>& rawImage,
+        uint32_t width,
+        uint32_t height,
+        CursorType type
+    ) noexcept {
+        COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
+
+        if (width > std::numeric_limits<int32_t>::max() || height > std::numeric_limits<int32_t>::max()) {
+            return nullptr;
+        }
+
+        constexpr size_t bytesPerPixel = 4;
+        if (rawImage.size() < bytesPerPixel * width * height) {
+            return nullptr;
+        }
+
+        GLFWimage image {};
+        image.width = width;
+        image.height = height;
+        image.pixels = const_cast<uint8_t*>(rawImage.data()); // GLFW promises that they won't be modifying this data
+
+        if (GLFWcursor* cursor = glfwCreateCursor(&image, 0, 0)) {
+            return std::make_shared<CursorImpl>(cursor, type);
+        }
+
+        return nullptr;
     }
 
     Buffer Engine::Factory::createBuffer(const BufferConfiguration& configuration) {
@@ -664,7 +782,7 @@ namespace coffee {
     ) {
         COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
 
-        [[ maybe_unused ]] constexpr auto verifyDescriptorLayouts = [](const std::vector<DescriptorLayout>& layouts) noexcept -> bool {
+        [[maybe_unused]] constexpr auto verifyDescriptorLayouts = [](const std::vector<DescriptorLayout>& layouts) noexcept -> bool {
             bool result = true;
 
             for (const auto& layout : layouts) {
@@ -687,14 +805,14 @@ namespace coffee {
         return backendImpl_->createFramebuffer(renderPass, configuration);
     }
 
-    CommandBuffer Engine::Factory::createCommandBuffer() {
+    GraphicsCommandBuffer Engine::Factory::createCommandBuffer() {
         COFFEE_ASSERT(backendImpl_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
         return backendImpl_->createCommandBuffer();
     }
 
     void Engine::createNullTexture() {
-        defaultTexture_ = createTexture(
-            reinterpret_cast<const uint8_t*>("\255\255\255\255"), 4, Format::R8G8B8A8SRGB, 1U, 1U, "null", TextureType::None);
+        defaultTexture_ =
+            createTexture(reinterpret_cast<const uint8_t*>("\255\255\255\255"), 4, Format::R8G8B8A8SRGB, 1U, 1U, "null", TextureType::None);
     }
 
     Texture Engine::createTexture(
@@ -735,21 +853,21 @@ namespace coffee {
         return std::make_shared<TextureImpl>(std::move(textureImage), filePath, type);
     }
 
-    Buffer Engine::createVerticesBuffer(const std::vector<Vertex>& vertices) {
+    Buffer Engine::createVerticesBuffer(const Vertex* vertices, size_t amount) {
         BufferConfiguration stagingBufferConfiguration {};
         stagingBufferConfiguration.usage = BufferUsage::TransferSource;
         stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
-        stagingBufferConfiguration.instanceCount = vertices.size();
+        stagingBufferConfiguration.instanceCount = amount;
         stagingBufferConfiguration.instanceSize = sizeof(Vertex);
         Buffer stagingVerticesBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
 
-        stagingVerticesBuffer->write(vertices.data(), vertices.size() * sizeof(Vertex));
+        stagingVerticesBuffer->write(vertices, amount * sizeof(Vertex));
         stagingVerticesBuffer->flush();
 
-        BufferConfiguration verticesBufferConfiguration{};
+        BufferConfiguration verticesBufferConfiguration {};
         verticesBufferConfiguration.properties = MemoryProperty::DeviceLocal;
         verticesBufferConfiguration.usage = BufferUsage::Vertex | BufferUsage::TransferDestination;
-        verticesBufferConfiguration.instanceCount = vertices.size();
+        verticesBufferConfiguration.instanceCount = amount;
         verticesBufferConfiguration.instanceSize = sizeof(Vertex);
         Buffer verticesBuffer = backendImpl_->createBuffer(verticesBufferConfiguration);
 
@@ -757,25 +875,25 @@ namespace coffee {
         return verticesBuffer;
     }
 
-    Buffer Engine::createIndicesBuffer(const std::vector<uint32_t>& indices) {
-        if (indices.empty()) {
+    Buffer Engine::createIndicesBuffer(const uint32_t* indices, size_t amount) {
+        if (amount == 0) {
             return nullptr;
         }
 
         BufferConfiguration stagingBufferConfiguration {};
         stagingBufferConfiguration.usage = BufferUsage::TransferSource;
         stagingBufferConfiguration.properties = MemoryProperty::HostVisible;
-        stagingBufferConfiguration.instanceCount = indices.size();
+        stagingBufferConfiguration.instanceCount = amount;
         stagingBufferConfiguration.instanceSize = sizeof(uint32_t);
         Buffer stagingIndicesBuffer = backendImpl_->createBuffer(stagingBufferConfiguration);
 
-        stagingIndicesBuffer->write(indices.data(), indices.size() * sizeof(uint32_t));
+        stagingIndicesBuffer->write(indices, amount * sizeof(uint32_t));
         stagingIndicesBuffer->flush();
 
-        BufferConfiguration verticesBufferConfiguration{};
+        BufferConfiguration verticesBufferConfiguration {};
         verticesBufferConfiguration.properties = MemoryProperty::DeviceLocal;
         verticesBufferConfiguration.usage = BufferUsage::Index | BufferUsage::TransferDestination;
-        verticesBufferConfiguration.instanceCount = indices.size();
+        verticesBufferConfiguration.instanceCount = amount;
         verticesBufferConfiguration.instanceSize = sizeof(uint32_t);
         Buffer indicesBuffer = backendImpl_->createBuffer(verticesBufferConfiguration);
 
@@ -795,4 +913,4 @@ namespace coffee {
         }
     }
 
-}
+} // namespace coffee

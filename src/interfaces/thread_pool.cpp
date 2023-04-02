@@ -17,16 +17,6 @@ namespace coffee {
         destroyThreads();
     }
 
-    void ThreadPool::push(std::function<void()>&& func) {
-        {
-            std::unique_lock<std::mutex> lock_ { tasksMutex_ };
-            tasks_.push(std::move(func));
-        }
-
-        tasksTotal_++;
-        cvTaskAvailable_.notify_one();
-    }
-
     void ThreadPool::waitForTasks() {
         waiting_ = true;
 
@@ -42,6 +32,16 @@ namespace coffee {
         for (uint32_t i = 0; i < amountOfThreads; ++i) {
             threads_.emplace_back(&ThreadPool::worker, this);
         }
+    }
+
+    void ThreadPool::pushTask(std::function<void()>&& func) {
+        {
+            std::scoped_lock<std::mutex> lock_ { tasksMutex_ };
+            tasks_.push(std::move(func));
+        }
+
+        tasksTotal_++;
+        cvTaskAvailable_.notify_one();
     }
 
     void ThreadPool::destroyThreads() {
@@ -66,7 +66,12 @@ namespace coffee {
             tasks_.pop();
 
             lock_.unlock();
-            try { task(); } catch (...) {}
+            try {
+                task();
+            }
+            catch (...) {
+                // Silently swallow exception and continue on
+            }
             lock_.lock();
 
             tasksTotal_--;
@@ -77,4 +82,4 @@ namespace coffee {
         }
     }
 
-}
+} // namespace coffee

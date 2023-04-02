@@ -1,8 +1,8 @@
 #ifndef COFFEE_UTILS_LOG
 #define COFFEE_UTILS_LOG
 
-#include <coffee/utils/platform.hpp>
 #include <coffee/types.hpp>
+#include <coffee/utils/platform.hpp>
 
 #include <fmt/format.h>
 
@@ -11,7 +11,9 @@ namespace coffee {
     void mustBe(bool exprResult, const char* exprString, const char* filePath, const unsigned line, const std::string& message);
     void log(MessageSeverity severity, const char* filePath, const unsigned line, const std::string& message);
 
-}
+} // namespace coffee
+
+// clang-format off
 
 #ifdef COFFEE_ASSERT_ENABLE
 #   define COFFEE_ASSERT(expr, formatting, ...) \
@@ -43,5 +45,7 @@ namespace coffee {
         coffee::log(coffee::MessageSeverity::Critical, __FILE__, __LINE__, formatted); \
         throw std::runtime_error(formatted); \
     } }
+
+// clang-format on
 
 #endif

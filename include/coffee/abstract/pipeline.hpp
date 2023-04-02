@@ -15,6 +15,6 @@ namespace coffee {
 
     using Pipeline = std::unique_ptr<AbstractPipeline>;
 
-}
+} // namespace coffee
 
 #endif

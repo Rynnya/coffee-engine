@@ -1,8 +1,8 @@
 #ifndef COFFEE_EVENTS_APPLICATION_EVENT
 #define COFFEE_EVENTS_APPLICATION_EVENT
 
-#include <coffee/types.hpp>
 #include <coffee/events/event.hpp>
+#include <coffee/types.hpp>
 
 namespace coffee {
 
@@ -17,6 +17,6 @@ namespace coffee {
         const PresentMode mode_;
     };
 
-}
+} // namespace coffee
 
 #endif

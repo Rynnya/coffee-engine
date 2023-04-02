@@ -34,6 +34,6 @@ namespace coffee {
         const bool numLock_;
     };
 
-}
+} // namespace coffee
 
 #endif

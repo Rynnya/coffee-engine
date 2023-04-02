@@ -11,9 +11,7 @@ namespace coffee {
     constexpr uint8_t archiveMagic[4] = { 0xD2, 0x8A, 0x3C, 0xB7 };
 
     struct Archive::PImpl {
-        PImpl()
-            : decompressorContext { ZSTD_createDCtx() }
-        {}
+        PImpl() : decompressorContext { ZSTD_createDCtx() } {}
 
         ~PImpl() {
             ZSTD_freeDCtx(decompressorContext);
@@ -31,7 +29,7 @@ namespace coffee {
             inputStream = std::move(newInputStream);
             files.clear();
 
-            uint32_t amountOfFiles {};
+            uint32_t amountOfFiles = 0;
             inputStream.read(reinterpret_cast<char*>(&amountOfFiles), sizeof(amountOfFiles));
 
             for (uint32_t i = 0; i < amountOfFiles; i++) {
@@ -84,7 +82,7 @@ namespace coffee {
     }
 
     bool Archive::isEmpty() const noexcept {
-        return pImpl_->files.size() == 0 || !(pImpl_->inputStream.is_open() || pImpl_->inputStream.good());
+        return pImpl_->files.size() == 0 || !(pImpl_->inputStream.is_open() && pImpl_->inputStream.good());
     }
 
     const std::string& Archive::getPath() const noexcept {
@@ -108,7 +106,7 @@ namespace coffee {
         pImpl_->inputStream.seekg(it->position);
         pImpl_->inputStream.read(reinterpret_cast<char*>(compressedData.get()), it->compressedSize);
         size_t decompressedSize = ZSTD_getFrameContentSize(compressedData.get(), it->compressedSize);
-        
+
         if (decompressedSize == 0 || decompressedSize == ZSTD_CONTENTSIZE_ERROR || decompressedSize == ZSTD_CONTENTSIZE_UNKNOWN) {
             return {};
         }
@@ -116,7 +114,12 @@ namespace coffee {
         std::vector<uint8_t> decompressedBytes {};
         decompressedBytes.resize(decompressedSize);
         size_t errorCode = ZSTD_decompressDCtx(
-            pImpl_->decompressorContext, decompressedBytes.data(), decompressedBytes.size(), compressedData.get(), it->compressedSize);
+            pImpl_->decompressorContext,
+            decompressedBytes.data(),
+            decompressedBytes.size(),
+            compressedData.get(),
+            it->compressedSize
+        );
 
         if (ZSTD_getErrorCode(errorCode) != ZSTD_error_no_error) {
             return {};
@@ -125,4 +128,4 @@ namespace coffee {
         return decompressedBytes;
     }
 
-}
+} // namespace coffee

@@ -18,7 +18,8 @@ namespace coffee {
         const std::vector<DescriptorLayout>& descriptorLayouts,
         const std::vector<Shader>& shaderPrograms,
         const PipelineConfiguration& configuration
-    ) : device_ { device } {
+    )
+            : device_ { device } {
         VkPipelineLayoutCreateInfo createInfo { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
 
         std::vector<VkDescriptorSetLayout> setLayouts {};
@@ -164,11 +165,9 @@ namespace coffee {
         depthStencilInfo.minDepthBounds = 0.0f;
         depthStencilInfo.maxDepthBounds = 1.0f;
 
-        constexpr std::array<VkDynamicState, 3> dynamicStates = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-            VK_DYNAMIC_STATE_BLEND_CONSTANTS
-        };
+        constexpr std::array<VkDynamicState, 3> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
+                                                                  VK_DYNAMIC_STATE_SCISSOR,
+                                                                  VK_DYNAMIC_STATE_BLEND_CONSTANTS };
 
         VkPipelineDynamicStateCreateInfo dynamicStateInfo { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
         dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
@@ -216,4 +215,4 @@ namespace coffee {
         vkDestroyPipelineLayout(device_.getLogicalDevice(), layout, nullptr);
     }
 
-}
+} // namespace coffee

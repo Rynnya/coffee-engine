@@ -1,5 +1,6 @@
-// DO NOT INCLUDE THIS FILE DIRECTLY
-// Instead include types.hpp, it has a header guard and also a lot more than this file
+#ifndef COFFEE_TYPES
+#    error "Do not include this file directly, instead include types.hpp"
+#endif
 
 namespace coffee {
 
@@ -67,22 +68,22 @@ namespace coffee {
         return static_cast<ResourceState>(static_cast<uint32_t>(this_) & static_cast<uint32_t>(other_));
     }
 
-    constexpr Offset2D Offset2D::operator+(const Offset2D& other) {
+    constexpr Offset2D Offset2D::operator+(const Offset2D& other) const noexcept {
         return { this->x + other.x, this->y + other.y };
     }
 
-    constexpr Offset2D Offset2D::operator-(const Offset2D& other) {
+    constexpr Offset2D Offset2D::operator-(const Offset2D& other) const noexcept {
         return { this->x - other.x, this->y - other.y };
     }
 
-    constexpr Offset2D& Offset2D::operator+=(const Offset2D& other) {
+    constexpr Offset2D& Offset2D::operator+=(const Offset2D& other) noexcept {
         this->x += other.x;
         this->y += other.y;
 
         return *this;
     }
 
-    constexpr Offset2D& Offset2D::operator-=(const Offset2D& other) {
+    constexpr Offset2D& Offset2D::operator-=(const Offset2D& other) noexcept {
         this->x -= other.x;
         this->y -= other.y;
 
@@ -159,10 +160,6 @@ namespace coffee {
         return Float2D { static_cast<float>(this->width), static_cast<float>(this->height) };
     }
 
-    constexpr Extent2D::operator Extent3D() const noexcept {
-        return Extent3D { this->width, this->height, 1U };
-    }
-
     constexpr Float2D Float2D::operator+(const Float2D& other) const noexcept {
         return { this->x + other.x, this->y + other.y };
     }
@@ -230,7 +227,187 @@ namespace coffee {
     }
 
     constexpr Float2D::operator Extent2D() const noexcept {
-        return Extent2D{ static_cast<uint32_t>(this->x), static_cast<uint32_t>(this->y) };
+        return Extent2D { static_cast<uint32_t>(this->x), static_cast<uint32_t>(this->y) };
     }
 
-}
+    constexpr Offset3D Offset3D::operator+(const Offset3D& other) {
+        return { this->x + other.x, this->y + other.y, this->z + other.z };
+    }
+
+    constexpr Offset3D Offset3D::operator-(const Offset3D& other) {
+        return { this->x - other.x, this->y - other.y, this->z - other.z };
+    }
+
+    constexpr Offset3D& Offset3D::operator+=(const Offset3D& other) {
+        this->x += other.x;
+        this->y += other.y;
+        this->z += other.z;
+
+        return *this;
+    }
+
+    constexpr Offset3D& Offset3D::operator-=(const Offset3D& other) {
+        this->x -= other.x;
+        this->y -= other.y;
+        this->z -= other.z;
+
+        return *this;
+    }
+
+    constexpr Extent3D Extent3D::operator+(const Extent3D& other) const noexcept {
+        return { this->width + other.width, this->height + other.height, this->depth + other.depth };
+    }
+
+    constexpr Extent3D Extent3D::operator-(const Extent3D& other) const noexcept {
+        return { this->width - other.width, this->height - other.height, this->depth - other.depth };
+    }
+
+    constexpr Extent3D Extent3D::operator+(const Offset3D& other) const noexcept {
+        return { this->width + other.x, this->height + other.y, this->depth + other.z };
+    }
+
+    constexpr Extent3D Extent3D::operator-(const Offset3D& other) const noexcept {
+        return { this->width - other.x, this->height - other.y, this->depth - other.z };
+    }
+
+    constexpr Extent3D Extent3D::operator+(const Float3D& other) const noexcept {
+        return { this->width + static_cast<uint32_t>(other.x),
+                 this->height + static_cast<uint32_t>(other.y),
+                 this->depth + static_cast<uint32_t>(other.z) };
+    }
+
+    constexpr Extent3D Extent3D::operator-(const Float3D& other) const noexcept {
+        return { this->width - static_cast<uint32_t>(other.x),
+                 this->height - static_cast<uint32_t>(other.y),
+                 this->depth - static_cast<uint32_t>(other.z) };
+    }
+
+    constexpr Extent3D& Extent3D::operator+=(const Extent3D& other) noexcept {
+        this->width += other.width;
+        this->height += other.height;
+        this->depth += other.depth;
+
+        return *this;
+    }
+
+    constexpr Extent3D& Extent3D::operator-=(const Extent3D& other) noexcept {
+        this->width -= other.width;
+        this->height -= other.height;
+        this->depth -= other.depth;
+
+        return *this;
+    }
+
+    constexpr Extent3D& Extent3D::operator+=(const Offset3D& other) noexcept {
+        this->width += other.x;
+        this->height += other.y;
+        this->depth += other.z;
+
+        return *this;
+    }
+
+    constexpr Extent3D& Extent3D::operator-=(const Offset3D& other) noexcept {
+        this->width -= other.x;
+        this->height -= other.y;
+        this->depth -= other.z;
+
+        return *this;
+    }
+
+    constexpr Extent3D& Extent3D::operator+=(const Float3D& other) noexcept {
+        this->width += static_cast<uint32_t>(other.x);
+        this->height += static_cast<uint32_t>(other.y);
+        this->depth += static_cast<uint32_t>(other.z);
+
+        return *this;
+    }
+
+    constexpr Extent3D& Extent3D::operator-=(const Float3D& other) noexcept {
+        this->width -= static_cast<uint32_t>(other.x);
+        this->height -= static_cast<uint32_t>(other.y);
+        this->depth -= static_cast<uint32_t>(other.z);
+
+        return *this;
+    }
+
+    constexpr Extent3D::operator Float3D() const noexcept {
+        return Float3D { static_cast<float>(this->width), static_cast<float>(this->height), static_cast<float>(this->depth) };
+    }
+
+    constexpr Float3D Float3D::operator+(const Float3D& other) const noexcept {
+        return { this->x + other.x, this->y + other.y, this->z + other.z };
+    }
+
+    constexpr Float3D Float3D::operator-(const Float3D& other) const noexcept {
+        return { this->x - other.x, this->y - other.y, this->z - other.z };
+    }
+
+    constexpr Float3D Float3D::operator+(const Offset3D& other) const noexcept {
+        return { this->x + other.x, this->y + other.y, this->z + other.z };
+    }
+
+    constexpr Float3D Float3D::operator-(const Offset3D& other) const noexcept {
+        return { this->x - other.x, this->y - other.y, this->z - other.z };
+    }
+
+    constexpr Float3D Float3D::operator+(const Extent3D& other) const noexcept {
+        return { this->x + other.width, this->y + other.height, this->z + other.depth };
+    }
+
+    constexpr Float3D Float3D::operator-(const Extent3D& other) const noexcept {
+        return { this->x - other.width, this->y - other.height, this->z - other.depth };
+    }
+
+    constexpr Float3D& Float3D::operator+=(const Float3D& other) noexcept {
+        this->x += other.x;
+        this->y += other.y;
+        this->z += other.z;
+
+        return *this;
+    }
+
+    constexpr Float3D& Float3D::operator-=(const Float3D& other) noexcept {
+        this->x -= other.x;
+        this->y -= other.y;
+        this->z -= other.z;
+
+        return *this;
+    }
+
+    constexpr Float3D& Float3D::operator+=(const Offset3D& other) noexcept {
+        this->x += other.x;
+        this->y += other.y;
+        this->z += other.z;
+
+        return *this;
+    }
+
+    constexpr Float3D& Float3D::operator-=(const Offset3D& other) noexcept {
+        this->x -= other.x;
+        this->y -= other.y;
+        this->z -= other.z;
+
+        return *this;
+    }
+
+    constexpr Float3D& Float3D::operator+=(const Extent3D& other) noexcept {
+        this->x += other.width;
+        this->y += other.height;
+        this->z += other.depth;
+
+        return *this;
+    }
+
+    constexpr Float3D& Float3D::operator-=(const Extent3D& other) noexcept {
+        this->x -= other.width;
+        this->y -= other.height;
+        this->z -= other.depth;
+
+        return *this;
+    }
+
+    constexpr Float3D::operator Extent3D() const noexcept {
+        return Extent3D { static_cast<uint32_t>(this->x), static_cast<uint32_t>(this->y), static_cast<uint32_t>(this->z) };
+    }
+
+} // namespace coffee

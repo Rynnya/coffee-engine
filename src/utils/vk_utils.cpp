@@ -33,15 +33,21 @@ namespace coffee {
     VkFormat VkUtils::findDepthFormat(VkPhysicalDevice device) {
         return findSupportedFormat(
             device,
-            { 
-                VK_FORMAT_D32_SFLOAT_S8_UINT,
-                VK_FORMAT_D32_SFLOAT,
-                VK_FORMAT_D24_UNORM_S8_UINT,
-                VK_FORMAT_D16_UNORM_S8_UINT,
-                VK_FORMAT_D16_UNORM
+            {
+                // Search in reverse order to get maximal compression that available for this GPU
+                VK_FORMAT_D16_UNORM_S8_UINT,  // This one is most likely won't be supported by any
+                                              // GPU's because of it misalignment
+                VK_FORMAT_D24_UNORM_S8_UINT,  // This one is most likely will be supported by most
+                                              // GPU's because of it's perfect alignment
+                VK_FORMAT_D32_SFLOAT_S8_UINT, // This one will have 24 bits of padding, not good
+                VK_FORMAT_D32_SFLOAT,         // This one doesn't have stencil, so it might be a bad idea to
+                                              // ever use it
+                VK_FORMAT_D16_UNORM           // This variant is always available for both depth and
+                                              // depth-stencil images as fallback
             },
             VK_IMAGE_TILING_OPTIMAL,
-            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+        );
     }
 
     uint32_t VkUtils::findMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -59,27 +65,22 @@ namespace coffee {
 
     VkSurfaceFormatKHR VkUtils::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) noexcept {
         for (const auto& availableFormat : availableFormats) {
-            if (
-                availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
-                availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-            ) {
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
                 return availableFormat;
             }
         }
 
-        // Fallback
+        // Fallback, most likely will be R8G8B8A8Unorm
         return availableFormats[0];
     }
 
     VkPresentModeKHR VkUtils::choosePresentMode(
         const std::vector<VkPresentModeKHR>& availablePresentModes,
-        const std::optional<VkPresentModeKHR>& preferable
+        VkPresentModeKHR preferable
     ) noexcept {
-        if (preferable.has_value()) {
-            for (const auto& availablePresentMode : availablePresentModes) {
-                if (availablePresentMode == preferable.value()) {
-                    return availablePresentMode;
-                }
+        for (const auto& availablePresentMode : availablePresentModes) {
+            if (availablePresentMode == preferable) {
+                return availablePresentMode;
             }
         }
 
@@ -95,7 +96,8 @@ namespace coffee {
         VkExtent2D actualExtent = extent;
 
         actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
-        actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+        actualExtent.height =
+            std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
 
         return actualExtent;
     }
@@ -255,7 +257,6 @@ namespace coffee {
         return VK_SHADER_STAGE_ALL_GRAPHICS;
     }
 
-
     VkShaderStageFlags VkUtils::transformShaderStages(ShaderStage stages) noexcept {
         VkShaderStageFlags flagsImpl = 0;
 
@@ -285,12 +286,8 @@ namespace coffee {
         VkBufferUsageFlags flagsImpl = 0;
 
         constexpr std::array<VkMemoryPropertyFlags, 7> bitset = {
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,   VK_BUFFER_USAGE_TRANSFER_DST_BIT,  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
         };
 
@@ -306,11 +303,9 @@ namespace coffee {
     VkMemoryPropertyFlags VkUtils::transformMemoryFlags(MemoryProperty flags) noexcept {
         VkMemoryPropertyFlags flagsImpl = 0;
 
-        constexpr std::array<VkMemoryPropertyFlags, 3> bitset = {
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        };
+        constexpr std::array<VkMemoryPropertyFlags, 3> bitset = { VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                                                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                                                                  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT };
 
         for (uint32_t i = 0; i < bitset.size(); i++) {
             if ((flags & static_cast<MemoryProperty>(1 << i)) == static_cast<MemoryProperty>(1 << i)) {
@@ -335,7 +330,6 @@ namespace coffee {
 
         return VK_IMAGE_TYPE_2D;
     }
-
 
     VkImageViewType VkUtils::transformImageViewType(ImageViewType type) noexcept {
         switch (type) {
@@ -384,12 +378,8 @@ namespace coffee {
     VkImageAspectFlags VkUtils::transformImageAspects(ImageAspect flags) noexcept {
         VkImageAspectFlags flagsImpl = 0;
 
-        constexpr std::array<VkImageAspectFlags, 4> bitset = {
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            VK_IMAGE_ASPECT_DEPTH_BIT,
-            VK_IMAGE_ASPECT_STENCIL_BIT,
-            VK_IMAGE_ASPECT_METADATA_BIT
-        };
+        constexpr std::array<VkImageAspectFlags, 4>
+            bitset = { VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_ASPECT_METADATA_BIT };
 
         for (uint32_t i = 0; i < bitset.size(); i++) {
             if ((flags & static_cast<ImageAspect>(1 << i)) == static_cast<ImageAspect>(1 << i)) {
@@ -987,7 +977,6 @@ namespace coffee {
         return VK_LOGIC_OP_CLEAR;
     }
 
-
     VkAttachmentLoadOp VkUtils::transformAttachmentLoadOp(AttachmentLoadOp op) noexcept {
         switch (op) {
             case AttachmentLoadOp::Load:
@@ -1019,12 +1008,8 @@ namespace coffee {
     VkColorComponentFlags VkUtils::transformColorComponents(ColorComponent components) noexcept {
         VkColorComponentFlags flagsImpl = 0;
 
-        constexpr std::array<VkColorComponentFlags, 4> bitset = {
-            VK_COLOR_COMPONENT_R_BIT,
-            VK_COLOR_COMPONENT_G_BIT,
-            VK_COLOR_COMPONENT_B_BIT,
-            VK_COLOR_COMPONENT_A_BIT
-        };
+        constexpr std::array<VkColorComponentFlags, 4>
+            bitset = { VK_COLOR_COMPONENT_R_BIT, VK_COLOR_COMPONENT_G_BIT, VK_COLOR_COMPONENT_B_BIT, VK_COLOR_COMPONENT_A_BIT };
 
         for (uint32_t i = 0; i < bitset.size(); i++) {
             if ((components & static_cast<ColorComponent>(1 << i)) == static_cast<ColorComponent>(1 << i)) {
@@ -1328,10 +1313,10 @@ namespace coffee {
                     flagsImpl |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
                     break;
                 case VK_ACCESS_SHADER_READ_BIT:
-                    flagsImpl |=  VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                    flagsImpl |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
                     break;
                 case VK_ACCESS_SHADER_WRITE_BIT:
-                    flagsImpl |=  VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+                    flagsImpl |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
                     break;
                 case VK_ACCESS_COLOR_ATTACHMENT_READ_BIT:
                     flagsImpl |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -1358,14 +1343,17 @@ namespace coffee {
                     flagsImpl |= VK_PIPELINE_STAGE_HOST_BIT;
                     break;
                 case VK_ACCESS_MEMORY_READ_BIT:
+                    flagsImpl |= VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+                    break;
                 case VK_ACCESS_MEMORY_WRITE_BIT:
+                    flagsImpl |= VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+                    break;
                 default:
                     break;
             }
-
         }
 
         return flagsImpl;
     }
 
-}
+} // namespace coffee

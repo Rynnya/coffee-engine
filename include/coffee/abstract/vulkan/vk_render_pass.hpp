@@ -1,8 +1,8 @@
 #ifndef COFFEE_VK_RENDER_PASS
 #define COFFEE_VK_RENDER_PASS
 
-#include <coffee/abstract/vulkan/vk_device.hpp>
 #include <coffee/abstract/render_pass.hpp>
+#include <coffee/abstract/vulkan/vk_device.hpp>
 
 namespace coffee {
 
@@ -22,6 +22,6 @@ namespace coffee {
         VulkanDevice& device_;
     };
 
-}
+} // namespace coffee
 
 #endif

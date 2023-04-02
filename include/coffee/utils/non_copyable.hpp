@@ -16,6 +16,6 @@ namespace coffee {
         NonCopyable& operator=(NonCopyable&&) noexcept = default;
     };
 
-}
+} // namespace coffee
 
 #endif

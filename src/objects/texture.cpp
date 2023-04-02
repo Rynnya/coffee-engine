@@ -5,10 +5,9 @@
 namespace coffee {
 
     TextureImpl::TextureImpl(Image&& texture, const std::string& filepath, TextureType type)
-        : texture_ { std::move(texture) }
-        , filepath_ { filepath }
-        , type_ { type }
-    {
+            : texture_ { std::move(texture) }
+            , filepath_ { filepath }
+            , type_ { type } {
         COFFEE_ASSERT(!filepath_.empty(), "Invalid filename provided.");
         COFFEE_ASSERT(texture_ != nullptr, "Invalid texture provided.");
     }
@@ -21,4 +20,4 @@ namespace coffee {
         return type_;
     }
 
-}
+} // namespace coffee

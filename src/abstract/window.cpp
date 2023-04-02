@@ -152,7 +152,8 @@ namespace coffee {
             return;
         }
 
-        // !!! Always recreate swap chain, even if previous size is same as new one, otherwise it will freeze image
+        // !!! Always recreate swap chain, even if previous size is same as new one, otherwise it
+        // will freeze image
         pImpl->framebufferWidth = static_cast<uint32_t>(width);
         pImpl->framebufferHeight = static_cast<uint32_t>(height);
         pImpl->windowIconified = false;
@@ -166,7 +167,8 @@ namespace coffee {
     }
 
     void AbstractWindow::PImpl::resizeCallback(GLFWwindow* window, int width, int height) {
-        // This callback most likely will be called with framebufferResizeCallback, so we don't do any callbacks or actions here
+        // This callback most likely will be called with framebufferResizeCallback, so we don't do
+        // any callbacks or actions here
         AbstractWindow::PImpl* pImpl = static_cast<AbstractWindow::PImpl*>(glfwGetWindowUserPointer(window));
         pImpl->windowWidth = static_cast<uint32_t>(width);
         pImpl->windowHeight = static_cast<uint32_t>(height);
@@ -199,18 +201,14 @@ namespace coffee {
         AbstractWindow::PImpl* pImpl = static_cast<AbstractWindow::PImpl*>(glfwGetWindowUserPointer(window));
         pImpl->windowFocused = static_cast<bool>(focused);
 
-        const WindowFocusEvent focusEvent{ static_cast<bool>(focused) };
+        const WindowFocusEvent focusEvent { static_cast<bool>(focused) };
         pImpl->focusCallbacks.iterate(pImpl->parentHandle, focusEvent);
     }
 
     void AbstractWindow::PImpl::mouseClickCallback(GLFWwindow* window, int button, int action, int mods) {
         AbstractWindow::PImpl* pImpl = static_cast<AbstractWindow::PImpl*>(glfwGetWindowUserPointer(window));
 
-        const MouseClickEvent mouseClickEvent {
-            glfwToCoffeeState(action),
-            static_cast<MouseButton>(button),
-            static_cast<uint32_t>(mods)
-        };
+        const MouseClickEvent mouseClickEvent { glfwToCoffeeState(action), static_cast<MouseButton>(button), static_cast<uint32_t>(mods) };
         pImpl->mouseClickCallbacks.iterate(pImpl->parentHandle, mouseClickEvent);
     }
 
@@ -234,12 +232,10 @@ namespace coffee {
     void AbstractWindow::PImpl::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
         AbstractWindow::PImpl* pImpl = static_cast<AbstractWindow::PImpl*>(glfwGetWindowUserPointer(window));
 
-        const KeyEvent keyEvent {
-            glfwToCoffeeState(action),
-            static_cast<Keys>(key),
-            static_cast<uint32_t>(scancode),
-            static_cast<uint32_t>(mods)
-        };
+        const KeyEvent keyEvent { glfwToCoffeeState(action),
+                                  static_cast<Keys>(key),
+                                  static_cast<uint32_t>(scancode),
+                                  static_cast<uint32_t>(mods) };
         pImpl->keyCallbacks.iterate(pImpl->parentHandle, keyEvent);
     }
 
@@ -253,13 +249,13 @@ namespace coffee {
 
     AbstractWindow::AbstractWindow(WindowSettings settings, const std::string& windowName) : pImpl_ { new AbstractWindow::PImpl() } {
         pImpl_->parentHandle = this;
-        
+
         std::string safeWindowName { windowName };
 
         if (safeWindowName.empty()) {
             safeWindowName = "Coffee Window";
         }
-        
+
         {
             std::scoped_lock<std::mutex> lock { creationMutex };
 
@@ -293,12 +289,10 @@ namespace coffee {
                 const GLFWvidmode* videoMode = glfwGetVideoMode(pImpl_->monitorHandle);
                 COFFEE_THROW_IF(videoMode == nullptr, "Failed to retreave main video mode of primary monitor!");
 
-                settings.extent.width = static_cast<uint32_t>(settings.fullscreen
-                    ? videoMode->width
-                    : videoMode->width - videoMode->width / 2);
-                settings.extent.height = static_cast<uint32_t>(settings.fullscreen
-                    ? videoMode->height
-                    : videoMode->height - videoMode->height / 2);
+                settings.extent.width =
+                    static_cast<uint32_t>(settings.fullscreen ? videoMode->width : videoMode->width - videoMode->width / 2);
+                settings.extent.height =
+                    static_cast<uint32_t>(settings.fullscreen ? videoMode->height : videoMode->height - videoMode->height / 2);
             }
 
             pImpl_->windowHandle = glfwCreateWindow(
@@ -306,7 +300,8 @@ namespace coffee {
                 settings.extent.height,
                 safeWindowName.c_str(),
                 settings.fullscreen ? pImpl_->monitorHandle : nullptr,
-                nullptr);
+                nullptr
+            );
             COFFEE_THROW_IF(pImpl_->windowHandle == nullptr, "Failed to create new GLFW window!");
         }
 
@@ -332,6 +327,8 @@ namespace coffee {
         pImpl_->framebufferHeight = static_cast<uint32_t>(height);
 
         pImpl_->windowFocused = static_cast<bool>(glfwGetWindowAttrib(pImpl_->windowHandle, GLFW_FOCUSED));
+        pImpl_->windowIconified = static_cast<bool>(glfwGetWindowAttrib(pImpl_->windowHandle, GLFW_ICONIFIED));
+
         // Hack: This required to forbid usage of possible extent of (0, 0)
         glfwSetWindowSizeLimits(pImpl_->windowHandle, 1, 1, GLFW_DONT_CARE, GLFW_DONT_CARE);
 
@@ -381,15 +378,14 @@ namespace coffee {
         return swapChain->acquireNextImage();
     }
 
-    void AbstractWindow::sendCommandBuffer(CommandBuffer&& commandBuffer) {
-        std::scoped_lock<std::mutex> lock { commandBuffersMutex };
+    void AbstractWindow::sendCommandBuffer(GraphicsCommandBuffer&& commandBuffer) {
+        std::vector<GraphicsCommandBuffer> commandBuffers {};
         commandBuffers.push_back(std::move(commandBuffer));
+        return swapChain->submitCommandBuffers(std::move(commandBuffers));
     }
 
-    void AbstractWindow::submitPendingWork() {
-        // TODO: Change to bool or void once DX12 is implemented (bool is recreate required, void if not)
-        swapChain->submitCommandBuffers(commandBuffers);
-        commandBuffers.clear();
+    void AbstractWindow::sendCommandBuffers(std::vector<GraphicsCommandBuffer>&& commandBuffers) {
+        return swapChain->submitCommandBuffers(std::move(commandBuffers));
     }
 
     void AbstractWindow::changePresentMode(PresentMode newMode) {
@@ -435,6 +431,18 @@ namespace coffee {
 
     void AbstractWindow::showWindow() const noexcept {
         glfwShowWindow(pImpl_->windowHandle);
+    }
+
+    bool AbstractWindow::isBorderless() const noexcept {
+        return !static_cast<bool>(glfwGetWindowAttrib(pImpl_->windowHandle, GLFW_DECORATED));
+    }
+
+    void AbstractWindow::makeBorderless() const noexcept {
+        glfwSetWindowAttrib(pImpl_->windowHandle, GLFW_DECORATED, GLFW_FALSE);
+    }
+
+    void AbstractWindow::revertBorderless() const noexcept {
+        glfwSetWindowAttrib(pImpl_->windowHandle, GLFW_DECORATED, GLFW_TRUE);
     }
 
     bool AbstractWindow::isPassthrough() const noexcept {
@@ -485,6 +493,16 @@ namespace coffee {
         glfwSetInputMode(pImpl_->windowHandle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
 
+    void AbstractWindow::setCursor(const Cursor& cursor) const noexcept {
+        if (cursor != nullptr) {
+            glfwSetCursor(pImpl_->windowHandle, reinterpret_cast<GLFWcursor*>(cursor->nativeHandle_));
+        }
+    }
+
+    void AbstractWindow::resetCursor() const noexcept {
+        glfwSetCursor(pImpl_->windowHandle, nullptr);
+    }
+
     Float2D AbstractWindow::getMousePosition() const noexcept {
         return { static_cast<float>(pImpl_->xMousePosition), static_cast<float>(pImpl_->yMousePosition) };
     }
@@ -530,7 +548,7 @@ namespace coffee {
     // Callbacks
 
     void AbstractWindow::addWindowResizeCallback(
-        const std::string& name, 
+        const std::string& name,
         const std::function<void(const AbstractWindow* const, const ResizeEvent&)>& callback
     ) {
         pImpl_->resizeCallbacks.add(name, callback);
@@ -562,10 +580,7 @@ namespace coffee {
         pImpl_->positionCallbacks.remove(name);
     }
 
-    void AbstractWindow::addWindowCloseCallback(
-        const std::string& name,
-        const std::function<void(const AbstractWindow* const)>& callback
-    ) {
+    void AbstractWindow::addWindowCloseCallback(const std::string& name, const std::function<void(const AbstractWindow* const)>& callback) {
         pImpl_->closeCallbacks.add(name, callback);
     }
 
@@ -650,4 +665,4 @@ namespace coffee {
         pImpl_->presentModeCallbacks.remove(name);
     }
 
-}
+} // namespace coffee

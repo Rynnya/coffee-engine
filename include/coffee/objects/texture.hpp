@@ -23,6 +23,6 @@ namespace coffee {
 
     using Texture = std::shared_ptr<TextureImpl>;
 
-}
+} // namespace coffee
 
 #endif
