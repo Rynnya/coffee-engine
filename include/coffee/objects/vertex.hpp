@@ -1,9 +1,12 @@
 #ifndef COFFEE_OBJECTS_VERTEX
 #define COFFEE_OBJECTS_VERTEX
 
-#include <coffee/types.hpp>
+#include <coffee/graphics/pipeline.hpp>
 
 #include <glm/glm.hpp>
+#include <volk.h>
+
+#include <vector>
 
 namespace coffee {
 
@@ -14,13 +17,14 @@ namespace coffee {
         glm::uint32 texCoords {};
         glm::u16vec3 tangent {};
 
-        static inline std::vector<coffee::InputElement> getElementDescriptions() {
+        static inline std::vector<InputElement> getElementDescriptions()
+        {
             std::vector<InputElement> elements {};
 
-            elements.push_back({ "Position", 0U, 0U, coffee::Format::R32G32B32SFloat, offsetof(Vertex, position) });
-            elements.push_back({ "Normal", 0U, 1U, coffee::Format::R16G16B16SFloat, offsetof(Vertex, normal) });
-            elements.push_back({ "UV", 0U, 2U, coffee::Format::R16G16SFloat, offsetof(Vertex, texCoords) });
-            elements.push_back({ "Tangent", 0U, 3U, coffee::Format::R16G16B16SFloat, offsetof(Vertex, tangent) });
+            elements.push_back({ 0U, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) });
+            elements.push_back({ 1U, VK_FORMAT_R16G16B16_SFLOAT, offsetof(Vertex, normal) });
+            elements.push_back({ 2U, VK_FORMAT_R16G16_SFLOAT, offsetof(Vertex, texCoords) });
+            elements.push_back({ 3U, VK_FORMAT_R16G16B16_SFLOAT, offsetof(Vertex, tangent) });
 
             return elements;
         }

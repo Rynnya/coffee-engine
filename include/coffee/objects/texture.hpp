@@ -1,24 +1,21 @@
 #ifndef COFFEE_OBJECTS_TEXTURE
 #define COFFEE_OBJECTS_TEXTURE
 
-#include <coffee/abstract/image.hpp>
+#include <coffee/graphics/image.hpp>
+#include <coffee/types.hpp>
 
 namespace coffee {
 
     class TextureImpl {
     public:
-        TextureImpl(Image&& texture, const std::string& filepath, TextureType type);
+        TextureImpl(Image&& texture, ImageView&& textureView, const std::string& filepath, TextureType type);
         ~TextureImpl() noexcept = default;
 
-        const std::string& getFilePath() const noexcept;
-        TextureType getType() const noexcept;
+        const std::string& filepath;
+        const TextureType type;
 
-    private:
-        Image texture_;
-        std::string filepath_;
-        TextureType type_;
-
-        friend class DescriptorWriter;
+        const Image texture;
+        const ImageView textureView;
     };
 
     using Texture = std::shared_ptr<TextureImpl>;

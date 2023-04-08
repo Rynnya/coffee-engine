@@ -18,7 +18,7 @@ namespace coffee {
         const Texture& read(TextureType type) const noexcept;
         void reset(TextureType type);
 
-        TextureType getTextureFlags() const noexcept;
+        TextureType textureFlags() const noexcept;
 
         struct Modifiers {
             // Diffuse color component of mesh

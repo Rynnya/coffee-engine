@@ -10,12 +10,8 @@ namespace coffee {
         ResizeEvent(uint32_t width, uint32_t height) noexcept;
         ~ResizeEvent() noexcept = default;
 
-        uint32_t getWidth() const noexcept;
-        uint32_t getHeight() const noexcept;
-
-    private:
-        const uint32_t width_;
-        const uint32_t height_;
+        const uint32_t width;
+        const uint32_t height;
     };
 
     class WindowEnterEvent {
@@ -23,23 +19,15 @@ namespace coffee {
         WindowEnterEvent(bool entered) noexcept;
         ~WindowEnterEvent() noexcept = default;
 
-        bool entered() const noexcept;
-        bool exited() const noexcept;
-
-    private:
-        const bool entered_;
+        const bool entered;
     };
 
     class WindowPositionEvent {
     public:
         WindowPositionEvent(int32_t xpos, int32_t ypos) noexcept;
 
-        int32_t getXPosition() const noexcept;
-        int32_t getYPosition() const noexcept;
-
-    private:
-        const int32_t xPosition_;
-        const int32_t yPosition_;
+        const int32_t x;
+        const int32_t y;
     };
 
     class WindowFocusEvent {
@@ -47,11 +35,7 @@ namespace coffee {
         WindowFocusEvent(bool lost) noexcept;
         ~WindowFocusEvent() noexcept = default;
 
-        bool isLostFocus() const noexcept;
-        bool isFocusGained() const noexcept;
-
-    private:
-        const bool lost_;
+        const bool lost;
     };
 
 } // namespace coffee

@@ -4,42 +4,46 @@
 
 namespace coffee {
 
-    static uint32_t textureTypeToIndex(TextureType textureType) {
+    static uint32_t textureTypeToIndex(TextureType textureType)
+    {
         COFFEE_ASSERT(Math::hasSingleBit(static_cast<uint32_t>(textureType)), "textureType must set ONLY one bit.");
 
         return Math::indexOfHighestBit(static_cast<uint32_t>(textureType));
     }
 
-    Materials::Materials(const Texture& defaultTexture) : defaultTexture { defaultTexture } {
+    Materials::Materials(const Texture& defaultTexture) : defaultTexture { defaultTexture }
+    {
         COFFEE_ASSERT(defaultTexture != nullptr, "Invalid defaultTexture provided.");
 
         textures_.fill(defaultTexture);
     }
 
-    void Materials::write(const Texture& texture) {
+    void Materials::write(const Texture& texture)
+    {
         if (texture == nullptr) {
             return;
         }
 
-        TextureType type = texture->getType();
-
-        textures_[textureTypeToIndex(type)] = texture;
+        textures_[textureTypeToIndex(texture->type)] = texture;
 
         if (texture != defaultTexture) {
-            reinterpret_cast<uint32_t&>(textureFlags_) |= static_cast<uint32_t>(type);
+            reinterpret_cast<uint32_t&>(textureFlags_) |= static_cast<uint32_t>(texture->type);
         }
     }
 
-    const Texture& Materials::read(TextureType type) const noexcept {
+    const Texture& Materials::read(TextureType type) const noexcept
+    {
         return textures_[textureTypeToIndex(type)];
     }
 
-    void Materials::reset(TextureType type) {
+    void Materials::reset(TextureType type)
+    {
         textures_[textureTypeToIndex(type)] = defaultTexture;
         reinterpret_cast<uint32_t&>(textureFlags_) &= ~static_cast<uint32_t>(type);
     }
 
-    TextureType Materials::getTextureFlags() const noexcept {
+    TextureType Materials::textureFlags() const noexcept
+    {
         return textureFlags_;
     }
 

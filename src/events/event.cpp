@@ -6,7 +6,8 @@
 
 namespace coffee {
 
-    State glfwToCoffeeState(int state) {
+    State glfwToCoffeeState(int state)
+    {
         switch (state) {
             case GLFW_PRESS:
                 return State::Press;

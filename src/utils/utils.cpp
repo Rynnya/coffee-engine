@@ -6,7 +6,8 @@
 
 namespace coffee {
 
-    std::vector<uint8_t> Utils::readFile(const std::string& fileName) {
+    std::vector<uint8_t> Utils::readFile(const std::string& fileName)
+    {
         std::ifstream file { fileName, std::ios::ate | std::ios::binary };
         COFFEE_THROW_IF(!file.is_open(), "Failed to open file: '{}'!", fileName);
 

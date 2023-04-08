@@ -14,7 +14,7 @@ namespace coffee {
 
         const std::vector<Mesh> meshes;
 
-        void draw(const GraphicsCommandBuffer& commandBuffer) override;
+        void draw(const CommandBuffer& commandBuffer) override;
     };
 
     using Model = std::shared_ptr<ModelImpl>;

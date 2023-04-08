@@ -1,14 +1,15 @@
 #ifndef COFFEE_OBJECTS_MESH
 #define COFFEE_OBJECTS_MESH
 
+#include <coffee/graphics/buffer.hpp>
 #include <coffee/interfaces/drawable.hpp>
 #include <coffee/objects/materials.hpp>
 
 namespace coffee {
 
     class MeshImpl
-            : public Drawable
-            , NonMoveable {
+        : public Drawable
+        , NonMoveable {
     public:
         friend class ModelImpl;
 
@@ -17,7 +18,7 @@ namespace coffee {
 
         Materials materials;
 
-        void draw(const GraphicsCommandBuffer& commandBuffer) override;
+        void draw(const CommandBuffer& commandBuffer) override;
 
     private:
         Buffer verticesBuffer_;
