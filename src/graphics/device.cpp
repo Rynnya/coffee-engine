@@ -242,17 +242,15 @@ namespace coffee {
         operationsInFlight_[currentOperation_] = inFlightFences_[currentOperationInFlight_];
         vkResetFences(logicalDevice_, 1, &inFlightFences_[currentOperationInFlight_]);
 
-        {
-            std::scoped_lock<std::mutex> queueLock { graphicsQueueMutex_ };
+        std::scoped_lock<std::mutex> queueLock { graphicsQueueMutex_ };
 
-            COFFEE_THROW_IF(
+        COFFEE_THROW_IF(
             vkQueueSubmit(
                 graphicsQueue_,
                 static_cast<uint32_t>(submitInfos.size()),
                 submitInfos.data(),
                 inFlightFences_[currentOperationInFlight_]) != VK_SUCCESS,
             "Failed to submit draw command buffers!");
-        }
 
         VkResult result = vkQueuePresentKHR(presentQueue_, &presentInfo);
 

@@ -157,7 +157,6 @@ namespace coffee {
         VkQueue graphicsQueue_ = VK_NULL_HANDLE;
         VkQueue presentQueue_ = VK_NULL_HANDLE;
         VkQueue transferQueue_ = VK_NULL_HANDLE;
-
         std::vector<VkFence> operationsInFlight_ {};
         std::array<VkFence, maxOperationsInFlight> inFlightFences_ {};
         std::mutex graphicsQueueMutex_ {};
