@@ -40,6 +40,7 @@ namespace coffee {
 
     bool SwapChain::acquireNextImage()
     {
+        // This waits for imageAvailableSemaphores_ if previous operation in flight isn't done already
         device_.waitForAcquire();
 
         VkResult result = vkAcquireNextImageKHR(
@@ -47,7 +48,7 @@ namespace coffee {
             handle_,
             std::numeric_limits<uint64_t>::max(),
             imageAvailableSemaphores_[device_.currentOperationInFlight()],
-            nullptr,
+            VK_NULL_HANDLE,
             &currentFrame_
         );
 

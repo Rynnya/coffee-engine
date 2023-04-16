@@ -182,16 +182,24 @@ namespace coffee {
     void Device::sendSubmitInfo(SubmitInfo&& submitInfo)
     {
         // This call must be synchronized because it can be called from swapchains or engine directly
-        std::scoped_lock<std::mutex> lock { graphicsQueueMutex_ };
+        std::scoped_lock<std::mutex> lock { submitMutex_ };
         pendingSubmits_.push_back(std::move(submitInfo));
     }
 
     void Device::submitPendingWork()
     {
-        std::scoped_lock<std::mutex> lock { graphicsQueueMutex_ };
+        std::scoped_lock<std::mutex> submitLock { submitMutex_ };
+
+        if (pendingSubmits_.empty()) {
+            return;
+        }
+
+        static constexpr VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
         std::vector<VkSubmitInfo> submitInfos {};
-        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        std::vector<VkSwapchainKHR> swapChains {};
+        std::vector<VkSemaphore> swapChainSemaphores {};
+        std::vector<uint32_t> imageIndices {};
 
         for (const auto& submitInfo : pendingSubmits_) {
             VkSubmitInfo nativeSubmitInfo { VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -204,9 +212,9 @@ namespace coffee {
                 nativeSubmitInfo.signalSemaphoreCount = 1;
                 nativeSubmitInfo.pSignalSemaphores = &submitInfo.signalSemaphone;
 
-                swapChains_.push_back(submitInfo.swapChain);
-                swapChainSemaphores_.push_back(submitInfo.signalSemaphone);
-                imageIndices_.push_back(*submitInfo.currentFrame);
+                swapChains.push_back(submitInfo.swapChain);
+                swapChainSemaphores.push_back(submitInfo.signalSemaphone);
+                imageIndices.push_back(*submitInfo.currentFrame);
 
                 uint32_t* currentSwapChainFrame = submitInfo.currentFrame;
                 *currentSwapChainFrame = (*currentSwapChainFrame + 1) % imageCountForSwapChain_;
@@ -218,6 +226,14 @@ namespace coffee {
             submitInfos.push_back(std::move(nativeSubmitInfo));
         }
 
+        VkPresentInfoKHR presentInfo { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+
+        presentInfo.waitSemaphoreCount = static_cast<uint32_t>(swapChainSemaphores.size());
+        presentInfo.pWaitSemaphores = swapChainSemaphores.data();
+        presentInfo.swapchainCount = static_cast<uint32_t>(swapChains.size());
+        presentInfo.pSwapchains = swapChains.data();
+        presentInfo.pImageIndices = imageIndices.data();
+
         // Push waiting for swapchain as far as possible
         if (operationsInFlight_[currentOperation_] != nullptr) {
             vkWaitForFences(logicalDevice_, 1, &operationsInFlight_[currentOperation_], VK_TRUE, std::numeric_limits<uint64_t>::max());
@@ -226,22 +242,17 @@ namespace coffee {
         operationsInFlight_[currentOperation_] = inFlightFences_[currentOperationInFlight_];
         vkResetFences(logicalDevice_, 1, &inFlightFences_[currentOperationInFlight_]);
 
-        COFFEE_THROW_IF(
+        {
+            std::scoped_lock<std::mutex> queueLock { graphicsQueueMutex_ };
+
+            COFFEE_THROW_IF(
             vkQueueSubmit(
-                graphicsQueue_, 
-                static_cast<uint32_t>(submitInfos.size()), 
-                submitInfos.data(), 
+                graphicsQueue_,
+                static_cast<uint32_t>(submitInfos.size()),
+                submitInfos.data(),
                 inFlightFences_[currentOperationInFlight_]) != VK_SUCCESS,
             "Failed to submit draw command buffers!");
-
-        VkPresentInfoKHR presentInfo { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
-
-        presentInfo.waitSemaphoreCount = static_cast<uint32_t>(swapChainSemaphores_.size());
-        presentInfo.pWaitSemaphores = swapChainSemaphores_.data();
-
-        presentInfo.swapchainCount = static_cast<uint32_t>(swapChains_.size());
-        presentInfo.pSwapchains = swapChains_.data();
-        presentInfo.pImageIndices = imageIndices_.data();
+        }
 
         VkResult result = vkQueuePresentKHR(presentQueue_, &presentInfo);
 
@@ -251,9 +262,6 @@ namespace coffee {
         currentOperation_ = (currentOperation_ + 1) % imageCountForSwapChain_;
 
         pendingSubmits_.clear();
-        swapChains_.clear();
-        swapChainSemaphores_.clear();
-        imageIndices_.clear();
 
         vmaSetCurrentFrameIndex(allocator_, currentOperation_);
     }
@@ -503,10 +511,10 @@ namespace coffee {
     {
         // clang-format off
         constexpr std::array<VkDescriptorPoolSize, 4> descriptorSizes = {
-            VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_SAMPLER,                16U },
-            VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64U },
-            VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         64U },
-            VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         64U },
+            VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_SAMPLER,                32U  },
+            VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 128U },
+            VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         128U },
+            VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         128U },
         };
         // clang-format on
 

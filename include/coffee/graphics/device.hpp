@@ -2,6 +2,7 @@
 #define COFFEE_GRAPHICS_DEVICE
 
 #include <coffee/interfaces/scope_exit.hpp>
+#include <coffee/interfaces/thread_pool.hpp>
 #include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
 #include <coffee/utils/vk_utils.hpp>
@@ -156,15 +157,14 @@ namespace coffee {
         VkQueue graphicsQueue_ = VK_NULL_HANDLE;
         VkQueue presentQueue_ = VK_NULL_HANDLE;
         VkQueue transferQueue_ = VK_NULL_HANDLE;
+
         std::vector<VkFence> operationsInFlight_ {};
         std::array<VkFence, maxOperationsInFlight> inFlightFences_ {};
         std::mutex graphicsQueueMutex_ {};
         std::mutex transferQueueMutex_ {};
 
         std::vector<SubmitInfo> pendingSubmits_ {};
-        std::vector<VkSwapchainKHR> swapChains_ {};
-        std::vector<VkSemaphore> swapChainSemaphores_ {};
-        std::vector<uint32_t> imageIndices_ {};
+        std::mutex submitMutex_ {};
 
         std::vector<VkCommandPool> graphicsPools_ {};
         std::mutex graphicsPoolsMutex_ {};

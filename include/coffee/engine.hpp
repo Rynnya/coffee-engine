@@ -47,6 +47,8 @@ namespace coffee {
         static const std::vector<Monitor>& monitors() noexcept;
 
         static void pollEvents();
+        static void waitEventsTimeout(double timeout);
+
         static void waitFramelimit();
         // This call must be used only for debugging and closing down the application
         // It will shread your performance if you use it in main loop
@@ -184,14 +186,7 @@ namespace coffee {
                     copyRegion.imageExtent.width = dstImage->extent.width;
                     copyRegion.imageExtent.height = dstImage->extent.height;
                     copyRegion.imageExtent.depth = dstImage->extent.depth;
-                    vkCmdCopyBufferToImage(
-                        commandBuffer,
-                        srcBuffer->buffer(),
-                        dstImage->image(),
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        1,
-                        &copyRegion
-                    );
+                    commandBuffer.copyBufferToImage(srcBuffer, dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
                     if (isUnifiedTransferGraphicsQueue()) {
                         VkImageMemoryBarrier useBarrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };

@@ -8,8 +8,8 @@ namespace coffee {
         : state { state }
         , key { key }
         , scancode { scancode }
-        , control { static_cast<bool>(mods & GLFW_MOD_SHIFT) }
-        , shift { static_cast<bool>(mods & GLFW_MOD_CONTROL) }
+        , control { static_cast<bool>(mods & GLFW_MOD_CONTROL) }
+        , shift { static_cast<bool>(mods & GLFW_MOD_SHIFT) }
         , alt { static_cast<bool>(mods & GLFW_MOD_ALT) }
         , super { static_cast<bool>(mods & GLFW_MOD_SUPER) }
         , capsLock { static_cast<bool>(mods & GLFW_MOD_CAPS_LOCK) }

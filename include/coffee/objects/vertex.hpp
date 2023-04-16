@@ -22,9 +22,9 @@ namespace coffee {
             std::vector<InputElement> elements {};
 
             elements.push_back({ 0U, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) });
-            elements.push_back({ 1U, VK_FORMAT_R16G16B16_SFLOAT, offsetof(Vertex, normal) });
+            elements.push_back({ 1U, VK_FORMAT_R16G16B16_SNORM, offsetof(Vertex, normal) });
             elements.push_back({ 2U, VK_FORMAT_R16G16_SFLOAT, offsetof(Vertex, texCoords) });
-            elements.push_back({ 3U, VK_FORMAT_R16G16B16_SFLOAT, offsetof(Vertex, tangent) });
+            elements.push_back({ 3U, VK_FORMAT_R16G16B16_SNORM, offsetof(Vertex, tangent) });
 
             return elements;
         }

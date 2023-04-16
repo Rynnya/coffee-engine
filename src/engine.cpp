@@ -220,6 +220,12 @@ namespace coffee {
         glfwPollEvents();
     }
 
+    void Engine::waitEventsTimeout(double timeout)
+    {
+        COFFEE_ASSERT(device_ != nullptr, "Did you forgot to call coffee::Engine::initialize()?");
+        glfwWaitEventsTimeout(timeout);
+    }
+
     void Engine::waitFramelimit()
     {
         using period = std::chrono::seconds::period;
@@ -378,9 +384,9 @@ namespace coffee {
                 vertex.position = glm::vec3 { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z } * 0.01f;
 
                 if (mesh->HasNormals()) {
-                    vertex.normal = { glm::packHalf1x16(mesh->mNormals[i].x),
-                                      glm::packHalf1x16(mesh->mNormals[i].y),
-                                      glm::packHalf1x16(mesh->mNormals[i].z) };
+                    vertex.normal = { glm::packSnorm1x16(mesh->mNormals[i].x),
+                                      glm::packSnorm1x16(mesh->mNormals[i].y),
+                                      glm::packSnorm1x16(mesh->mNormals[i].z) };
                 }
 
                 if (mesh->HasTextureCoords(0)) {
@@ -388,9 +394,9 @@ namespace coffee {
                 }
 
                 if (mesh->HasTangentsAndBitangents()) {
-                    vertex.tangent = { glm::packHalf1x16(mesh->mTangents[i].x),
-                                       glm::packHalf1x16(mesh->mTangents[i].y),
-                                       glm::packHalf1x16(mesh->mTangents[i].z) };
+                    vertex.tangent = { glm::packSnorm1x16(mesh->mTangents[i].x),
+                                       glm::packSnorm1x16(mesh->mTangents[i].y),
+                                       glm::packSnorm1x16(mesh->mTangents[i].z) };
                 }
 
                 vertices.push_back(std::move(vertex));
@@ -690,6 +696,8 @@ namespace coffee {
             std::scoped_lock<std::mutex> lock { poolsAndBuffersMutex_ };
 
             if (poolsAndBuffersClearFlags_[currentOperation]) {
+                device_->waitForAcquire();
+
                 for (auto& [commandPool, commandBuffer] : poolsAndBuffers_[currentOperation]) {
                     vkFreeCommandBuffers(device_->logicalDevice(), commandPool, 1, &commandBuffer);
                     device_->returnGraphicsCommandPool(commandPool);
@@ -718,6 +726,8 @@ namespace coffee {
             std::scoped_lock<std::mutex> lock { poolsAndBuffersMutex_ };
 
             if (poolsAndBuffersClearFlags_[currentOperation]) {
+                device_->waitForAcquire();
+
                 for (auto& [commandPool, commandBuffer] : poolsAndBuffers_[currentOperation]) {
                     vkFreeCommandBuffers(device_->logicalDevice(), commandPool, 1, &commandBuffer);
                     device_->returnGraphicsCommandPool(commandPool);

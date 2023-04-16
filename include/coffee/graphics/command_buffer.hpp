@@ -22,6 +22,9 @@ namespace coffee {
     // Some functions like vkCmdPipelineBarrier won't be declared here as they pretty big and must be handled by user instead
 
     class CommandBuffer : NonCopyable {
+    private:
+        static constexpr uint32_t uintmax = std::numeric_limits<uint32_t>::max();
+
     public:
         CommandBuffer(Device& device, CommandBufferType type);
         ~CommandBuffer() noexcept;
@@ -29,7 +32,7 @@ namespace coffee {
         CommandBuffer(CommandBuffer&& other) noexcept;
         CommandBuffer& operator=(CommandBuffer&&) = delete;
 
-        inline void copyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, uint32_t regionCount, const VkBufferCopy* pRegions)
+        inline void copyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, size_t regionCount, const VkBufferCopy* pRegions)
             const noexcept
         {
             COFFEE_ASSERT(srcBuffer != nullptr, "Invalid srcBuffer provided.");
@@ -45,9 +48,10 @@ namespace coffee {
             );
 
             COFFEE_ASSERT(regionCount > 0, "regionCount must be greater than 0.");
+            COFFEE_ASSERT(regionCount <= uintmax, "regionCount must be less than {}.", uintmax);
             COFFEE_ASSERT(pRegions != nullptr, "pRegions must be a valid pointer.");
 
-            vkCmdCopyBuffer(buffer_, srcBuffer->buffer(), dstBuffer->buffer(), regionCount, pRegions);
+            vkCmdCopyBuffer(buffer_, srcBuffer->buffer(), dstBuffer->buffer(), static_cast<uint32_t>(regionCount), pRegions);
         }
 
         inline void copyImage(
@@ -55,7 +59,7 @@ namespace coffee {
             VkImageLayout srcImageLayout,
             const Image& dstImage,
             VkImageLayout dstImageLayout,
-            uint32_t regionCount,
+            size_t regionCount,
             const VkImageCopy* pRegions
         ) const noexcept
         {
@@ -63,16 +67,25 @@ namespace coffee {
             COFFEE_ASSERT(dstImage != nullptr, "Invalid dstImage provided.");
 
             COFFEE_ASSERT(regionCount > 0, "regionCount must be greater than 0.");
+            COFFEE_ASSERT(regionCount <= uintmax, "regionCount must be less than {}.", uintmax);
             COFFEE_ASSERT(pRegions != nullptr, "pRegions must be a valid pointer.");
 
-            vkCmdCopyImage(buffer_, srcImage->image(), srcImageLayout, dstImage->image(), dstImageLayout, regionCount, pRegions);
+            vkCmdCopyImage(
+                buffer_,
+                srcImage->image(),
+                srcImageLayout,
+                dstImage->image(),
+                dstImageLayout,
+                static_cast<uint32_t>(regionCount),
+                pRegions
+            );
         }
 
         inline void copyBufferToImage(
             const Buffer& srcBuffer,
             const Image& dstImage,
             VkImageLayout dstImageLayout,
-            uint32_t regionCount,
+            size_t regionCount,
             const VkBufferImageCopy* pRegions
         ) const noexcept
         {
@@ -85,16 +98,24 @@ namespace coffee {
             );
 
             COFFEE_ASSERT(regionCount > 0, "regionCount must be greater than 0.");
+            COFFEE_ASSERT(regionCount <= uintmax, "regionCount must be less than {}.", uintmax);
             COFFEE_ASSERT(pRegions != nullptr, "pRegions must be a valid pointer.");
 
-            vkCmdCopyBufferToImage(buffer_, srcBuffer->buffer(), dstImage->image(), dstImageLayout, regionCount, pRegions);
+            vkCmdCopyBufferToImage(
+                buffer_,
+                srcBuffer->buffer(),
+                dstImage->image(),
+                dstImageLayout,
+                static_cast<uint32_t>(regionCount),
+                pRegions
+            );
         }
 
         inline void copyImageToBuffer(
             const Image& srcImage,
             VkImageLayout srcImageLayout,
             const Buffer& dstBuffer,
-            uint32_t regionCount,
+            size_t regionCount,
             const VkBufferImageCopy* pRegions
         ) const noexcept
         {
@@ -107,9 +128,17 @@ namespace coffee {
             );
 
             COFFEE_ASSERT(regionCount > 0, "regionCount must be greater than 0.");
+            COFFEE_ASSERT(regionCount <= uintmax, "regionCount must be less than {}.", uintmax);
             COFFEE_ASSERT(pRegions != nullptr, "pRegions must be a valid pointer.");
 
-            vkCmdCopyImageToBuffer(buffer_, srcImage->image(), srcImageLayout, dstBuffer->buffer(), regionCount, pRegions);
+            vkCmdCopyImageToBuffer(
+                buffer_,
+                srcImage->image(),
+                srcImageLayout,
+                dstBuffer->buffer(),
+                static_cast<uint32_t>(regionCount),
+                pRegions
+            );
         }
 
         inline void bindPipeline(VkPipelineBindPoint bindPoint, const Pipeline& pipeline) const noexcept
@@ -124,9 +153,9 @@ namespace coffee {
         inline void bindDescriptorSets(
             VkPipelineBindPoint bindPoint,
             const Pipeline& pipeline,
-            uint32_t descriptorSetCount,
+            size_t descriptorSetCount,
             const VkDescriptorSet* pDescriptorSets,
-            uint32_t firstSet = 0U
+            size_t firstSet = 0U
         ) const noexcept
         {
             COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot bind descriptor sets to transfer command buffer.");
@@ -134,33 +163,53 @@ namespace coffee {
             COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
             COFFEE_ASSERT(descriptorSetCount > 0, "descriptorSetCount must be greater than 0.");
+            COFFEE_ASSERT(descriptorSetCount <= uintmax, "descriptorSetCount must be less than {}.", uintmax);
             COFFEE_ASSERT(pDescriptorSets != nullptr, "pDescriptorSets must be a valid pointer.");
+            COFFEE_ASSERT(firstSet <= uintmax, "firstSet must be less than {}.", uintmax);
 
-            vkCmdBindDescriptorSets(buffer_, bindPoint, pipeline->layout(), firstSet, descriptorSetCount, pDescriptorSets, 0, nullptr);
+            vkCmdBindDescriptorSets(
+                buffer_,
+                bindPoint,
+                pipeline->layout(),
+                static_cast<uint32_t>(firstSet),
+                static_cast<uint32_t>(descriptorSetCount),
+                pDescriptorSets,
+                0,
+                nullptr
+            );
         }
 
         inline void pushConstants(
             const Pipeline& pipeline,
             VkShaderStageFlags stageFlags,
-            uint32_t size,
+            size_t size,
             const void* pValues,
-            uint32_t offset = 0U
+            size_t offset = 0U
         ) const noexcept
         {
             COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot push constants to transfer command buffer.");
             COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
             COFFEE_ASSERT(size > 0, "size must be greater than 0.");
+            COFFEE_ASSERT(size <= uintmax, "size must be less than {}.", uintmax);
             COFFEE_ASSERT(pValues != nullptr, "pValues must be a valid pointer.");
+            COFFEE_ASSERT(offset <= uintmax, "offset must be less than {}.", uintmax);
 
-            vkCmdPushConstants(buffer_, pipeline->layout(), stageFlags, offset, size, pValues);
+            vkCmdPushConstants(
+                buffer_,
+                pipeline->layout(),
+                stageFlags,
+                static_cast<uint32_t>(offset),
+                static_cast<uint32_t>(size),
+                pValues
+            );
         }
 
         inline void beginRenderPass(
             const RenderPass& renderPass,
             const Framebuffer& framebuffer,
             const VkRect2D& renderArea,
-            uint32_t clearValueCount,
+            size_t clearValueCount,
             const VkClearValue* pClearValues
         ) const noexcept
         {
@@ -212,20 +261,18 @@ namespace coffee {
             vkCmdSetBlendConstants(buffer_, blendConstants);
         }
 
-        inline void bindVertexBuffers(
-            uint32_t bindingCount,
-            const VkBuffer* pBuffers,
-            const VkDeviceSize* pOffsets,
-            uint32_t firstBinding = 0U
-        ) const noexcept
+        inline void bindVertexBuffers(size_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, size_t firstBinding = 0U)
+            const noexcept
         {
             COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
 
             COFFEE_ASSERT(bindingCount > 0, "bindingCount must be greater than 0.");
+            COFFEE_ASSERT(bindingCount <= uintmax, "bindingCount must be less than {}.", uintmax);
             COFFEE_ASSERT(pBuffers != nullptr, "pBuffers must be a valid pointer.");
             COFFEE_ASSERT(pOffsets != nullptr, "pOffsets must be a valid pointer.");
+            COFFEE_ASSERT(firstBinding <= uintmax, "firstBinding must be less than {}.", uintmax);
 
-            vkCmdBindVertexBuffers(buffer_, firstBinding, bindingCount, pBuffers, pOffsets);
+            vkCmdBindVertexBuffers(buffer_, static_cast<uint32_t>(firstBinding), static_cast<uint32_t>(bindingCount), pBuffers, pOffsets);
         }
 
         inline void bindIndexBuffer(const Buffer& indexBuffer, VkDeviceSize offset = 0ULL) const noexcept

@@ -242,21 +242,6 @@ namespace coffee {
         glfwSetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH, GLFW_FALSE);
     }
 
-    bool WindowImpl::isTextMode() const noexcept
-    {
-        return textModeEnabled_;
-    }
-
-    void WindowImpl::enableTextMode() const noexcept
-    {
-        textModeEnabled_ = true;
-    }
-
-    void WindowImpl::disableTextMode() const noexcept
-    {
-        textModeEnabled_ = false;
-    }
-
     CursorState WindowImpl::cursorState() const noexcept
     {
         switch (glfwGetInputMode(windowHandle_, GLFW_CURSOR)) {
@@ -457,10 +442,7 @@ namespace coffee {
     void WindowImpl::charCallback(GLFWwindow* window, unsigned int codepoint)
     {
         WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
-
-        if (windowPtr->isTextMode()) {
-            windowPtr->charEvent(*windowPtr, static_cast<char32_t>(codepoint));
-        }
+        windowPtr->charEvent(*windowPtr, static_cast<char32_t>(codepoint));
     }
 
 } // namespace coffee

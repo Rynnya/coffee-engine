@@ -83,10 +83,6 @@ namespace coffee {
         void enablePassthrough() const noexcept;
         void disablePassthrough() const noexcept;
 
-        bool isTextMode() const noexcept;
-        void enableTextMode() const noexcept;
-        void disableTextMode() const noexcept;
-
         CursorState cursorState() const noexcept;
         void showCursor() const noexcept;
         void hideCursor() const noexcept;
@@ -110,17 +106,17 @@ namespace coffee {
 
         // clang-format off
 
-        Invokable<const WindowImpl&, const ResizeEvent&>            windowResizeEvent {};
-        Invokable<const WindowImpl&, const WindowEnterEvent&>       windowEnterEvent {};
-        Invokable<const WindowImpl&, const WindowPositionEvent&>    windowPositionEvent {};
-        Invokable<const WindowImpl&>                                windowCloseEvent {};
-        Invokable<const WindowImpl&, const WindowFocusEvent&>       windowFocusEvent {};
-        Invokable<const WindowImpl&, const MouseClickEvent&>        mouseClickEvent {};
-        Invokable<const WindowImpl&, const MouseMoveEvent&>         mouseMoveEvent {};
-        Invokable<const WindowImpl&, const MouseWheelEvent&>        mouseWheelEvent {};
-        Invokable<const WindowImpl&, const KeyEvent&>               keyEvent {};
-        Invokable<const WindowImpl&, char32_t>                      charEvent {};
-        Invokable<const WindowImpl&, VkPresentModeKHR>              presentModeEvent {};
+        mutable Invokable<const WindowImpl&, const ResizeEvent&>            windowResizeEvent {};
+        mutable Invokable<const WindowImpl&, const WindowEnterEvent&>       windowEnterEvent {};
+        mutable Invokable<const WindowImpl&, const WindowPositionEvent&>    windowPositionEvent {};
+        mutable Invokable<const WindowImpl&>                                windowCloseEvent {};
+        mutable Invokable<const WindowImpl&, const WindowFocusEvent&>       windowFocusEvent {};
+        mutable Invokable<const WindowImpl&, const MouseClickEvent&>        mouseClickEvent {};
+        mutable Invokable<const WindowImpl&, const MouseMoveEvent&>         mouseMoveEvent {};
+        mutable Invokable<const WindowImpl&, const MouseWheelEvent&>        mouseWheelEvent {};
+        mutable Invokable<const WindowImpl&, const KeyEvent&>               keyEvent {};
+        mutable Invokable<const WindowImpl&, char32_t>                      charEvent {};
+        mutable Invokable<const WindowImpl&, VkPresentModeKHR>              presentModeEvent {};
 
         // clang-format on
 
@@ -162,7 +158,6 @@ namespace coffee {
         mutable bool windowFocused_ = false;
         mutable bool windowIconified_ = false;
         mutable bool rawInputEnabled_ = false;
-        mutable bool textModeEnabled_ = false;
 
         std::unique_ptr<SwapChain> swapChain = nullptr;
     };
