@@ -1,18 +1,21 @@
 #include <coffee/graphics/device.hpp>
 
 #include <coffee/graphics/command_buffer.hpp>
+#include <coffee/graphics/monitor.hpp>
+#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/log.hpp>
+#include <coffee/utils/utils.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
 #define VOLK_IMPLEMENTATION
-#include <volk.h>
-
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
 #define VMA_IMPLEMENTATION
-#include <vk_mem_alloc.h>
 
 #include <GLFW/glfw3.h>
+#include <basis_universal/basisu_transcoder.cpp>
+#include <vma/vk_mem_alloc.h>
+#include <volk/volk.h>
 
 #include <array>
 #include <set>
@@ -35,27 +38,19 @@ namespace coffee {
     static const std::vector<const char*> instanceDebugLayers = {};
 #endif
 
-    Device::Device()
+    static std::atomic_uint32_t initializationCounter = 0;
+
+    GPUDevice::GPUDevice()
     {
-        COFFEE_THROW_IF(volkInitialize() != VK_SUCCESS, "Failed to find Vulkan library!");
+        if (initializationCounter.fetch_add(1, std::memory_order_relaxed) == 0) {
+            initializeGlobalEnvironment();
+        }
 
         createInstance();
         createDebugMessenger();
 
-        GLFWwindow* window = nullptr;
-        VkSurfaceKHR surface = VK_NULL_HANDLE;
-
-        {
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-            glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-            glfwInitVulkanLoader(vkGetInstanceProcAddr);
-
-            window = glfwCreateWindow(1, 1, "Temp", nullptr, nullptr);
-            COFFEE_THROW_IF(window == nullptr, "Failed to create temporary window for surface!");
-            COFFEE_THROW_IF(glfwCreateWindowSurface(instance_, window, nullptr, &surface) != VK_SUCCESS, "Failed to create temporary surface!");
-
-            glfwDefaultWindowHints();
-        }
+        GLFWwindow* window = createTemporaryWindow();
+        VkSurfaceKHR surface = createTemporarySurface(window);
 
         pickPhysicalDevice(surface);
         createLogicalDevice(surface);
@@ -64,19 +59,25 @@ namespace coffee {
         createDescriptorPool();
         createAllocator();
 
-        {
-            vkDestroySurfaceKHR(instance_, surface, nullptr);
-            glfwDestroyWindow(window);
-        }
+        destroyTemporarySurface(surface);
+        destroyTemporaryWindow(window);
     }
 
-    Device::~Device() noexcept
+    GPUDevice::~GPUDevice() noexcept
     {
-        for (const auto& pool : graphicsPools_) {
+        vkDeviceWaitIdle(logicalDevice_);
+
+        VkCommandPool pool = VK_NULL_HANDLE;
+
+        for (size_t i = 0; i < poolsAndBuffers_.size(); i++) {
+            clearCommandBuffers(i);
+        }
+
+        while (graphicsPools_.try_pop(pool)) {
             vkDestroyCommandPool(logicalDevice_, pool, nullptr);
         }
 
-        for (const auto& pool : transferPools_) {
+        while (transferPools_.try_pop(pool)) {
             vkDestroyCommandPool(logicalDevice_, pool, nullptr);
         }
 
@@ -93,82 +94,20 @@ namespace coffee {
 
         vkDestroyDevice(logicalDevice_, nullptr);
         vkDestroyInstance(instance_, nullptr);
-    }
 
-    VkCommandPool Device::acquireGraphicsCommandPool()
-    {
-        {
-            std::scoped_lock<std::mutex> lock { graphicsPoolsMutex_ };
-
-            if (!graphicsPools_.empty()) {
-                VkCommandPool alreadyConstructed = graphicsPools_.back();
-                graphicsPools_.pop_back();
-
-                return alreadyConstructed;
-            }
+        if (initializationCounter.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            deinitializeGlobalEnvironment();
         }
-
-        VkCommandPool pool = nullptr;
-
-        VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-        poolInfo.flags = 0;
-        poolInfo.queueFamilyIndex = indices_.graphicsFamily.value();
-
-        COFFEE_THROW_IF(
-            vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &pool) != VK_SUCCESS, "Failed to create command pool!");
-
-        return pool;
     }
 
-    void Device::returnGraphicsCommandPool(VkCommandPool pool)
-    {
-        std::scoped_lock<std::mutex> lock { graphicsPoolsMutex_ };
+    GPUDevicePtr GPUDevice::create() { return std::shared_ptr<GPUDevice>(new GPUDevice {}); }
 
-        graphicsPools_.push_back(pool);
-    }
-
-    VkCommandPool Device::acquireTransferCommandPool()
-    {
-        if (transferQueue_ == VK_NULL_HANDLE) {
-            return acquireGraphicsCommandPool();
-        }
-
-        {
-            std::scoped_lock<std::mutex> lock { transferPoolsMutex_ };
-
-            if (!transferPools_.empty()) {
-                VkCommandPool alreadyConstructed = transferPools_.back();
-                transferPools_.pop_back();
-
-                return alreadyConstructed;
-            }
-        }
-
-        VkCommandPool pool = nullptr;
-
-        VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-        poolInfo.flags = 0;
-        poolInfo.queueFamilyIndex = indices_.transferFamily.value();
-
-        COFFEE_THROW_IF(
-            vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &pool) != VK_SUCCESS, "Failed to create command pool!");
-
-        return pool;
-    }
-
-    void Device::returnTransferCommandPool(VkCommandPool pool)
-    {
-        std::scoped_lock<std::mutex> lock { transferPoolsMutex_ };
-
-        transferPools_.push_back(pool);
-    }
-
-    void Device::waitForAcquire()
+    void GPUDevice::waitForAcquire()
     {
         vkWaitForFences(logicalDevice_, 1U, &inFlightFences_[currentOperationInFlight_], VK_TRUE, std::numeric_limits<uint64_t>::max());
     }
 
-    void Device::waitForRelease()
+    void GPUDevice::waitForRelease()
     {
         vkWaitForFences(
             logicalDevice_,
@@ -179,15 +118,63 @@ namespace coffee {
         );
     }
 
-    void Device::sendSubmitInfo(SubmitInfo&& submitInfo)
+    void GPUDevice::sendCommandBuffer(
+        CommandBuffer&& commandBuffer,
+        VkSwapchainKHR swapChain,
+        VkSemaphore waitSemaphone,
+        VkSemaphore signalSemaphone,
+        uint32_t* currentFrame
+    )
     {
-        // This call must be synchronized because it can be called from swapchains or engine directly
-        std::scoped_lock<std::mutex> lock { submitMutex_ };
-        pendingSubmits_.push_back(std::move(submitInfo));
+        sendCommandBuffers(
+            coffee::utils::moveList<CommandBuffer, std::vector<CommandBuffer>>({ std::move(commandBuffer) }),
+            swapChain,
+            waitSemaphone,
+            signalSemaphone,
+            currentFrame
+        );
     }
 
-    void Device::submitPendingWork()
+    void GPUDevice::sendCommandBuffers(
+        std::vector<CommandBuffer>&& commandBuffers,
+        VkSwapchainKHR swapChain,
+        VkSemaphore waitSemaphone,
+        VkSemaphore signalSemaphone,
+        uint32_t* currentFrame
+    )
     {
+        SubmitInfo info {};
+        info.swapChain = swapChain;
+        info.waitSemaphone = waitSemaphone;
+        info.signalSemaphone = signalSemaphone;
+        info.currentFrame = currentFrame;
+        VkResult result = VK_SUCCESS;
+
+        std::scoped_lock<std::mutex> lock { submitMutex_ };
+
+        if (poolsAndBuffersClearFlags_[currentOperation_]) {
+            clearCommandBuffers(currentOperation_);
+        }
+
+        for (auto& commandBuffer : commandBuffers) {
+            if ((result = vkEndCommandBuffer(commandBuffer)) != VK_SUCCESS) {
+                COFFEE_FATAL("Failed to end command buffer!");
+
+                // Having this issue most likely mean that command buffer construction is broken
+                // So our only valid case is throw fatal exception, even tho device might be active and everything is working correctly
+                throw FatalVulkanException { result };
+            }
+
+            poolsAndBuffers_[currentOperation_].push_back({ std::exchange(commandBuffer.pool_, VK_NULL_HANDLE), commandBuffer });
+            info.commandBuffers.push_back(commandBuffer);
+        }
+
+        pendingSubmits_.push_back(std::move(info));
+    }
+
+    void GPUDevice::submitPendingWork()
+    {
+        // This WHOLE operation must be atomic, that's why using tbb container here irrelevant
         std::scoped_lock<std::mutex> submitLock { submitMutex_ };
 
         if (pendingSubmits_.empty()) {
@@ -195,6 +182,7 @@ namespace coffee {
         }
 
         static constexpr VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        poolsAndBuffersClearFlags_[currentOperation_] = true;
 
         std::vector<VkSubmitInfo> submitInfos {};
         std::vector<VkSwapchainKHR> swapChains {};
@@ -204,7 +192,11 @@ namespace coffee {
         for (const auto& submitInfo : pendingSubmits_) {
             VkSubmitInfo nativeSubmitInfo { VK_STRUCTURE_TYPE_SUBMIT_INFO };
 
-            if (submitInfo.swapChain != nullptr) {
+            if (submitInfo.swapChain != VK_NULL_HANDLE) {
+                COFFEE_ASSERT(submitInfo.waitSemaphone != VK_NULL_HANDLE, "Invalid wait semaphore provided.");
+                COFFEE_ASSERT(submitInfo.signalSemaphone != VK_NULL_HANDLE, "Invalid signal semaphore provided.");
+                COFFEE_ASSERT(submitInfo.currentFrame != nullptr, "Invalid current frame pointer provided.");
+
                 nativeSubmitInfo.waitSemaphoreCount = 1;
                 nativeSubmitInfo.pWaitSemaphores = &submitInfo.waitSemaphone;
                 nativeSubmitInfo.pWaitDstStageMask = waitStages;
@@ -244,17 +236,28 @@ namespace coffee {
 
         std::scoped_lock<std::mutex> queueLock { graphicsQueueMutex_ };
 
-        COFFEE_THROW_IF(
-            vkQueueSubmit(
-                graphicsQueue_,
-                static_cast<uint32_t>(submitInfos.size()),
-                submitInfos.data(),
-                inFlightFences_[currentOperationInFlight_]) != VK_SUCCESS,
-            "Failed to submit draw command buffers!");
+        VkResult result = vkQueueSubmit(
+            graphicsQueue_,
+            static_cast<uint32_t>(submitInfos.size()),
+            submitInfos.data(),
+            inFlightFences_[currentOperationInFlight_]
+        );
 
-        VkResult result = vkQueuePresentKHR(presentQueue_, &presentInfo);
+        if (result != VK_SUCCESS) {
+            COFFEE_FATAL("Failed to submit command buffers!");
 
-        COFFEE_THROW_IF(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR && result != VK_ERROR_OUT_OF_DATE_KHR, "Failed to present images!");
+            throw FatalVulkanException { result };
+        }
+
+        if (swapChains.size() != 0) {
+            result = vkQueuePresentKHR(presentQueue_, &presentInfo);
+
+            if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR && result != VK_ERROR_OUT_OF_DATE_KHR) {
+                COFFEE_FATAL("Failed to present images!");
+
+                throw FatalVulkanException { result };
+            }
+        }
 
         currentOperationInFlight_ = (currentOperationInFlight_ + 1) % maxOperationsInFlight;
         currentOperation_ = (currentOperation_ + 1) % imageCountForSwapChain_;
@@ -264,7 +267,7 @@ namespace coffee {
         vmaSetCurrentFrameIndex(allocator_, currentOperation_);
     }
 
-    ScopeExit Device::singleTimeTransfer(std::function<void(const CommandBuffer&)>&& transferActions)
+    ScopeExit GPUDevice::singleTimeTransfer(std::function<void(const CommandBuffer&)>&& transferActions)
     {
         auto&& [fence, commandBuffer] = beginSingleTimeCommands(CommandBufferType::Transfer);
         transferActions(commandBuffer);
@@ -277,14 +280,71 @@ namespace coffee {
         return endSingleTimeCommands(CommandBufferType::Graphics, graphicsQueue_, graphicsQueueMutex_, fence, std::move(commandBuffer));
     }
 
-    ScopeExit Device::singleTimeGraphics(std::function<void(const CommandBuffer&)>&& graphicsActions)
+    ScopeExit GPUDevice::singleTimeGraphics(std::function<void(const CommandBuffer&)>&& graphicsActions)
     {
         auto&& [fence, commandBuffer] = beginSingleTimeCommands(CommandBufferType::Graphics);
         graphicsActions(commandBuffer);
+
         return endSingleTimeCommands(CommandBufferType::Graphics, graphicsQueue_, graphicsQueueMutex_, fence, std::move(commandBuffer));
     }
 
-    void Device::createInstance()
+    void GPUDevice::initializeGlobalEnvironment()
+    {
+        VkResult result = volkInitialize();
+
+        if (result != VK_SUCCESS) {
+            COFFEE_FATAL("Failed to load Vulkan library through Volk!");
+
+            throw FatalVulkanException { result };
+        }
+
+        glfwInitVulkanLoader(vkGetInstanceProcAddr);
+
+        Monitor::initialize();
+
+        basist::basisu_transcoder_init();
+    }
+
+    void GPUDevice::deinitializeGlobalEnvironment() { Monitor::deinitialize(); }
+
+    GLFWwindow* GPUDevice::createTemporaryWindow()
+    {
+        // TODO: Potential data race with Window class
+
+        glfwDefaultWindowHints();
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
+        GLFWwindow* window = glfwCreateWindow(1, 1, "Temp", nullptr, nullptr);
+
+        if (window == nullptr) {
+            COFFEE_FATAL("Failed to create temporary window for surface!");
+
+            throw FatalVulkanException { VK_ERROR_EXTENSION_NOT_PRESENT };
+        }
+
+        return window;
+    }
+
+    VkSurfaceKHR GPUDevice::createTemporarySurface(GLFWwindow* window)
+    {
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
+        VkResult result = glfwCreateWindowSurface(instance_, window, nullptr, &surface);
+
+        if (result != VK_SUCCESS) {
+            COFFEE_FATAL("Failed to create temporary surface!");
+
+            throw FatalVulkanException { result };
+        }
+
+        return surface;
+    }
+
+    void GPUDevice::destroyTemporarySurface(VkSurfaceKHR surface) { vkDestroySurfaceKHR(instance_, surface, nullptr); }
+
+    void GPUDevice::destroyTemporaryWindow(GLFWwindow* window) { glfwDestroyWindow(window); }
+
+    void GPUDevice::createInstance()
     {
         VkApplicationInfo appInfo { VK_STRUCTURE_TYPE_APPLICATION_INFO };
         appInfo.apiVersion = VK_API_VERSION_1_0;
@@ -295,7 +355,11 @@ namespace coffee {
         uint32_t glfwExtensionCount = 0;
         const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-        COFFEE_THROW_IF(glfwExtensions == nullptr, "Vulkan doesn't supported on this machine!");
+        if (glfwExtensions == nullptr) {
+            COFFEE_FATAL("Vulkan doesn't supported on this machine!");
+
+            throw FatalVulkanException { VK_ERROR_INCOMPATIBLE_DRIVER };
+        }
 
         auto availableExtensions = VkUtils::getInstanceExtensions();
         std::vector<const char*> extensions { glfwExtensions, glfwExtensions + glfwExtensionCount };
@@ -319,8 +383,13 @@ namespace coffee {
 
         createInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
         createInfo.ppEnabledLayerNames = instanceLayers.data();
+        VkResult result = vkCreateInstance(&createInfo, nullptr, &instance_);
 
-        COFFEE_THROW_IF(vkCreateInstance(&createInfo, nullptr, &instance_) != VK_SUCCESS, "Failed to create instance!");
+        if (result != VK_SUCCESS) {
+            COFFEE_FATAL("Failed to create instance!");
+
+            throw FatalVulkanException { result };
+        }
 
         for ([[maybe_unused]] const char* extension : extensions) {
             COFFEE_INFO("Enabled instance extension: {}", extension);
@@ -330,10 +399,10 @@ namespace coffee {
             COFFEE_INFO("Enabled instance layer: {}", instanceLayer);
         }
 
-        volkLoadInstance(instance_);
+        volkLoadInstanceOnly(instance_);
     }
 
-    void Device::createDebugMessenger()
+    void GPUDevice::createDebugMessenger()
     {
 #ifdef COFFEE_DEBUG
         VkDebugUtilsMessengerCreateInfoEXT createInfo { VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT };
@@ -374,6 +443,7 @@ namespace coffee {
             return VK_FALSE;
         };
 
+        // Volk will extract this pointer when vkLoadInstance is called
         if (vkCreateDebugUtilsMessengerEXT == nullptr) {
             COFFEE_WARNING("Failed to load vkCreateDebugUtilsMessengerEXT! Validation logging will be unavailable!");
             return;
@@ -383,11 +453,16 @@ namespace coffee {
 #endif
     }
 
-    void Device::pickPhysicalDevice(VkSurfaceKHR surface)
+    void GPUDevice::pickPhysicalDevice(VkSurfaceKHR surface)
     {
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
-        COFFEE_THROW_IF(deviceCount == 0, "Failed to find GPU with Vulkan support!");
+
+        if (deviceCount == 0) {
+            COFFEE_FATAL("Failed to find GPU with Vulkan support!");
+
+            throw FatalVulkanException { VK_ERROR_INCOMPATIBLE_DRIVER };
+        }
 
         std::vector<VkPhysicalDevice> devices { deviceCount };
         vkEnumeratePhysicalDevices(instance_, &deviceCount, devices.data());
@@ -395,21 +470,34 @@ namespace coffee {
         for (const VkPhysicalDevice& device : devices) {
             if (isDeviceSuitable(device, surface)) {
                 physicalDevice_ = device;
-                break;
+
+                vkGetPhysicalDeviceProperties(physicalDevice_, &properties_);
+
+                // If we first found suitable CPU, iGPU or vGPU, we should look for dGPU and if there's no such device, use what we have
+                // For tests: VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
+                if (properties_.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+                    break;
+                }
             }
         }
 
-        COFFEE_THROW_IF(physicalDevice_ == nullptr, "Failed to find suitable GPU for Vulkan!");
-        vkGetPhysicalDeviceProperties(physicalDevice_, &properties_);
+        if (physicalDevice_ == VK_NULL_HANDLE) {
+            COFFEE_FATAL("Failed to find suitable GPU for Vulkan!");
+
+            throw FatalVulkanException { VK_ERROR_INCOMPATIBLE_DRIVER };
+        }
 
         COFFEE_INFO("Selected physical device: {}", properties_.deviceName);
 
         // Surface is still alive at this point, so we can use this for our thingies
         imageCountForSwapChain_ = VkUtils::getOptimalAmountOfFramebuffers(physicalDevice_, surface);
-        surfaceFormat_ = VkUtils::chooseSurfaceFormat(VkUtils::querySwapChainSupport(physicalDevice_, surface).formats);
+        surfaceFormat_ = VkUtils::chooseSurfaceFormat(physicalDevice_, VkUtils::querySwapChainSupport(physicalDevice_, surface).formats);
+
+        optimalDepthFormat_ = VkUtils::findDepthFormat(physicalDevice_);
+        optimalDepthStencilFormat_ = VkUtils::findDepthStencilFormat(physicalDevice_);
     }
 
-    void Device::createLogicalDevice(VkSurfaceKHR surface)
+    void GPUDevice::createLogicalDevice(VkSurfaceKHR surface)
     {
         float queuePriority = 1.0f;
 
@@ -467,20 +555,22 @@ namespace coffee {
                 memoryPriorityAndBudgetExtensionsEnabled = false;
             }
         }
-        else {
-            // Tell VMA that we didn't support such functionality on instance level
-            memoryPriorityAndBudgetExtensionsEnabled = false;
-        }
 
         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
+        VkResult result = vkCreateDevice(physicalDevice_, &createInfo, nullptr, &logicalDevice_);
 
-        COFFEE_THROW_IF(
-            vkCreateDevice(physicalDevice_, &createInfo, nullptr, &logicalDevice_) != VK_SUCCESS, "Failed to create logical device!");
+        if (result != VK_SUCCESS) {
+            COFFEE_FATAL("Failed to create logical device!");
+
+            throw FatalVulkanException { result };
+        }
 
         for ([[maybe_unused]] const char* extension : extensions) {
             COFFEE_INFO("Enabled device extension: {}", extension);
         }
+
+        volkLoadDevice(logicalDevice_);
 
         vkGetDeviceQueue(logicalDevice_, indices_.graphicsFamily.value(), 0, &graphicsQueue_);
         vkGetDeviceQueue(logicalDevice_, indices_.presentFamily.value(), 0, &presentQueue_);
@@ -488,24 +578,29 @@ namespace coffee {
         if (indices_.transferFamily.has_value()) {
             vkGetDeviceQueue(logicalDevice_, indices_.transferFamily.value(), 0, &transferQueue_);
         }
-
-        volkLoadDevice(logicalDevice_);
     }
 
-    void Device::createSyncObjects()
+    void GPUDevice::createSyncObjects()
     {
         operationsInFlight_.resize(imageCountForSwapChain_);
 
+        poolsAndBuffersClearFlags_.resize(imageCountForSwapChain_);
+        poolsAndBuffers_.resize(imageCountForSwapChain_);
+
         VkFenceCreateInfo fenceCreateInfo { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
         fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        VkResult result = VK_SUCCESS;
 
         for (size_t i = 0; i < maxOperationsInFlight; i++) {
-            COFFEE_THROW_IF(
-                vkCreateFence(logicalDevice_, &fenceCreateInfo, nullptr, &inFlightFences_[i]) != VK_SUCCESS, "Failed to create queue fence!");
+            if ((result = vkCreateFence(logicalDevice_, &fenceCreateInfo, nullptr, &inFlightFences_[i])) != VK_SUCCESS) {
+                COFFEE_FATAL("Failed to create queue fence!");
+
+                throw FatalVulkanException { result };
+            }
         }
     }
 
-    void Device::createDescriptorPool()
+    void GPUDevice::createDescriptorPool()
     {
         // clang-format off
         constexpr std::array<VkDescriptorPoolSize, 4> descriptorSizes = {
@@ -531,13 +626,16 @@ namespace coffee {
         descriptorPoolInfo.pPoolSizes = descriptorSizes.data();
         descriptorPoolInfo.maxSets = totalSize;
         descriptorPoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        VkResult result = vkCreateDescriptorPool(logicalDevice_, &descriptorPoolInfo, nullptr, &descriptorPool_);
 
-        COFFEE_THROW_IF(
-            vkCreateDescriptorPool(logicalDevice_, &descriptorPoolInfo, nullptr, &descriptorPool_) != VK_SUCCESS, 
-            "Failed to create descriptor pool!");
+        if (result != VK_SUCCESS) {
+            COFFEE_FATAL("Failed to create descriptor pool!");
+
+            throw FatalVulkanException { result };
+        }
     }
 
-    void Device::createAllocator()
+    void GPUDevice::createAllocator()
     {
         VmaVulkanFunctions vulkanFunctions = {};
         vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
@@ -585,12 +683,13 @@ namespace coffee {
             allocatorCreateInfo.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT;
         }
 
-        COFFEE_THROW_IF(vmaCreateAllocator(&allocatorCreateInfo, &allocator_) != VK_SUCCESS, "Failed to create VMA allocator!");
+        // Actual vmaCreateAllocator implementation ALWAYS returns VK_SUCCESS
+        vmaCreateAllocator(&allocatorCreateInfo, &allocator_);
 
         vmaSetCurrentFrameIndex(allocator_, currentOperation_);
     }
 
-    bool Device::isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions)
+    bool GPUDevice::isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions)
     {
         // TODO: Change to rating system and allow user in future to select which GPU must be used
         VkUtils::QueueFamilyIndices indices = VkUtils::findQueueFamilies(device, surface);
@@ -615,19 +714,22 @@ namespace coffee {
         return indices.isComplete() && requiredExtensions.empty() && swapChainAdequate && features.samplerAnisotropy;
     }
 
-    std::pair<VkFence, CommandBuffer> Device::beginSingleTimeCommands(CommandBufferType type)
+    std::pair<VkFence, CommandBuffer> GPUDevice::beginSingleTimeCommands(CommandBufferType type)
     {
         VkFence fence = VK_NULL_HANDLE;
         VkFenceCreateInfo createInfo { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+        VkResult result = vkCreateFence(logicalDevice_, &createInfo, nullptr, &fence);
 
-        COFFEE_THROW_IF(
-            vkCreateFence(logicalDevice_, &createInfo, nullptr, &fence) != VK_SUCCESS, 
-            "Failed to create fence to single time command buffer!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create fence to single time command buffer!");
 
-        return std::make_pair(fence, CommandBuffer { *this, type });
+            throw RegularVulkanException { result };
+        }
+
+        return std::make_pair(fence, CommandBuffer { shared_from_this(), type });
     }
 
-    ScopeExit Device::endSingleTimeCommands(
+    ScopeExit GPUDevice::endSingleTimeCommands(
         CommandBufferType type,
         VkQueue queueToSubmit,
         std::mutex& mutex,
@@ -635,38 +737,99 @@ namespace coffee {
         CommandBuffer&& commandBuffer
     )
     {
-        COFFEE_THROW_IF(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS, "Failed to end single time command buffer!");
+        VkResult result = vkEndCommandBuffer(commandBuffer);
+
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to end single time command buffer!");
+
+            throw RegularVulkanException { result };
+        }
 
         VkCommandBuffer vkCommandBuffer = commandBuffer;
-        VkCommandPool vkCommandPool = std::exchange(commandBuffer.pool_, VK_NULL_HANDLE);
-
         VkSubmitInfo submitInfo { VK_STRUCTURE_TYPE_SUBMIT_INFO };
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &vkCommandBuffer;
 
         {
             std::scoped_lock<std::mutex> lock { mutex };
-            COFFEE_THROW_IF(vkQueueSubmit(queueToSubmit, 1, &submitInfo, fence) != VK_SUCCESS, "Failed to submit single time command buffer!");
+            result = vkQueueSubmit(queueToSubmit, 1, &submitInfo, fence);
+
+            if (result != VK_SUCCESS) {
+                COFFEE_FATAL("Failed to submit single time command buffer!");
+
+                throw FatalVulkanException { result };
+            }
         }
 
-        return { [this, fence, vkCommandBuffer, vkCommandPool, type]() {
+        return ScopeExit([this, fence, type, cb = std::move(commandBuffer)]() {
             vkWaitForFences(logicalDevice_, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
-
-            vkFreeCommandBuffers(logicalDevice_, vkCommandPool, 1, &vkCommandBuffer);
             vkDestroyFence(logicalDevice_, fence, nullptr);
+        });
+    }
 
-            switch (type) {
-                case CommandBufferType::Graphics:
-                    returnGraphicsCommandPool(vkCommandPool);
-                    break;
-                case CommandBufferType::Transfer:
-                    returnTransferCommandPool(vkCommandPool);
-                    break;
-                default:
-                    // Just to stfu the compiler
-                    break;
-            }
-        } };
+    VkCommandPool GPUDevice::acquireGraphicsCommandPool()
+    {
+        VkCommandPool pool = VK_NULL_HANDLE;
+
+        if (graphicsPools_.try_pop(pool)) {
+            return pool;
+        }
+
+        VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+        poolInfo.flags = 0;
+        poolInfo.queueFamilyIndex = indices_.graphicsFamily.value();
+        VkResult result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &pool);
+
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create command pool from graphics queue!");
+
+            throw RegularVulkanException { result };
+        }
+
+        return pool;
+    }
+
+    void GPUDevice::returnGraphicsCommandPool(VkCommandPool pool) { graphicsPools_.push(pool); }
+
+    VkCommandPool GPUDevice::acquireTransferCommandPool()
+    {
+        if (transferQueue_ == VK_NULL_HANDLE) {
+            return acquireGraphicsCommandPool();
+        }
+
+        VkCommandPool pool = VK_NULL_HANDLE;
+
+        if (transferPools_.try_pop(pool)) {
+            return pool;
+        }
+
+        VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+        poolInfo.flags = 0;
+        poolInfo.queueFamilyIndex = indices_.transferFamily.value();
+        VkResult result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &pool);
+
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create command pool from transfer queue!");
+
+            throw RegularVulkanException { result };
+        }
+
+        return pool;
+    }
+
+    void GPUDevice::returnTransferCommandPool(VkCommandPool pool) { transferPools_.push(pool); }
+
+    void GPUDevice::clearCommandBuffers(size_t index)
+    {
+        waitForAcquire();
+
+        for (auto& [commandPool, commandBuffer] : poolsAndBuffers_[index]) {
+            vkFreeCommandBuffers(logicalDevice_, commandPool, 1, &commandBuffer);
+            returnGraphicsCommandPool(commandPool);
+        }
+
+        poolsAndBuffers_[index].clear();
+        poolsAndBuffersClearFlags_[index] = false;
     }
 
 } // namespace coffee

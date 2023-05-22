@@ -4,7 +4,6 @@
 #include <coffee/graphics/buffer.hpp>
 #include <coffee/graphics/image.hpp>
 #include <coffee/graphics/sampler.hpp>
-#include <coffee/objects/texture.hpp>
 
 #include <map>
 
@@ -22,33 +21,37 @@ namespace coffee {
         VkDeviceSize bufferSize = 0U;
         VkBuffer buffer = VK_NULL_HANDLE;
         VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        ImageView imageView = nullptr;
-        Sampler sampler = nullptr;
+        ImageViewPtr imageView = nullptr;
+        SamplerPtr sampler = nullptr;
     };
 
-    class DescriptorLayoutImpl {
-    public:
-        DescriptorLayoutImpl(Device& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings);
-        ~DescriptorLayoutImpl() noexcept;
+    class DescriptorLayout;
+    using DescriptorLayoutPtr = std::shared_ptr<DescriptorLayout>;
 
-        inline const VkDescriptorSetLayout& layout() const noexcept
-        {
-            return layout_;
-        }
+    class DescriptorSet;
+    using DescriptorSetPtr = std::shared_ptr<DescriptorSet>;
+
+    class DescriptorLayout {
+    public:
+        ~DescriptorLayout() noexcept;
+
+        static DescriptorLayoutPtr create(const GPUDevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings);
+
+        inline const VkDescriptorSetLayout& layout() const noexcept { return layout_; }
 
         const std::map<uint32_t, DescriptorBindingInfo> bindings;
 
     private:
-        Device& device_;
+        DescriptorLayout(const GPUDevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings);
+
+        GPUDevicePtr device_;
 
         VkDescriptorSetLayout layout_ = VK_NULL_HANDLE;
     };
 
-    using DescriptorLayout = std::shared_ptr<DescriptorLayoutImpl>;
-
     class DescriptorWriter {
     public:
-        DescriptorWriter(const DescriptorLayout& layout);
+        DescriptorWriter(const DescriptorLayoutPtr& layout);
 
         DescriptorWriter(const DescriptorWriter&);
         DescriptorWriter(DescriptorWriter&&) noexcept;
@@ -57,40 +60,42 @@ namespace coffee {
 
         DescriptorWriter& addBuffer(
             uint32_t bindingIndex,
-            const Buffer& buffer,
+            const BufferPtr& buffer,
             size_t offset = 0,
             size_t totalSize = std::numeric_limits<size_t>::max()
         );
-        DescriptorWriter& addImage(uint32_t bindingIndex, VkImageLayout layout, const ImageView& image, const Sampler& sampler = nullptr);
-        DescriptorWriter& addTexture(uint32_t bindingIndex, const Texture& texture, const Sampler& sampler = nullptr);
-        DescriptorWriter& addSampler(uint32_t bindingIndex, const Sampler& sampler);
+        DescriptorWriter& addImage(
+            uint32_t bindingIndex,
+            VkImageLayout layout,
+            const ImageViewPtr& image,
+            const SamplerPtr& sampler = nullptr
+        );
+        DescriptorWriter& addSampler(uint32_t bindingIndex, const SamplerPtr& sampler);
 
     private:
-        DescriptorLayout layout_;
+        DescriptorLayoutPtr layout_;
         std::map<uint32_t, DescriptorWriteInfo> writes_ {};
 
-        friend class DescriptorSetImpl;
+        friend class DescriptorSet;
     };
 
-    class DescriptorSetImpl : NonMoveable {
+    class DescriptorSet : NonMoveable {
     public:
-        DescriptorSetImpl(Device& device, const DescriptorWriter& writer);
-        ~DescriptorSetImpl() noexcept;
+        ~DescriptorSet() noexcept;
+
+        static DescriptorSetPtr create(const GPUDevicePtr& device, const DescriptorWriter& writer);
 
         void updateDescriptor(const DescriptorWriter& writer);
 
-        inline const VkDescriptorSet& set() const noexcept
-        {
-            return set_;
-        }
+        inline const VkDescriptorSet& set() const noexcept { return set_; }
 
     private:
-        Device& device_;
+        DescriptorSet(const GPUDevicePtr& device, const DescriptorWriter& writer);
+
+        GPUDevicePtr device_;
 
         VkDescriptorSet set_ = VK_NULL_HANDLE;
     };
-
-    using DescriptorSet = std::shared_ptr<DescriptorSetImpl>;
 
 } // namespace coffee
 

@@ -1,5 +1,6 @@
 #include <coffee/graphics/render_pass.hpp>
 
+#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
@@ -7,7 +8,7 @@
 
 namespace coffee {
 
-    RenderPassImpl::RenderPassImpl(Device& device, const RenderPassConfiguration& configuration) : device_ { device }
+    RenderPass::RenderPass(const GPUDevicePtr& device, const RenderPassConfiguration& configuration) : device_ { device }
     {
         VkRenderPassCreateInfo renderPassInfo { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
 
@@ -22,7 +23,7 @@ namespace coffee {
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 
         for (const auto& colorAttachment : configuration.colorAttachments) {
-            VkSampleCountFlagBits sampleCountImpl = VkUtils::getUsableSampleCount(colorAttachment.samples, device_.properties());
+            VkSampleCountFlagBits sampleCountImpl = VkUtils::getUsableSampleCount(colorAttachment.samples, device_->properties());
             bool resolveRequired = sampleCountImpl != VK_SAMPLE_COUNT_1_BIT;
             bool resolveInPlace = resolveRequired && (colorAttachment.resolveImage != nullptr);
 
@@ -88,27 +89,39 @@ namespace coffee {
             subpass.pDepthStencilAttachment = &depthAttachmentRef;
         }
 
+        // This is still suboptimal variant for render passes, but at least it tried to do only what attachments wanna do
+        // As example, depth-only will only wait for early-late tests while color-only will wait for fragment shader and output
+
         std::array<VkSubpassDependency, 2> subpassDependencies {};
         subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         subpassDependencies[0].dstSubpass = 0;
-        subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                                              VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        subpassDependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        subpassDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         subpassDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
         subpassDependencies[1].srcSubpass = 0;
         subpassDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        subpassDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        subpassDependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        subpassDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        subpassDependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         subpassDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
+        if (!configuration.colorAttachments.empty()) {
+            subpassDependencies[0].srcStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            subpassDependencies[0].dstStageMask |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            subpassDependencies[0].srcAccessMask |= VK_ACCESS_SHADER_READ_BIT;
+            subpassDependencies[0].dstAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+            subpassDependencies[1].srcStageMask |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            subpassDependencies[1].dstStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            subpassDependencies[1].srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            subpassDependencies[1].dstAccessMask |= VK_ACCESS_SHADER_READ_BIT;
+        }
+
         if (configuration.depthStencilAttachment.has_value()) {
+            subpassDependencies[0].srcStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            subpassDependencies[0].dstStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
             subpassDependencies[0].srcAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
             subpassDependencies[0].dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            subpassDependencies[1].srcStageMask |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            subpassDependencies[1].dstStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            subpassDependencies[1].srcAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            subpassDependencies[1].dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         }
 
         renderPassInfo.dependencyCount = static_cast<uint32_t>(subpassDependencies.size());
@@ -121,15 +134,22 @@ namespace coffee {
         renderPassInfo.pSubpasses = &subpass;
 
         COFFEE_ASSERT(!attachments.empty(), "No attachments was provided to render pass.");
+        VkResult result = vkCreateRenderPass(device_->logicalDevice(), &renderPassInfo, nullptr, &renderPass_);
 
-        COFFEE_THROW_IF(
-            vkCreateRenderPass(device_.logicalDevice(), &renderPassInfo, nullptr, &renderPass_) != VK_SUCCESS,
-            "Failed to create render pass!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create render pass!");
+
+            throw RegularVulkanException { result };
+        }
     }
 
-    RenderPassImpl::~RenderPassImpl()
+    RenderPass::~RenderPass() { vkDestroyRenderPass(device_->logicalDevice(), renderPass_, nullptr); }
+
+    RenderPassPtr RenderPass::create(const GPUDevicePtr& device, const RenderPassConfiguration& configuration)
     {
-        vkDestroyRenderPass(device_.logicalDevice(), renderPass_, nullptr);
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+
+        return std::unique_ptr<RenderPass>(new RenderPass { device, configuration });
     }
 
 } // namespace coffee

@@ -1,11 +1,11 @@
 #ifndef COFFEE_ABSTRACT_MONITOR
 #define COFFEE_ABSTRACT_MONITOR
 
+#include <coffee/interfaces/event_handler.hpp>
 #include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
 
-#include <volk.h>
-
+#include <volk/volk.h>
 #include <GLFW/glfw3.h>
 
 #include <any>
@@ -28,20 +28,25 @@ namespace coffee {
         uint32_t refreshRate = 0;
     };
 
-    class MonitorImpl : NonMoveable {
+    class Monitor;
+    using MonitorPtr = std::shared_ptr<const Monitor>;
+
+    class Monitor : NonMoveable {
     public:
-        MonitorImpl(GLFWmonitor* handle, uint32_t uniqueID);
-        ~MonitorImpl() noexcept = default;
+        Monitor(GLFWmonitor* handle, uint32_t uniqueID);
+        ~Monitor() noexcept = default;
+
+        static MonitorPtr primaryMonitor() noexcept;
+        static std::vector<MonitorPtr> monitors() noexcept;
+
+        inline static Invokable<const MonitorPtr&> monitorConnectedEvent {};
+        inline static Invokable<const MonitorPtr&> monitorDisconnectedEvent {};
 
         VideoMode currentVideoMode() const noexcept;
 
-        inline const std::vector<VideoMode>& videoModes() const noexcept {
-            return modes_;
-        }
+        inline const std::vector<VideoMode>& videoModes() const noexcept { return modes_; }
 
-        inline VkExtent2D physicalSize() const noexcept {
-            return physicalSize_;
-        }
+        inline VkExtent2D physicalSize() const noexcept { return physicalSize_; }
 
         Float2D contentScale() const noexcept;
         VkExtent2D position() const noexcept;
@@ -53,12 +58,20 @@ namespace coffee {
         mutable std::any userData;
 
     private:
+        // This function will also initialize GLFW, not only monitors
+        static void initialize();
+        // This function will also deinitialize GLFW, not only monitors
+        static void deinitialize();
+
         GLFWmonitor* handle_ = nullptr;
         std::vector<VideoMode> modes_ {};
         VkExtent2D physicalSize_ {};
-    };
 
-    using Monitor = std::shared_ptr<const MonitorImpl>;
+        inline static uint32_t nextMonitorID_ = 0;
+        inline static std::vector<MonitorPtr> monitors_ {};
+
+        friend class GPUDevice;
+    };
 
 } // namespace coffee
 

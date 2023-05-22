@@ -7,25 +7,26 @@
 
 namespace coffee {
 
-    class MeshImpl
-        : public Drawable
-        , NonMoveable {
+    class Mesh : public Drawable {
     public:
-        friend class ModelImpl;
+        friend class Model;
 
-        MeshImpl(Buffer&& verticesBuffer, Buffer&& indicesBuffer, Materials&& materials);
-        virtual ~MeshImpl() noexcept = default;
+        Mesh(Materials&& materials, uint32_t verticesOffset, uint32_t indicesOffset, uint32_t verticesCount, uint32_t indicesCount);
+        virtual ~Mesh() noexcept = default;
+
+        Mesh(const Mesh&) = default;
+        Mesh& operator=(const Mesh&) = default;
+        Mesh(Mesh&&) = default;
+        Mesh& operator=(Mesh&&) = default;
 
         Materials materials;
+        const uint32_t verticesOffset;
+        const uint32_t indicesOffset;
+        const uint32_t verticesCount;
+        const uint32_t indicesCount;
 
-        void draw(const CommandBuffer& commandBuffer) override;
-
-    private:
-        Buffer verticesBuffer_;
-        Buffer indicesBuffer_;
+        void draw(const CommandBuffer& commandBuffer) const override;
     };
-
-    using Mesh = std::unique_ptr<MeshImpl>;
 
 } // namespace coffee
 

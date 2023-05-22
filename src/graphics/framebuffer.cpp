@@ -1,10 +1,11 @@
 #include <coffee/graphics/framebuffer.hpp>
 
+#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
 namespace coffee {
 
-    FramebufferImpl::FramebufferImpl(Device& device, const RenderPass& renderPass, const FramebufferConfiguration& configuration)
+    Framebuffer::Framebuffer(const GPUDevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration)
         : width { configuration.extent.width }
         , height { configuration.extent.height }
         , layers { configuration.layers }
@@ -41,15 +42,27 @@ namespace coffee {
         createInfo.width = width;
         createInfo.height = height;
         createInfo.layers = layers;
+        VkResult result = vkCreateFramebuffer(device_->logicalDevice(), &createInfo, nullptr, &framebuffer_);
 
-        COFFEE_THROW_IF(
-            vkCreateFramebuffer(device_.logicalDevice(), &createInfo, nullptr, &framebuffer_) != VK_SUCCESS,
-            "Failed to create framebuffer!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create framebuffer!");
+
+            throw RegularVulkanException { result };
+        }
     }
 
-    FramebufferImpl::~FramebufferImpl() noexcept
+    Framebuffer::~Framebuffer() noexcept { vkDestroyFramebuffer(device_->logicalDevice(), framebuffer_, nullptr); }
+
+    FramebufferPtr Framebuffer::create(
+        const GPUDevicePtr& device,
+        const RenderPassPtr& renderPass,
+        const FramebufferConfiguration& configuration
+    )
     {
-        vkDestroyFramebuffer(device_.logicalDevice(), framebuffer_, nullptr);
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+        COFFEE_ASSERT(renderPass != nullptr, "Invalid renderPass provided.");
+
+        return std::unique_ptr<Framebuffer>(new Framebuffer { device, renderPass, configuration });
     }
 
 } // namespace coffee

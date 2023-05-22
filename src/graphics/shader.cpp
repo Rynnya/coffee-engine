@@ -1,10 +1,16 @@
 #include <coffee/graphics/shader.hpp>
 
+#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
 namespace coffee {
 
-    ShaderImpl::ShaderImpl(Device& device, const std::vector<uint8_t>& byteCode, VkShaderStageFlagBits stage, const std::string& entrypoint)
+    ShaderModule::ShaderModule(
+        const GPUDevicePtr& device,
+        const std::vector<uint8_t>& byteCode,
+        ShaderStage stage,
+        const std::string& entrypoint
+    )
         : entrypoint { entrypoint.empty() ? "main" : entrypoint }
         , stage { stage }
         , device_ { device }
@@ -25,7 +31,7 @@ namespace coffee {
 
         COFFEE_ASSERT(
             verifyStage(stage),
-            "Invalid VkShaderStageFlagBits provided. It must be single input, and must be any of (VK_SHADER_STAGE_VERTEX_BIT, "
+            "Invalid VkShaderStageFlagBits provided. It must be any of (VK_SHADER_STAGE_VERTEX_BIT, "
             "VK_SHADER_STAGE_GEOMETRY_BIT, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, "
             "VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_COMPUTE_BIT)."
         );
@@ -33,15 +39,28 @@ namespace coffee {
         VkShaderModuleCreateInfo createInfo { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
         createInfo.codeSize = byteCode.size();
         createInfo.pCode = reinterpret_cast<const uint32_t*>(byteCode.data());
+        VkResult result = vkCreateShaderModule(device_->logicalDevice(), &createInfo, nullptr, &shader_);
 
-        COFFEE_THROW_IF(
-            vkCreateShaderModule(device_.logicalDevice(), &createInfo, nullptr, &shader_) != VK_SUCCESS,
-            "Failed to create shader module!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create shader module!");
+
+            throw RegularVulkanException { result };
+        }
     }
 
-    ShaderImpl::~ShaderImpl() noexcept
+    ShaderModule::~ShaderModule() noexcept { vkDestroyShaderModule(device_->logicalDevice(), shader_, nullptr); }
+
+    ShaderPtr ShaderModule::create(
+        const GPUDevicePtr& device,
+        const std::vector<uint8_t>& byteCode,
+        ShaderStage stage,
+        const std::string& entrypoint
+    )
     {
-        vkDestroyShaderModule(device_.logicalDevice(), shader_, nullptr);
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+        COFFEE_ASSERT(!byteCode.empty(), "Empty byte code provided.");
+
+        return std::shared_ptr<ShaderModule>(new ShaderModule { device, byteCode, stage, entrypoint });
     }
 
 } // namespace coffee

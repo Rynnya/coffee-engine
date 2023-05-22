@@ -1,18 +1,21 @@
 #include <coffee/graphics/image.hpp>
 
+#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
 #include <algorithm>
 
 namespace coffee {
 
-    ImageImpl::ImageImpl(Device& device, const ImageConfiguration& configuration)
-        : imageType { configuration.imageType }
+    Image::Image(const GPUDevicePtr& device, const ImageConfiguration& configuration)
+        : swapChainImage { false }
+        , imageType { configuration.imageType }
         , imageFormat { configuration.format }
         , extent { configuration.extent.width, configuration.extent.height, std::max(configuration.extent.depth, 1U) }
-        , sampleCount { VkUtils::getUsableSampleCount(configuration.samples, device.properties()) }
+        , sampleCount { VkUtils::getUsableSampleCount(configuration.samples, device->properties()) }
+        , mipLevels { configuration.mipLevels }
+        , arrayLayers { configuration.arrayLayers }
         , device_ { device }
-        , swapChainImage_ { false }
     {
         VkImageCreateInfo imageCreateInfo { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
         imageCreateInfo.flags = configuration.flags;
@@ -33,54 +36,73 @@ namespace coffee {
         vmaCreateInfo.flags = configuration.allocationFlags;
         vmaCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
         vmaCreateInfo.priority = std::clamp(configuration.priority, 0.0f, 1.0f);
+        VkResult result = vmaCreateImage(device_->allocator(), &imageCreateInfo, &vmaCreateInfo, &image_, &allocation_, nullptr);
 
-        COFFEE_THROW_IF(
-            vmaCreateImage(device_.allocator(), &imageCreateInfo, &vmaCreateInfo, &image_, &allocation_, nullptr) != VK_SUCCESS, 
-            "VMA failed to allocate and bind memory for image!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("VMA failed to allocate image, requested extent {{ {}, {}, {} }}, with {} usage flags!", 
+                extent.width, extent.height, extent.depth, format::imageUsageFlags(imageCreateInfo.usage));
+
+            throw RegularVulkanException { result };
+        }
     }
 
-    ImageImpl::ImageImpl(Device& device, VkFormat imageFormat, VkImage imageImpl, uint32_t width, uint32_t height) noexcept
-        : imageType { VK_IMAGE_TYPE_2D }
+    Image::Image(const GPUDevicePtr& device, VkFormat imageFormat, VkImage imageImpl, uint32_t width, uint32_t height) noexcept
+        : swapChainImage { true }
+        , imageType { VK_IMAGE_TYPE_2D }
         , imageFormat { imageFormat }
         , extent { width, height, 1 }
         , sampleCount { VK_SAMPLE_COUNT_1_BIT }
+        , mipLevels { 1U }
+        , arrayLayers { 1U }
         , device_ { device }
-        , swapChainImage_ { true }
     {
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
         COFFEE_ASSERT(imageImpl != nullptr, "Invalid image handle provided.");
 
         image_ = imageImpl;
     }
 
-    ImageImpl::~ImageImpl() noexcept
+    Image::~Image() noexcept
     {
         // Specification states that we must not free swap chain images
-        if (!swapChainImage_) {
-            vmaDestroyImage(device_.allocator(), image_, allocation_);
+        if (!swapChainImage) {
+            vmaDestroyImage(device_->allocator(), image_, allocation_);
         }
     }
 
-    ImageViewImpl::ImageViewImpl(const Image& image, const ImageViewConfiguration& configuration)
-        : aspectMask { configuration.subresourceRange.aspectMask }
-        , image_ { image }
+    ImagePtr Image::create(const GPUDevicePtr& device, const ImageConfiguration& configuration)
     {
-        COFFEE_ASSERT(image_ != nullptr, "Invalid image handle provided.");
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+
+        return std::shared_ptr<Image>(new Image { device, configuration });
+    }
+
+    ImageView::ImageView(const ImagePtr& image, const ImageViewConfiguration& configuration)
+        : image { image }
+        , aspectMask { configuration.subresourceRange.aspectMask }
+    {
+        COFFEE_ASSERT(image != nullptr, "Invalid image handle provided.");
 
         VkImageViewCreateInfo createInfo { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        createInfo.image = image_->image();
+        createInfo.image = image->image();
         createInfo.viewType = configuration.viewType;
         createInfo.format = configuration.format;
         createInfo.components = configuration.components;
         createInfo.subresourceRange = configuration.subresourceRange;
+        VkResult result = vkCreateImageView(image->device_->logicalDevice(), &createInfo, nullptr, &view_);
 
-        COFFEE_THROW_IF(
-            vkCreateImageView(image_->device_.logicalDevice(), &createInfo, nullptr, &view_) != VK_SUCCESS, 
-            "Failed to create image view!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create image view!");
+
+            throw RegularVulkanException { result };
+        }
     }
 
-    ImageViewImpl::~ImageViewImpl() noexcept
+    ImageView::~ImageView() noexcept { vkDestroyImageView(image->device_->logicalDevice(), view_, nullptr); }
+
+    ImageViewPtr ImageView::create(const ImagePtr& image, const ImageViewConfiguration& configuration)
     {
-        vkDestroyImageView(image_->device_.logicalDevice(), view_, nullptr);
+        return std::shared_ptr<ImageView>(new ImageView { image, configuration });
     }
 
 } // namespace coffee

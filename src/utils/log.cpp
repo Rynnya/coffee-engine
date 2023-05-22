@@ -51,7 +51,7 @@ namespace coffee {
                 case MessageSeverity::Error:
                     return "ERROR";
                 case MessageSeverity::Critical:
-                    return "UNRECOVERABLE";
+                    return "FATAL";
                 default:
                     return "UNKNOWN";
             }

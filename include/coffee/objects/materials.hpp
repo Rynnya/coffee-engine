@@ -1,7 +1,7 @@
 #ifndef COFFEE_OBJECTS_MATERIALS
 #define COFFEE_OBJECTS_MATERIALS
 
-#include <coffee/objects/texture.hpp>
+#include <coffee/graphics/image.hpp>
 #include <coffee/utils/math.hpp>
 #include <coffee/utils/non_copyable.hpp>
 
@@ -12,10 +12,10 @@ namespace coffee {
 
     class Materials : NonCopyable {
     public:
-        Materials(const Texture& defaultTexture);
+        Materials(const ImageViewPtr& defaultTexture);
 
-        void write(const Texture& texture);
-        const Texture& read(TextureType type) const noexcept;
+        void write(const ImageViewPtr& texture, TextureType type);
+        const ImageViewPtr& read(TextureType type) const noexcept;
         void reset(TextureType type);
 
         TextureType textureFlags() const noexcept;
@@ -35,10 +35,10 @@ namespace coffee {
             float roughnessFactor = 0.0f;
         } modifiers {};
 
-        const Texture defaultTexture;
+        const ImageViewPtr defaultTexture;
 
     private:
-        std::array<Texture, 7> textures_;
+        std::array<ImageViewPtr, 7> textures_;
         TextureType textureFlags_ = TextureType::None;
     };
 

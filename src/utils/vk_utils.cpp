@@ -3,6 +3,7 @@
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/math.hpp>
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 
@@ -36,12 +37,32 @@ namespace coffee {
         return findSupportedFormat(
             device,
             {
+                VK_FORMAT_D32_SFLOAT,          // Best possible depth buffer with best precision, supported almost everywhere
+                VK_FORMAT_X8_D24_UNORM_PACK32, // If somehow D32 is not supported - fallback to 24 bits
+
+                // Specification stated that devices MUST support ONE of two formats listed above
+                VK_FORMAT_D16_UNORM // This variant is always available, altho it precision is absolute garbage, and it most likely won't be
+                                    // selected at all
+            },
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+        );
+    }
+
+    VkFormat VkUtils::findDepthStencilFormat(VkPhysicalDevice device)
+    {
+        return findSupportedFormat(
+            device,
+            {
                 // Search in reverse order to get maximal compression that available for this GPU
-                VK_FORMAT_D32_SFLOAT_S8_UINT, // This one will have 40 bits of data, 32 for depth and 8 for stencil
-                VK_FORMAT_D32_SFLOAT,         // This one doesn't have stencil, so it might be a bad idea to
-                                              // ever use it
-                VK_FORMAT_D16_UNORM           // This variant is always available for both depth and
-                                              // depth-stencil images as fallback
+                VK_FORMAT_D24_UNORM_S8_UINT, // After some research Zilver and me found that AMD actually doesn't support this format most
+                                             // of the time, while Nvidia is do opposite - support it most of the time
+                                             // So it will be properly to check for this type first
+                VK_FORMAT_D32_SFLOAT_S8_UINT // Again, after some research Zilver found that AMD support true 40 bit format, while Nvidia
+                                             // emulate it through 64 bit format (This is 24 bit loss!)
+
+                // Specification stated that devices MUST support ONE of two formats listed above
+                // So it's pretty much safe to leave only them here
             },
             VK_IMAGE_TILING_OPTIMAL,
             VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
@@ -62,15 +83,44 @@ namespace coffee {
         throw std::runtime_error("Failed to find suitable memory type!");
     }
 
-    VkSurfaceFormatKHR VkUtils::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) noexcept
+    VkSurfaceFormatKHR VkUtils::chooseSurfaceFormat(
+        VkPhysicalDevice device,
+        const std::vector<VkSurfaceFormatKHR>& availableFormats
+    ) noexcept
     {
-        for (const auto& availableFormat : availableFormats) {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-                return availableFormat;
+        VkImageFormatProperties properties {};
+
+        bool is10bitSupported =
+            vkGetPhysicalDeviceImageFormatProperties(
+                device,
+                VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+                VK_IMAGE_TYPE_2D,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                0,
+                &properties
+            ) == VK_SUCCESS;
+
+        if (is10bitSupported) {
+            auto it = std::find_if(availableFormats.begin(), availableFormats.end(), [](const auto& availableFormat) {
+                return availableFormat.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 &&
+                       availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+            });
+
+            if (it != availableFormats.end()) {
+                return *it;
             }
         }
 
-        // Fallback, most likely will be R8G8B8A8Unorm
+        auto it = std::find_if(availableFormats.begin(), availableFormats.end(), [](const auto& availableFormat) {
+            return availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+        });
+
+        if (it != availableFormats.end()) {
+            return *it;
+        }
+
+        // Fallback, most likely will be VK_FORMAT_B8G8R8A8_UNORM
         return availableFormats[0];
     }
 

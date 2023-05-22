@@ -10,15 +10,23 @@ namespace coffee {
     struct FramebufferConfiguration {
         VkExtent2D extent {};
         uint32_t layers = 1U;
-        std::vector<ImageView> colorViews {};
-        ImageView depthStencilView = nullptr;
-        ImageView resolveView = nullptr;
+        std::vector<ImageViewPtr> colorViews {};
+        ImageViewPtr depthStencilView = nullptr;
+        ImageViewPtr resolveView = nullptr;
     };
 
-    class FramebufferImpl {
+    class Framebuffer;
+    using FramebufferPtr = std::unique_ptr<Framebuffer>;
+
+    class Framebuffer {
     public:
-        FramebufferImpl(Device& device, const RenderPass& renderPass, const FramebufferConfiguration& configuration);
-        ~FramebufferImpl() noexcept;
+        ~Framebuffer() noexcept;
+
+        static FramebufferPtr create(
+            const GPUDevicePtr& device,
+            const RenderPassPtr& renderPass,
+            const FramebufferConfiguration& configuration
+        );
 
         const uint32_t width;
         const uint32_t height;
@@ -30,12 +38,14 @@ namespace coffee {
         }
 
     private:
-        Device& device_;
+        Framebuffer(const GPUDevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration);
+
+        GPUDevicePtr device_;
 
         VkFramebuffer framebuffer_ = VK_NULL_HANDLE;
     };
 
-    using Framebuffer = std::unique_ptr<FramebufferImpl>;
+    
 
 } // namespace coffee
 

@@ -1,19 +1,17 @@
 #ifndef COFFEE_ABSTRACT_WINDOW
 #define COFFEE_ABSTRACT_WINDOW
 
-#include <coffee/events/key_event.hpp>
-#include <coffee/events/mouse_event.hpp>
-#include <coffee/events/window_event.hpp>
-
 #include <coffee/graphics/cursor.hpp>
 #include <coffee/graphics/keys.hpp>
 #include <coffee/graphics/swap_chain.hpp>
 #include <coffee/interfaces/event_handler.hpp>
 
+#include <coffee/events/key_event.hpp>
+#include <coffee/events/mouse_event.hpp>
+#include <coffee/events/window_event.hpp>
+
 #include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
-
-#include <GLFW/glfw3.h>
 
 #include <any>
 #include <functional>
@@ -25,7 +23,7 @@ namespace coffee {
         // Leave as 0 to automatic selection
         VkExtent2D extent {};
         // FIFO - Available always, fallback if provided method isn't available
-        // FIFO Relaxed - Not supported by engine
+        // FIFO Relaxed - Automatically set as replacement for FIFO if supported by GPU
         // Mailbox - Applied if supported
         // Immediate - Applied if supported
         VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -51,12 +49,16 @@ namespace coffee {
         Disabled = 2
     };
 
-    class WindowImpl : NonMoveable {
-    public:
-        WindowImpl(Device& device, WindowSettings settings, const std::string& windowName);
-        ~WindowImpl() noexcept;
+    class Window;
+    using WindowPtr = std::unique_ptr<Window>;
 
-        const std::vector<Image>& presentImages() const noexcept;
+    class Window : NonMoveable {
+    public:
+        ~Window() noexcept;
+
+        static WindowPtr create(const GPUDevicePtr& device, WindowSettings settings, const std::string& windowName = "Coffee");
+
+        const std::vector<ImagePtr>& presentImages() const noexcept;
         uint32_t currentImageIndex() const noexcept;
 
         bool acquireNextImage();
@@ -88,7 +90,7 @@ namespace coffee {
         void hideCursor() const noexcept;
         void disableCursor() const noexcept;
 
-        void setCursor(const Cursor& cursor) const noexcept;
+        void setCursor(const CursorPtr& cursor) const noexcept;
         void resetCursor() const noexcept;
 
         Float2D mousePosition() const noexcept;
@@ -99,6 +101,9 @@ namespace coffee {
         void setWindowPosition(const VkOffset2D& position) const noexcept;
         void setWindowSize(const VkExtent2D& size) const noexcept;
 
+        static std::string clipboard();
+        static void setClipboard(const std::string& clipboard);
+
         bool isButtonPressed(Keys key) const noexcept;
         bool isButtonPressed(MouseButton mouseButton) const noexcept;
 
@@ -106,23 +111,25 @@ namespace coffee {
 
         // clang-format off
 
-        mutable Invokable<const WindowImpl&, const ResizeEvent&>            windowResizeEvent {};
-        mutable Invokable<const WindowImpl&, const WindowEnterEvent&>       windowEnterEvent {};
-        mutable Invokable<const WindowImpl&, const WindowPositionEvent&>    windowPositionEvent {};
-        mutable Invokable<const WindowImpl&>                                windowCloseEvent {};
-        mutable Invokable<const WindowImpl&, const WindowFocusEvent&>       windowFocusEvent {};
-        mutable Invokable<const WindowImpl&, const MouseClickEvent&>        mouseClickEvent {};
-        mutable Invokable<const WindowImpl&, const MouseMoveEvent&>         mouseMoveEvent {};
-        mutable Invokable<const WindowImpl&, const MouseWheelEvent&>        mouseWheelEvent {};
-        mutable Invokable<const WindowImpl&, const KeyEvent&>               keyEvent {};
-        mutable Invokable<const WindowImpl&, char32_t>                      charEvent {};
-        mutable Invokable<const WindowImpl&, VkPresentModeKHR>              presentModeEvent {};
+        mutable Invokable<const Window&, const ResizeEvent&>            windowResizeEvent {};
+        mutable Invokable<const Window&, const WindowEnterEvent&>       windowEnterEvent {};
+        mutable Invokable<const Window&, const WindowPositionEvent&>    windowPositionEvent {};
+        mutable Invokable<const Window&>                                windowCloseEvent {};
+        mutable Invokable<const Window&, const WindowFocusEvent&>       windowFocusEvent {};
+        mutable Invokable<const Window&, const MouseClickEvent&>        mouseClickEvent {};
+        mutable Invokable<const Window&, const MouseMoveEvent&>         mouseMoveEvent {};
+        mutable Invokable<const Window&, const MouseWheelEvent&>        mouseWheelEvent {};
+        mutable Invokable<const Window&, const KeyEvent&>               keyEvent {};
+        mutable Invokable<const Window&, char32_t>                      charEvent {};
+        mutable Invokable<const Window&, VkPresentModeKHR>              presentModeEvent {};
 
         // clang-format on
 
         mutable std::any userData;
 
     private:
+        Window(const GPUDevicePtr& device, WindowSettings settings, const std::string& windowName);
+
         static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
         static void resizeCallback(GLFWwindow* window, int width, int height);
         static void windowEnterCallback(GLFWwindow* window, int entered);
@@ -137,7 +144,7 @@ namespace coffee {
         static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
         static void charCallback(GLFWwindow* window, unsigned int codepoint);
 
-        Device& device_;
+        GPUDevicePtr device_;
 
         GLFWwindow* windowHandle_ = nullptr;
         GLFWmonitor* monitorHandle_ = nullptr;
@@ -161,8 +168,6 @@ namespace coffee {
 
         std::unique_ptr<SwapChain> swapChain = nullptr;
     };
-
-    using Window = std::unique_ptr<WindowImpl>;
 
 } // namespace coffee
 

@@ -2,8 +2,12 @@
 #define COFFEE_TYPES
 
 #include <cstdint>
+#include <memory>
 
 namespace coffee {
+
+    class GPUDevice;
+    using GPUDevicePtr = std::shared_ptr<GPUDevice>;
 
     struct Float2D {
         float x = 0.0f;

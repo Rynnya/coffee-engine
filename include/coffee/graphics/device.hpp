@@ -7,7 +7,9 @@
 #include <coffee/utils/non_moveable.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
-#include <vk_mem_alloc.h>
+#include <GLFW/glfw3.h>
+#include <oneapi/tbb/concurrent_queue.h>
+#include <vma/vk_mem_alloc.h>
 
 #include <array>
 #include <mutex>
@@ -24,31 +26,45 @@ namespace coffee {
         std::vector<VkCommandBuffer> commandBuffers {};
     };
 
-    // Forward declaration
     class CommandBuffer;
 
-    class Device : NonMoveable {
+    // Core class for GPU handling
+    // Provides low-level access for Vulkan and mandatory for most graphics wrapper
+    // Prefer using wrappers instead of raw Vulkan functions if engine supports such behaviour
+    class GPUDevice
+        : NonMoveable
+        , public std::enable_shared_from_this<GPUDevice> {
     public:
         static constexpr size_t maxOperationsInFlight = 2;
 
-        Device();
-        ~Device() noexcept;
+        ~GPUDevice() noexcept;
 
-        VkCommandPool acquireGraphicsCommandPool();
-        void returnGraphicsCommandPool(VkCommandPool pool);
-        VkCommandPool acquireTransferCommandPool();
-        void returnTransferCommandPool(VkCommandPool pool);
+        static GPUDevicePtr create();
 
+        // Called by swapchain when acquiring next image
+        // Waits until previous frame is done
         void waitForAcquire();
+        // Called by swapchain when resize occurs
+        // Waits until all frames in flight is done
         void waitForRelease();
 
-        void sendSubmitInfo(SubmitInfo&& submitInfo);
+        void sendCommandBuffer(
+            CommandBuffer&& commandBuffer,
+            VkSwapchainKHR swapChain = VK_NULL_HANDLE,
+            VkSemaphore waitSemaphone = VK_NULL_HANDLE,
+            VkSemaphore signalSemaphone = VK_NULL_HANDLE,
+            uint32_t* currentFrame = nullptr
+        );
+        void sendCommandBuffers(
+            std::vector<CommandBuffer>&& commandBuffers,
+            VkSwapchainKHR swapChain = VK_NULL_HANDLE,
+            VkSemaphore waitSemaphone = VK_NULL_HANDLE,
+            VkSemaphore signalSemaphone = VK_NULL_HANDLE,
+            uint32_t* currentFrame = nullptr
+        );
         void submitPendingWork();
 
-        inline bool isUnifiedTransferGraphicsQueue() const noexcept
-        {
-            return transferQueue_ == VK_NULL_HANDLE;
-        }
+        inline bool isUnifiedTransferGraphicsQueue() const noexcept { return transferQueue_ == VK_NULL_HANDLE; }
 
         inline uint32_t transferQueueFamilyIndex() const noexcept
         {
@@ -59,65 +75,70 @@ namespace coffee {
             return indices_.graphicsFamily.value();
         }
 
-        inline uint32_t graphicsQueueFamilyIndex() const noexcept
+        inline uint32_t graphicsQueueFamilyIndex() const noexcept { return indices_.graphicsFamily.value(); }
+
+        [[nodiscard]] ScopeExit singleTimeTransfer(std::function<void(const CommandBuffer&)>&& transferActions);
+        [[nodiscard]] ScopeExit singleTimeGraphics(std::function<void(const CommandBuffer&)>&& graphicsActions);
+
+        // Generic Vulkan structures
+
+        inline VkInstance instance() const noexcept { return instance_; }
+
+        inline VkPhysicalDevice physicalDevice() const noexcept { return physicalDevice_; }
+
+        inline VkDevice logicalDevice() const noexcept { return logicalDevice_; }
+
+        inline VkDescriptorPool descriptorPool() const noexcept { return descriptorPool_; }
+
+        inline VmaAllocator allocator() const noexcept { return allocator_; }
+
+        // Swapchain related functions
+
+        inline uint32_t imageCount() const noexcept { return imageCountForSwapChain_; }
+
+        inline uint32_t currentOperation() const noexcept { return currentOperation_; }
+
+        inline uint32_t currentOperationInFlight() const noexcept { return currentOperationInFlight_; }
+
+        // Properties
+
+        inline std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> heapBudgets() const noexcept
         {
-            return indices_.graphicsFamily.value();
+            std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets {};
+            vmaGetHeapBudgets(allocator_, budgets.data());
+
+            return budgets;
         }
 
-        ScopeExit singleTimeTransfer(std::function<void(const CommandBuffer&)>&& transferActions);
-        ScopeExit singleTimeGraphics(std::function<void(const CommandBuffer&)>&& graphicsActions);
-
-        inline VkInstance instance() const noexcept
+        inline const VkPhysicalDeviceMemoryProperties* memoryProperties() const noexcept
         {
-            return instance_;
+            const VkPhysicalDeviceMemoryProperties* properties = nullptr;
+            vmaGetMemoryProperties(allocator_, &properties);
+
+            return properties;
         }
 
-        inline VkPhysicalDevice physicalDevice() const noexcept
-        {
-            return physicalDevice_;
-        }
+        inline const VkPhysicalDeviceProperties& properties() const noexcept { return properties_; }
 
-        inline VkDevice logicalDevice() const noexcept
-        {
-            return logicalDevice_;
-        }
+        // Formats
 
-        inline VkDescriptorPool descriptorPool() const noexcept
-        {
-            return descriptorPool_;
-        }
+        inline const VkSurfaceFormatKHR& surfaceFormat() const noexcept { return surfaceFormat_; }
 
-        inline VmaAllocator allocator() const noexcept
-        {
-            return allocator_;
-        }
+        inline VkFormat optimalDepthFormat() const noexcept { return optimalDepthFormat_; }
 
-        inline uint32_t imageCount() const noexcept
-        {
-            return imageCountForSwapChain_;
-        }
-
-        inline uint32_t currentOperation() const noexcept
-        {
-            return currentOperation_;
-        }
-
-        inline uint32_t currentOperationInFlight() const noexcept
-        {
-            return currentOperationInFlight_;
-        }
-
-        inline const VkPhysicalDeviceProperties& properties() const noexcept
-        {
-            return properties_;
-        }
-
-        inline const VkSurfaceFormatKHR& surfaceFormat() const noexcept
-        {
-            return surfaceFormat_;
-        }
+        inline VkFormat optimalDepthStencilFormat() const noexcept { return optimalDepthStencilFormat_; }
 
     private:
+        GPUDevice();
+
+        void initializeGlobalEnvironment();
+        void deinitializeGlobalEnvironment();
+
+        GLFWwindow* createTemporaryWindow();
+        VkSurfaceKHR createTemporarySurface(GLFWwindow* window);
+        void destroyTemporarySurface(VkSurfaceKHR surface);
+        void destroyTemporaryWindow(GLFWwindow* window);
+
         void createInstance();
         void createDebugMessenger();
         void pickPhysicalDevice(VkSurfaceKHR surface);
@@ -137,6 +158,13 @@ namespace coffee {
             CommandBuffer&& commandBuffer
         );
 
+        VkCommandPool acquireGraphicsCommandPool();
+        void returnGraphicsCommandPool(VkCommandPool pool);
+        VkCommandPool acquireTransferCommandPool();
+        void returnTransferCommandPool(VkCommandPool pool);
+
+        void clearCommandBuffers(size_t index);
+
         uint32_t imageCountForSwapChain_ = 0;
         uint32_t currentOperation_ = 0;         // Must be in range of [0, imageCountForSwapChain]
         uint32_t currentOperationInFlight_ = 0; // Must be in range of [0, maxOperationsInFlight]
@@ -151,6 +179,8 @@ namespace coffee {
         VkDevice logicalDevice_ = VK_NULL_HANDLE;
 
         VkSurfaceFormatKHR surfaceFormat_ {};
+        VkFormat optimalDepthFormat_ = VK_FORMAT_UNDEFINED;
+        VkFormat optimalDepthStencilFormat_ = VK_FORMAT_UNDEFINED;
         VkPhysicalDeviceProperties properties_ {};
         VkUtils::QueueFamilyIndices indices_ {};
 
@@ -162,16 +192,18 @@ namespace coffee {
         std::mutex graphicsQueueMutex_ {};
         std::mutex transferQueueMutex_ {};
 
-        std::vector<SubmitInfo> pendingSubmits_ {};
         std::mutex submitMutex_ {};
+        std::vector<SubmitInfo> pendingSubmits_ {};
+        std::vector<bool> poolsAndBuffersClearFlags_ {};
+        std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
 
-        std::vector<VkCommandPool> graphicsPools_ {};
-        std::mutex graphicsPoolsMutex_ {};
-        std::vector<VkCommandPool> transferPools_ {};
-        std::mutex transferPoolsMutex_ {};
+        tbb::concurrent_queue<VkCommandPool> graphicsPools_ {};
+        tbb::concurrent_queue<VkCommandPool> transferPools_ {};
 
         VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
         VmaAllocator allocator_ = VK_NULL_HANDLE;
+
+        friend class CommandBuffer;
     };
 
 } // namespace coffee

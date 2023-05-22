@@ -1,8 +1,8 @@
 #include <coffee/events/event.hpp>
 
-#include <GLFW/glfw3.h>
-
 #include <atomic>
+
+#include <GLFW/glfw3.h>
 
 namespace coffee {
 

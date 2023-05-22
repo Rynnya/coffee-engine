@@ -26,13 +26,16 @@ namespace coffee {
         static constexpr uint32_t uintmax = std::numeric_limits<uint32_t>::max();
 
     public:
-        CommandBuffer(Device& device, CommandBufferType type);
         ~CommandBuffer() noexcept;
+
+        static CommandBuffer createTransfer(const GPUDevicePtr& device);
+        static CommandBuffer createGraphics(const GPUDevicePtr& device);
+        static CommandBuffer createCompute(const GPUDevicePtr& device);
 
         CommandBuffer(CommandBuffer&& other) noexcept;
         CommandBuffer& operator=(CommandBuffer&&) = delete;
 
-        inline void copyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, size_t regionCount, const VkBufferCopy* pRegions)
+        inline void copyBuffer(const BufferPtr& srcBuffer, const BufferPtr& dstBuffer, size_t regionCount, const VkBufferCopy* pRegions)
             const noexcept
         {
             COFFEE_ASSERT(srcBuffer != nullptr, "Invalid srcBuffer provided.");
@@ -55,9 +58,9 @@ namespace coffee {
         }
 
         inline void copyImage(
-            const Image& srcImage,
+            const ImagePtr& srcImage,
             VkImageLayout srcImageLayout,
-            const Image& dstImage,
+            const ImagePtr& dstImage,
             VkImageLayout dstImageLayout,
             size_t regionCount,
             const VkImageCopy* pRegions
@@ -82,8 +85,8 @@ namespace coffee {
         }
 
         inline void copyBufferToImage(
-            const Buffer& srcBuffer,
-            const Image& dstImage,
+            const BufferPtr& srcBuffer,
+            const ImagePtr& dstImage,
             VkImageLayout dstImageLayout,
             size_t regionCount,
             const VkBufferImageCopy* pRegions
@@ -112,9 +115,9 @@ namespace coffee {
         }
 
         inline void copyImageToBuffer(
-            const Image& srcImage,
+            const ImagePtr& srcImage,
             VkImageLayout srcImageLayout,
-            const Buffer& dstBuffer,
+            const BufferPtr& dstBuffer,
             size_t regionCount,
             const VkBufferImageCopy* pRegions
         ) const noexcept
@@ -141,7 +144,7 @@ namespace coffee {
             );
         }
 
-        inline void bindPipeline(VkPipelineBindPoint bindPoint, const Pipeline& pipeline) const noexcept
+        inline void bindPipeline(VkPipelineBindPoint bindPoint, const PipelinePtr& pipeline) const noexcept
         {
             COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot bind pipeline to transfer command buffer.");
 
@@ -152,7 +155,7 @@ namespace coffee {
 
         inline void bindDescriptorSets(
             VkPipelineBindPoint bindPoint,
-            const Pipeline& pipeline,
+            const PipelinePtr& pipeline,
             size_t descriptorSetCount,
             const VkDescriptorSet* pDescriptorSets,
             size_t firstSet = 0U
@@ -180,7 +183,7 @@ namespace coffee {
         }
 
         inline void pushConstants(
-            const Pipeline& pipeline,
+            const PipelinePtr& pipeline,
             VkShaderStageFlags stageFlags,
             size_t size,
             const void* pValues,
@@ -206,8 +209,8 @@ namespace coffee {
         }
 
         inline void beginRenderPass(
-            const RenderPass& renderPass,
-            const Framebuffer& framebuffer,
+            const RenderPassPtr& renderPass,
+            const FramebufferPtr& framebuffer,
             const VkRect2D& renderArea,
             size_t clearValueCount,
             const VkClearValue* pClearValues
@@ -275,7 +278,7 @@ namespace coffee {
             vkCmdBindVertexBuffers(buffer_, static_cast<uint32_t>(firstBinding), static_cast<uint32_t>(bindingCount), pBuffers, pOffsets);
         }
 
-        inline void bindIndexBuffer(const Buffer& indexBuffer, VkDeviceSize offset = 0ULL) const noexcept
+        inline void bindIndexBuffer(const BufferPtr& indexBuffer, VkDeviceSize offset = 0ULL) const noexcept
         {
             COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
 
@@ -305,7 +308,7 @@ namespace coffee {
             vkCmdDrawIndexed(buffer_, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
         }
 
-        inline void drawIndirect(const Buffer& drawBuffer, VkDeviceSize offset = 0U, uint32_t drawCount = 1U, uint32_t stride = 0U)
+        inline void drawIndirect(const BufferPtr& drawBuffer, VkDeviceSize offset = 0U, uint32_t drawCount = 1U, uint32_t stride = 0U)
             const noexcept
         {
             COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
@@ -315,8 +318,12 @@ namespace coffee {
             vkCmdDrawIndirect(buffer_, drawBuffer->buffer(), offset, drawCount, stride);
         }
 
-        inline void drawIndexedIndirect(const Buffer& drawBuffer, VkDeviceSize offset = 0U, uint32_t drawCount = 1U, uint32_t stride = 0U)
-            const noexcept
+        inline void drawIndexedIndirect(
+            const BufferPtr& drawBuffer,
+            VkDeviceSize offset = 0U,
+            uint32_t drawCount = 1U,
+            uint32_t stride = 0U
+        ) const noexcept
         {
             COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
 
@@ -332,7 +339,7 @@ namespace coffee {
             vkCmdDispatch(buffer_, groupCountX, groupCountY, groupCountZ);
         }
 
-        inline void dispatchIndirect(const Buffer& dispatchBuffer, VkDeviceSize offset = 0U) const noexcept
+        inline void dispatchIndirect(const BufferPtr& dispatchBuffer, VkDeviceSize offset = 0U) const noexcept
         {
             COFFEE_ASSERT(type == CommandBufferType::Compute, "CommandBufferType must be Compute.");
 
@@ -341,24 +348,51 @@ namespace coffee {
             vkCmdDispatchIndirect(buffer_, dispatchBuffer->buffer(), offset);
         }
 
+        // Provides strong pipeline synchronization between two scopes
+        // WARNING: Must not be used in production as can cause huge overhead
+        // Use this only as debugging tool to catch some nesty bugs
+        inline void fullPipelineBarrier() const noexcept
+        {
+            constexpr VkAccessFlags allAccessFlags =
+                VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+                VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
+                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT |
+                VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT;
+
+            VkMemoryBarrier memoryBarrier { VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+            memoryBarrier.srcAccessMask = allAccessFlags;
+            memoryBarrier.dstAccessMask = allAccessFlags;
+
+            vkCmdPipelineBarrier(
+                buffer_,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                0,
+                1,
+                &memoryBarrier,
+                0,
+                nullptr,
+                0,
+                nullptr
+            );
+        };
+
         // Provided as way to add additional functionality if not present in this implementation
         // WARNING: Using this naked pointer will allow to forbidden usage of Vulkan, please look closely to Validation Errors
-        inline operator VkCommandBuffer() const noexcept
-        {
-            return buffer_;
-        }
+        inline operator VkCommandBuffer() const noexcept { return buffer_; }
 
         const CommandBufferType type;
 
     private:
-        Device& device_;
+        CommandBuffer(const GPUDevicePtr& device, CommandBufferType type);
+
+        GPUDevicePtr device_;
 
         VkCommandPool pool_ = VK_NULL_HANDLE;
         VkCommandBuffer buffer_ = VK_NULL_HANDLE;
 
-        friend class Engine;
-        friend class Device;
-        friend class SwapChain;
+        friend class GPUDevice;
     };
 
 } // namespace coffee

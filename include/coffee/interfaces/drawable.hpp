@@ -10,7 +10,8 @@ namespace coffee {
         Drawable() noexcept = default;
         virtual ~Drawable() noexcept = default;
 
-        virtual void draw(const CommandBuffer& commandBuffer) = 0;
+        virtual void bind(const CommandBuffer& commandBuffer) const {};
+        virtual void draw(const CommandBuffer& commandBuffer) const = 0;
     };
 
 } // namespace coffee

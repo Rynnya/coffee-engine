@@ -7,15 +7,18 @@ namespace coffee {
 
     class Math {
     public:
-        static constexpr size_t getLowestBit(size_t bitmask) noexcept {
-            return bitmask & ~(bitmask - 1);
+        static inline bool isSystemLittleEndian()
+        {
+            const uint32_t value = 0x01;
+            return (*static_cast<const uint8_t*>(static_cast<const void*>(&value)) == 0x01);
         }
 
-        static constexpr size_t excludeLowestBit(size_t bitmask) noexcept {
-            return bitmask & (bitmask - 1);
-        }
+        static constexpr size_t getLowestBit(size_t bitmask) noexcept { return bitmask & ~(bitmask - 1); }
 
-        static constexpr size_t getHighestBit(size_t bitmask) noexcept {
+        static constexpr size_t excludeLowestBit(size_t bitmask) noexcept { return bitmask & (bitmask - 1); }
+
+        static constexpr size_t getHighestBit(size_t bitmask) noexcept
+        {
             // Reference: http://aggregate.org/MAGIC/#Most%20Significant%201%20Bit
 
             bitmask |= bitmask >> 1;
@@ -31,11 +34,49 @@ namespace coffee {
             return bitmask & ~(bitmask >> 1);
         }
 
-        static constexpr size_t excludeHighestBit(size_t bitmask) noexcept {
-            return bitmask & ~getHighestBit(bitmask);
+        static constexpr size_t excludeHighestBit(size_t bitmask) noexcept { return bitmask & ~getHighestBit(bitmask); }
+
+        // For some reasons MSVC cannot detect byte swap and replace it with single instruction
+
+        // Provided just for convenience when working with binary data in different endianness
+        // Eventually will be converted into no-op
+        static constexpr uint8_t byteSwap(uint8_t value) { return value; }
+
+        static inline uint16_t byteSwap(uint16_t value)
+        {
+#if defined(COFFEE_MSVC)
+            return _byteswap_ushort(value);
+#else
+            return (((value & 0x00FF) << 8) | ((value & 0xFF00) >> 8));
+#endif
         }
 
-        static constexpr uint32_t indexOfHighestBit(uint32_t bitmask) noexcept {
+        static inline uint32_t byteSwap(uint32_t value)
+        {
+#if defined(COFFEE_MSVC)
+            return _byteswap_ulong(value);
+#else
+            return (
+                ((value & 0x000000FF) << 24) | ((value & 0x0000FF00) << 8) | ((value & 0x00FF0000) >> 8) | ((value & 0xFF000000) >> 24)
+            );
+#endif
+        }
+
+        static inline uint64_t byteSwap(uint64_t value)
+        {
+#if defined(COFFEE_MSVC)
+            return _byteswap_uint64(value);
+#else
+            return (
+                ((value & 0x00000000000000FF) << 56) | ((value & 0x000000000000FF00) << 40) | ((value & 0x0000000000FF0000) << 24) |
+                ((value & 0x00000000FF000000) << 8) | ((value & 0x000000FF00000000) >> 8) | ((value & 0x0000FF0000000000) >> 24) |
+                ((value & 0x00FF000000000000) >> 40) | ((value & 0xFF00000000000000) >> 56)
+            );
+#endif
+        }
+
+        static constexpr uint32_t indexOfHighestBit(uint32_t bitmask) noexcept
+        {
             constexpr size_t multiplyDeBruijnBitPosition[32] = { 0, 9,  1,  10, 13, 21, 2,  29, 11, 14, 16, 18, 22, 25, 3, 30,
                                                                  8, 12, 20, 28, 15, 17, 24, 7,  19, 27, 23, 6,  26, 5,  4, 31 };
 
@@ -48,7 +89,8 @@ namespace coffee {
             return multiplyDeBruijnBitPosition[static_cast<uint32_t>(bitmask * 0x07C4ACDDU) >> 27];
         }
 
-        static constexpr size_t countActiveBits(size_t bitmask) noexcept {
+        static constexpr size_t countActiveBits(size_t bitmask) noexcept
+        {
             // Reference: https://en.wikipedia.org/wiki/Hamming_weight#Efficient_implementation
 
             constexpr size_t m1 = 0x5555555555555555;
@@ -62,11 +104,10 @@ namespace coffee {
             return (bitmask * h01) >> 56;
         }
 
-        static constexpr bool hasSingleBit(size_t bitmask) {
-            return bitmask != 0 && !(bitmask & (bitmask - 1));
-        }
+        static constexpr bool hasSingleBit(size_t bitmask) { return bitmask != 0 && !(bitmask & (bitmask - 1)); }
 
-        static constexpr size_t roundToPowerOf2(size_t bitmask) noexcept {
+        static constexpr size_t roundToPowerOf2(size_t bitmask) noexcept
+        {
             // Reference: https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
 
             bitmask--;
@@ -83,11 +124,13 @@ namespace coffee {
             return ++bitmask;
         }
 
-        static constexpr size_t roundToMultiple(size_t numerator, size_t denominator) noexcept {
+        static constexpr size_t roundToMultiple(size_t numerator, size_t denominator) noexcept
+        {
             return (static_cast<size_t>((numerator - 1) / denominator) + 1) * denominator;
         }
 
-        static constexpr size_t interleaveBits(uint32_t x, uint32_t y, uint32_t z) {
+        static constexpr size_t interleaveBits(uint32_t x, uint32_t y, uint32_t z)
+        {
             constexpr uint32_t mortonXTable[256] = {
                 0x00000000, 0x00000001, 0x00000008, 0x00000009, 0x00000040, 0x00000041, 0x00000048, 0x00000049, 0x00000200, 0x00000201,
                 0x00000208, 0x00000209, 0x00000240, 0x00000241, 0x00000248, 0x00000249, 0x00001000, 0x00001001, 0x00001008, 0x00001009,

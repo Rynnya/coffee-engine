@@ -4,8 +4,6 @@
 #include <coffee/graphics/device.hpp>
 #include <coffee/utils/non_copyable.hpp>
 
-#include <vk_mem_alloc.h>
-
 namespace coffee {
 
     struct BufferConfiguration {
@@ -14,15 +12,38 @@ namespace coffee {
         VkBufferUsageFlags usageFlags = 0;
         VkMemoryPropertyFlags memoryProperties = 0;
         VmaAllocationCreateFlags allocationFlags = 0;
+        VmaMemoryUsage allocationUsage = VMA_MEMORY_USAGE_AUTO;
         float priority = 0.5f;
     };
 
-    class BufferImpl : NonMoveable {
-    public:
-        BufferImpl(Device& device, const BufferConfiguration& configuration);
-        ~BufferImpl() noexcept;
+    struct FSBufferConfiguration {
+        std::string path {};
+        VkDeviceSize size = std::numeric_limits<VkDeviceSize>::max();
+        VkDeviceSize offset = 0;
+        VkBufferUsageFlags usageFlags = 0;
+        VkMemoryPropertyFlags memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        VmaAllocationCreateFlags allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+        VmaMemoryUsage allocationUsage = VMA_MEMORY_USAGE_AUTO;
+        float priority = 0.5f;
+    };
 
-        void map() noexcept;
+    class Buffer;
+    using BufferPtr = std::unique_ptr<Buffer>;
+
+    class Buffer : NonMoveable {
+    public:
+        ~Buffer() noexcept;
+
+        static BufferPtr create(const GPUDevicePtr& device, const BufferConfiguration& configuration);
+        // TODO: Replace FilesystemPtr with std::vector<uint8_t> so AssetManager can call this
+        //static BufferPtr create(
+        //    const GPUDevicePtr& device,
+        //    const FilesystemPtr& filesystem,
+        //    const FSBufferConfiguration& configuration,
+        //    const ThreadContext& ctx = {}
+        //);
+
+        void* map();
         void unmap() noexcept;
         void flush(size_t size = VK_WHOLE_SIZE, size_t offset = 0U);
         void invalidate(size_t size, size_t offset = 0U);
@@ -32,40 +53,29 @@ namespace coffee {
         const VkBufferUsageFlags usageFlags = 0;
         const VkMemoryPropertyFlags memoryProperties = 0;
 
-        inline const VkBuffer& buffer() const noexcept
-        {
-            return buffer_;
-        }
+        inline const VkBuffer& buffer() const noexcept { return buffer_; }
 
-        inline void* memory() const noexcept
-        {
-            return mappedMemory_;
-        }
+        // WARNING: This pointer point to the beginning of buffer, so you must always apply offset to it
+        // Map doesn't have such flaw because it does offset automatically
+        inline void* memory() const noexcept { return mappedMemory_; }
 
-        inline bool isHostVisible() const noexcept
-        {
-            return isHostVisible_;
-        }
+        inline bool isHostVisible() const noexcept { return isHostVisible_; }
 
-        inline bool isHostCoherent() const noexcept
-        {
-            return isHostCoherent_;
-        }
+        inline bool isHostCoherent() const noexcept { return isHostCoherent_; }
 
     private:
-        Device& device_;
+        Buffer(const GPUDevicePtr& device, const BufferConfiguration& configuration);
+
+        GPUDevicePtr device_;
 
         VmaAllocation allocation_ = VK_NULL_HANDLE;
         VkBuffer buffer_ = VK_NULL_HANDLE;
         void* mappedMemory_ = nullptr;
+        std::atomic_uint16_t mapCount_ = 0;
 
         bool isHostVisible_ = false;
         bool isHostCoherent_ = false;
-
-        std::mutex allocationMutex_ {};
     };
-
-    using Buffer = std::unique_ptr<BufferImpl>;
 
 } // namespace coffee
 

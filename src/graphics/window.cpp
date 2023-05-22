@@ -1,5 +1,6 @@
 #include <coffee/graphics/window.hpp>
 
+#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/platform.hpp>
 
@@ -12,7 +13,7 @@ namespace coffee {
 
     static std::mutex creationMutex {};
 
-    WindowImpl::WindowImpl(Device& device, WindowSettings settings, const std::string& windowName) : device_ { device }
+    Window::Window(const GPUDevicePtr& device, WindowSettings settings, const std::string& windowName) : device_ { device }
     {
         std::string safeWindowName { windowName };
 
@@ -25,9 +26,13 @@ namespace coffee {
 
             glfwDefaultWindowHints();
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
             monitorHandle_ = glfwGetPrimaryMonitor();
-            COFFEE_THROW_IF(monitorHandle_ == nullptr, "Failed to get primary monitor handle!");
+
+            if (monitorHandle_ == nullptr) {
+                COFFEE_ERROR("Failed to get primary monitor handle!");
+
+                throw GLFWException { "Failed to get primary monitor handle!" };
+            }
 
             if (settings.fullscreen && settings.borderless) {
                 COFFEE_WARNING(
@@ -51,7 +56,12 @@ namespace coffee {
 
             if (settings.extent.width == 0 || settings.extent.height == 0) {
                 const GLFWvidmode* videoMode = glfwGetVideoMode(monitorHandle_);
-                COFFEE_THROW_IF(videoMode == nullptr, "Failed to retreave main video mode of primary monitor!");
+
+                if (videoMode == nullptr) {
+                    COFFEE_ERROR("Failed to retreave main video mode of primary monitor!");
+
+                    throw GLFWException { "Failed to retreave main video mode of primary monitor!" };
+                }
 
                 settings.extent.width =
                     static_cast<uint32_t>(settings.fullscreen ? videoMode->width : videoMode->width - videoMode->width / 2);
@@ -66,7 +76,12 @@ namespace coffee {
                 settings.fullscreen ? monitorHandle_ : nullptr,
                 nullptr
             );
-            COFFEE_THROW_IF(windowHandle_ == nullptr, "Failed to create new GLFW window!");
+
+            if (windowHandle_ == nullptr) {
+                COFFEE_ERROR("Failed to create new GLFW window!");
+
+                throw GLFWException { "Failed to create new GLFW window!" };
+            }
         }
 
         titleName_ = safeWindowName;
@@ -114,53 +129,54 @@ namespace coffee {
         glfwSetCharCallback(windowHandle_, charCallback);
 
         glfwSetWindowUserPointer(windowHandle_, this);
+        VkResult result = glfwCreateWindowSurface(device_->instance(), windowHandle_, nullptr, &surfaceHandle_);
 
-        COFFEE_THROW_IF(
-            glfwCreateWindowSurface(device_.instance(), windowHandle_, nullptr, &surfaceHandle_) != VK_SUCCESS,
-            "Failed to create window surface!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create window surface!");
+
+            throw RegularVulkanException { result };
+        }
 
         const VkExtent2D extent = { static_cast<uint32_t>(framebufferWidth_), static_cast<uint32_t>(framebufferHeight_) };
         swapChain = std::make_unique<SwapChain>(device_, surfaceHandle_, extent, settings.presentMode);
     }
 
-    WindowImpl::~WindowImpl() noexcept
+    Window::~Window() noexcept
     {
         swapChain->waitIdle();
 
         swapChain = nullptr;
-        vkDestroySurfaceKHR(device_.instance(), surfaceHandle_, nullptr);
+        vkDestroySurfaceKHR(device_->instance(), surfaceHandle_, nullptr);
 
         glfwDestroyWindow(windowHandle_);
     }
 
-    const std::vector<Image>& WindowImpl::presentImages() const noexcept
+    WindowPtr Window::create(const GPUDevicePtr& device, WindowSettings settings, const std::string& windowName)
     {
-        return swapChain->presentImages();
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+
+        return std::unique_ptr<Window>(new Window { device, settings, windowName });
     }
 
-    uint32_t WindowImpl::currentImageIndex() const noexcept
-    {
-        return swapChain->currentFrame();
-    }
+    const std::vector<ImagePtr>& Window::presentImages() const noexcept { return swapChain->presentImages(); }
 
-    bool WindowImpl::acquireNextImage()
-    {
-        return swapChain->acquireNextImage();
-    }
+    uint32_t Window::currentImageIndex() const noexcept { return swapChain->currentFrame(); }
 
-    void WindowImpl::sendCommandBuffer(CommandBuffer&& commandBuffer)
+    bool Window::acquireNextImage() { return swapChain->acquireNextImage(); }
+
+    void Window::sendCommandBuffer(CommandBuffer&& commandBuffer)
     {
         std::vector<CommandBuffer> commandBuffers {};
         commandBuffers.push_back(std::move(commandBuffer));
         swapChain->submitCommandBuffers(std::move(commandBuffers));
     }
 
-    void WindowImpl::sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers)
+    void Window::sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers)
     {
         swapChain->submitCommandBuffers(std::move(commandBuffers));
     }
 
-    void WindowImpl::changePresentMode(VkPresentModeKHR newMode)
+    void Window::changePresentMode(VkPresentModeKHR newMode)
     {
         while (framebufferWidth_ == 0 || framebufferHeight_ == 0) {
             glfwWaitEvents();
@@ -172,12 +188,9 @@ namespace coffee {
         presentModeEvent(*this, std::forward<VkPresentModeKHR>(newMode));
     }
 
-    const std::string& WindowImpl::getWindowTitle() const noexcept
-    {
-        return titleName_;
-    }
+    const std::string& Window::getWindowTitle() const noexcept { return titleName_; }
 
-    void WindowImpl::setWindowTitle(const std::string& newTitle) const noexcept
+    void Window::setWindowTitle(const std::string& newTitle) const noexcept
     {
         if (newTitle.empty()) {
             return;
@@ -187,62 +200,29 @@ namespace coffee {
         titleName_ = newTitle;
     }
 
-    bool WindowImpl::isFocused() const noexcept
-    {
-        return windowFocused_;
-    }
+    bool Window::isFocused() const noexcept { return windowFocused_; }
 
-    void WindowImpl::focusWindow() const noexcept
-    {
-        glfwFocusWindow(windowHandle_);
-    }
+    void Window::focusWindow() const noexcept { glfwFocusWindow(windowHandle_); }
 
-    bool WindowImpl::isIconified() const noexcept
-    {
-        return windowIconified_;
-    }
+    bool Window::isIconified() const noexcept { return windowIconified_; }
 
-    void WindowImpl::hideWindow() const noexcept
-    {
-        glfwHideWindow(windowHandle_);
-    }
+    void Window::hideWindow() const noexcept { glfwHideWindow(windowHandle_); }
 
-    void WindowImpl::showWindow() const noexcept
-    {
-        glfwShowWindow(windowHandle_);
-    }
+    void Window::showWindow() const noexcept { glfwShowWindow(windowHandle_); }
 
-    bool WindowImpl::isBorderless() const noexcept
-    {
-        return !static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_DECORATED));
-    }
+    bool Window::isBorderless() const noexcept { return !static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_DECORATED)); }
 
-    void WindowImpl::makeBorderless() const noexcept
-    {
-        glfwSetWindowAttrib(windowHandle_, GLFW_DECORATED, GLFW_FALSE);
-    }
+    void Window::makeBorderless() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_DECORATED, GLFW_FALSE); }
 
-    void WindowImpl::revertBorderless() const noexcept
-    {
-        glfwSetWindowAttrib(windowHandle_, GLFW_DECORATED, GLFW_TRUE);
-    }
+    void Window::revertBorderless() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_DECORATED, GLFW_TRUE); }
 
-    bool WindowImpl::isPassthrough() const noexcept
-    {
-        return static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH));
-    }
+    bool Window::isPassthrough() const noexcept { return static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH)); }
 
-    void WindowImpl::enablePassthrough() const noexcept
-    {
-        glfwSetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH, GLFW_TRUE);
-    }
+    void Window::enablePassthrough() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH, GLFW_TRUE); }
 
-    void WindowImpl::disablePassthrough() const noexcept
-    {
-        glfwSetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH, GLFW_FALSE);
-    }
+    void Window::disablePassthrough() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH, GLFW_FALSE); }
 
-    CursorState WindowImpl::cursorState() const noexcept
+    CursorState Window::cursorState() const noexcept
     {
         switch (glfwGetInputMode(windowHandle_, GLFW_CURSOR)) {
             default:
@@ -255,88 +235,59 @@ namespace coffee {
         }
     }
 
-    void WindowImpl::showCursor() const noexcept
-    {
-        glfwSetInputMode(windowHandle_, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-    }
+    void Window::showCursor() const noexcept { glfwSetInputMode(windowHandle_, GLFW_CURSOR, GLFW_CURSOR_NORMAL); }
 
-    void WindowImpl::hideCursor() const noexcept
-    {
-        glfwSetInputMode(windowHandle_, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-    }
+    void Window::hideCursor() const noexcept { glfwSetInputMode(windowHandle_, GLFW_CURSOR, GLFW_CURSOR_HIDDEN); }
 
-    void WindowImpl::disableCursor() const noexcept
-    {
-        glfwSetInputMode(windowHandle_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    }
+    void Window::disableCursor() const noexcept { glfwSetInputMode(windowHandle_, GLFW_CURSOR, GLFW_CURSOR_DISABLED); }
 
-    void WindowImpl::setCursor(const Cursor& cursor) const noexcept
+    void Window::setCursor(const CursorPtr& cursor) const noexcept
     {
         if (cursor != nullptr) {
-            glfwSetCursor(windowHandle_, reinterpret_cast<GLFWcursor*>(cursor->nativeHandle_));
+            glfwSetCursor(windowHandle_, cursor->cursor_);
         }
     }
 
-    void WindowImpl::resetCursor() const noexcept
-    {
-        glfwSetCursor(windowHandle_, nullptr);
-    }
+    void Window::resetCursor() const noexcept { glfwSetCursor(windowHandle_, nullptr); }
 
-    Float2D WindowImpl::mousePosition() const noexcept
-    {
-        return { static_cast<float>(xMousePosition_), static_cast<float>(yMousePosition_) };
-    }
+    Float2D Window::mousePosition() const noexcept { return { static_cast<float>(xMousePosition_), static_cast<float>(yMousePosition_) }; }
 
-    VkOffset2D WindowImpl::windowPosition() const noexcept
-    {
-        return { xWindowPosition_, yWindowPosition_ };
-    }
+    VkOffset2D Window::windowPosition() const noexcept { return { xWindowPosition_, yWindowPosition_ }; }
 
-    VkExtent2D WindowImpl::windowSize() const noexcept
-    {
-        return { windowWidth_, windowHeight_ };
-    }
+    VkExtent2D Window::windowSize() const noexcept { return { windowWidth_, windowHeight_ }; }
 
-    VkExtent2D WindowImpl::framebufferSize() const noexcept
-    {
-        return { framebufferWidth_, framebufferHeight_ };
-    }
+    VkExtent2D Window::framebufferSize() const noexcept { return { framebufferWidth_, framebufferHeight_ }; }
 
-    void WindowImpl::setMousePosition(const Float2D& position) const noexcept
+    void Window::setMousePosition(const Float2D& position) const noexcept
     {
         glfwSetCursorPos(windowHandle_, static_cast<double>(position.x), static_cast<double>(position.y));
     }
 
-    void WindowImpl::setWindowPosition(const VkOffset2D& position) const noexcept
-    {
-        glfwSetWindowPos(windowHandle_, position.x, position.y);
-    }
+    void Window::setWindowPosition(const VkOffset2D& position) const noexcept { glfwSetWindowPos(windowHandle_, position.x, position.y); }
 
-    void WindowImpl::setWindowSize(const VkExtent2D& size) const noexcept
+    void Window::setWindowSize(const VkExtent2D& size) const noexcept
     {
         glfwSetWindowSize(windowHandle_, size.width, size.height);
         windowWidth_ = framebufferWidth_ = size.width;
         windowWidth_ = framebufferHeight_ = size.height;
     }
 
-    bool WindowImpl::isButtonPressed(Keys key) const noexcept
-    {
-        return glfwGetKey(windowHandle_, *key) == GLFW_PRESS;
-    }
+    std::string Window::clipboard() { return glfwGetClipboardString(nullptr); }
 
-    bool WindowImpl::isButtonPressed(MouseButton mouseButton) const noexcept
+    void Window::setClipboard(const std::string& clipboard) { glfwSetClipboardString(nullptr, clipboard.data()); }
+
+    bool Window::isButtonPressed(Keys key) const noexcept { return glfwGetKey(windowHandle_, *key) == GLFW_PRESS; }
+
+    bool Window::isButtonPressed(MouseButton mouseButton) const noexcept
     {
         return glfwGetMouseButton(windowHandle_, *mouseButton) == GLFW_PRESS;
     }
 
-    bool WindowImpl::shouldClose() const noexcept
-    {
-        return static_cast<bool>(glfwWindowShouldClose(windowHandle_));
-    }
+    bool Window::shouldClose() const noexcept { return static_cast<bool>(glfwWindowShouldClose(windowHandle_)); }
 
-    void WindowImpl::framebufferResizeCallback(GLFWwindow* window, int width, int height)
+    void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
         // Discard all callbacks when window is minimized
         if (width == 0 || height == 0) {
@@ -358,26 +309,26 @@ namespace coffee {
         windowPtr->windowResizeEvent(*windowPtr, resizeEvent);
     }
 
-    void WindowImpl::resizeCallback(GLFWwindow* window, int width, int height)
+    void Window::resizeCallback(GLFWwindow* window, int width, int height)
     {
         // This callback most likely will be called with framebufferResizeCallback, so we don't do
         // any callbacks or actions here
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
         windowPtr->windowWidth_ = static_cast<uint32_t>(width);
         windowPtr->windowHeight_ = static_cast<uint32_t>(height);
     }
 
-    void WindowImpl::windowEnterCallback(GLFWwindow* window, int entered)
+    void Window::windowEnterCallback(GLFWwindow* window, int entered)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
         const WindowEnterEvent enterEvent { static_cast<bool>(entered) };
         windowPtr->windowEnterEvent(*windowPtr, enterEvent);
     }
 
-    void WindowImpl::windowPositionCallback(GLFWwindow* window, int xpos, int ypos)
+    void Window::windowPositionCallback(GLFWwindow* window, int xpos, int ypos)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
         windowPtr->xWindowPosition_ = xpos;
         windowPtr->yWindowPosition_ = ypos;
@@ -386,33 +337,33 @@ namespace coffee {
         windowPtr->windowPositionEvent(*windowPtr, positionEvent);
     }
 
-    void WindowImpl::windowCloseCallback(GLFWwindow* window)
+    void Window::windowCloseCallback(GLFWwindow* window)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
         windowPtr->windowCloseEvent(*windowPtr);
     }
 
-    void WindowImpl::focusCallback(GLFWwindow* window, int focused)
+    void Window::focusCallback(GLFWwindow* window, int focused)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
         windowPtr->windowFocused_ = static_cast<bool>(focused);
 
         const WindowFocusEvent focusEvent { static_cast<bool>(focused) };
         windowPtr->windowFocusEvent(*windowPtr, focusEvent);
     }
 
-    void WindowImpl::mouseClickCallback(GLFWwindow* window, int button, int action, int mods)
+    void Window::mouseClickCallback(GLFWwindow* window, int button, int action, int mods)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
         const MouseClickEvent mouseClickEvent { glfwToCoffeeState(action), static_cast<MouseButton>(button), static_cast<uint32_t>(mods) };
         windowPtr->mouseClickEvent(*windowPtr, mouseClickEvent);
     }
 
-    void WindowImpl::mousePositionCallback(GLFWwindow* window, double xpos, double ypos)
+    void Window::mousePositionCallback(GLFWwindow* window, double xpos, double ypos)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
         const MouseMoveEvent moveEvent { static_cast<float>(xpos), static_cast<float>(ypos) };
         windowPtr->mouseMoveEvent(*windowPtr, moveEvent);
@@ -421,17 +372,17 @@ namespace coffee {
         windowPtr->yMousePosition_ = ypos;
     }
 
-    void WindowImpl::mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset)
+    void Window::mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
         const MouseWheelEvent wheelEvent { static_cast<float>(xoffset), static_cast<float>(yoffset) };
         windowPtr->mouseWheelEvent(*windowPtr, wheelEvent);
     }
 
-    void WindowImpl::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+    void Window::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
         auto state = glfwToCoffeeState(action);
         const KeyEvent keyEvent { state, static_cast<Keys>(key), static_cast<uint32_t>(scancode), static_cast<uint32_t>(mods) };
@@ -439,9 +390,9 @@ namespace coffee {
         windowPtr->keyEvent(*windowPtr, keyEvent);
     }
 
-    void WindowImpl::charCallback(GLFWwindow* window, unsigned int codepoint)
+    void Window::charCallback(GLFWwindow* window, unsigned int codepoint)
     {
-        WindowImpl* windowPtr = static_cast<WindowImpl*>(glfwGetWindowUserPointer(window));
+        Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
         windowPtr->charEvent(*windowPtr, static_cast<char32_t>(codepoint));
     }
 

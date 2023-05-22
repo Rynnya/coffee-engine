@@ -19,7 +19,8 @@
 // https://stackoverflow.com/a/5920028
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #    define COFFEE_WINDOWS
-#    if defined(_MSC_VER) || defined(__MINGW32__) || defined(__MINGW64__)
+#    if defined(_MSC_VER)
+#        define COFFEE_MSVC
 #        pragma comment(lib, "user32.lib")
 #        pragma comment(lib, "gdi32.lib")
 #        pragma comment(lib, "shell32.lib")

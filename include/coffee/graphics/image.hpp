@@ -21,6 +21,12 @@ namespace coffee {
         float priority = 0.5f;
     };
 
+    struct FSImageConfiguration {
+        VkImageCreateFlags flags = 0;
+        uint32_t mipLevels = 1U;
+        float priority = 0.5f;
+    };
+
     struct ImageViewConfiguration {
         VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
         VkFormat format = VK_FORMAT_UNDEFINED;
@@ -28,57 +34,59 @@ namespace coffee {
         VkImageSubresourceRange subresourceRange { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     };
 
-    class ImageImpl : NonMoveable {
+    class Image;
+    using ImagePtr = std::shared_ptr<Image>;
+
+    class ImageView;
+    using ImageViewPtr = std::shared_ptr<ImageView>;
+
+    class Image : NonMoveable {
     public:
-        // Must be used for regular images BUT NOT FOR SWAPCHAIN ONE'S
-        ImageImpl(Device& device, const ImageConfiguration& configuration);
+        ~Image() noexcept;
 
-        // Must be used ONLY for swapchain images
-        ImageImpl(Device& device, VkFormat imageFormat, VkImage imageImpl, uint32_t width, uint32_t height) noexcept;
+        static ImagePtr create(const GPUDevicePtr& device, const ImageConfiguration& configuration);
 
-        ~ImageImpl() noexcept;
+        inline const VkImage& image() const noexcept { return image_; }
 
-        inline const VkImage& image() const noexcept
-        {
-            return image_;
-        }
-
+        const bool swapChainImage = false;
         const VkImageType imageType = VK_IMAGE_TYPE_2D;
         const VkFormat imageFormat = VK_FORMAT_UNDEFINED;
         const VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
         const VkExtent3D extent = {};
+        const uint32_t mipLevels = 1U;
+        const uint32_t arrayLayers = 1U;
 
     private:
-        Device& device_;
+        Image(const GPUDevicePtr& device, const ImageConfiguration& configuration);
 
-        const bool swapChainImage_ = false;
+        // Swapchain-specific constructor
+        Image(const GPUDevicePtr& device, VkFormat imageFormat, VkImage imageImpl, uint32_t width, uint32_t height) noexcept;
+
+        GPUDevicePtr device_;
 
         VmaAllocation allocation_ = VK_NULL_HANDLE;
         VkImage image_ = VK_NULL_HANDLE;
 
-        friend class ImageViewImpl;
+        friend class ImageView;
+        friend class SwapChain;
     };
 
-    using Image = std::shared_ptr<ImageImpl>;
-
-    class ImageViewImpl {
+    class ImageView : NonMoveable {
     public:
-        ImageViewImpl(const Image& image, const ImageViewConfiguration& configuration);
-        ~ImageViewImpl() noexcept;
+        ~ImageView() noexcept;
 
-        inline VkImageView view() const noexcept
-        {
-            return view_;
-        }
+        static ImageViewPtr create(const ImagePtr& image, const ImageViewConfiguration& configuration);
 
+        inline VkImageView view() const noexcept { return view_; }
+
+        const ImagePtr image;
         const VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     private:
-        Image image_ = nullptr;
+        ImageView(const ImagePtr& image, const ImageViewConfiguration& configuration);
+
         VkImageView view_ = VK_NULL_HANDLE;
     };
-
-    using ImageView = std::shared_ptr<ImageViewImpl>;
 
 } // namespace coffee
 

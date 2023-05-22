@@ -1,7 +1,12 @@
 #ifndef COFFEE_ABSTRACT_CURSOR
 #define COFFEE_ABSTRACT_CURSOR
 
-#include <memory>
+#include <coffee/types.hpp>
+
+#include <volk/volk.h>
+#include <GLFW/glfw3.h>
+
+#include <vector>
 
 namespace coffee {
 
@@ -18,21 +23,25 @@ namespace coffee {
         NotAllowed = 9
     };
 
-    class CursorImpl {
-    public:
-        CursorImpl(void* nativeHandle, CursorType type);
-        ~CursorImpl() noexcept;
+    class Cursor;
+    using CursorPtr = std::shared_ptr<Cursor>;
 
-        CursorType getType() const noexcept;
+    class Cursor {
+    public:
+        ~Cursor() noexcept;
+
+        static CursorPtr create(CursorType type);
+        static CursorPtr create(const std::vector<uint8_t>& rawImage, uint32_t width, uint32_t height, CursorType type);
+
+        const CursorType type = CursorType::Arrow;
 
     private:
-        void* nativeHandle_ = nullptr;
-        CursorType type_ = CursorType::Arrow;
+        Cursor(GLFWcursor* cursorHandle, CursorType type);
 
-        friend class WindowImpl;
+        GLFWcursor* cursor_ = nullptr;
+
+        friend class Window;
     };
-
-    using Cursor = std::shared_ptr<CursorImpl>;
 
 } // namespace coffee
 

@@ -11,30 +11,24 @@ namespace coffee {
         return Math::indexOfHighestBit(static_cast<uint32_t>(textureType));
     }
 
-    Materials::Materials(const Texture& defaultTexture) : defaultTexture { defaultTexture }
+    Materials::Materials(const ImageViewPtr& defaultTexture) : defaultTexture { defaultTexture }
     {
         COFFEE_ASSERT(defaultTexture != nullptr, "Invalid defaultTexture provided.");
 
         textures_.fill(defaultTexture);
     }
 
-    void Materials::write(const Texture& texture)
+    void Materials::write(const ImageViewPtr& texture, TextureType type)
     {
         if (texture == nullptr) {
             return;
         }
 
-        textures_[textureTypeToIndex(texture->type)] = texture;
-
-        if (texture != defaultTexture) {
-            reinterpret_cast<uint32_t&>(textureFlags_) |= static_cast<uint32_t>(texture->type);
-        }
+        textures_[textureTypeToIndex(type)] = texture;
+        reinterpret_cast<uint32_t&>(textureFlags_) |= static_cast<uint32_t>(type);
     }
 
-    const Texture& Materials::read(TextureType type) const noexcept
-    {
-        return textures_[textureTypeToIndex(type)];
-    }
+    const ImageViewPtr& Materials::read(TextureType type) const noexcept { return textures_[textureTypeToIndex(type)]; }
 
     void Materials::reset(TextureType type)
     {
@@ -42,9 +36,6 @@ namespace coffee {
         reinterpret_cast<uint32_t&>(textureFlags_) &= ~static_cast<uint32_t>(type);
     }
 
-    TextureType Materials::textureFlags() const noexcept
-    {
-        return textureFlags_;
-    }
+    TextureType Materials::textureFlags() const noexcept { return textureFlags_; }
 
 } // namespace coffee

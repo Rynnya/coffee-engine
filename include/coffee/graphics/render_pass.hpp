@@ -18,7 +18,7 @@ namespace coffee {
         VkAttachmentStoreOp stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         VkImageLayout finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        Image resolveImage = nullptr;
+        ImagePtr resolveImage = nullptr;
     };
 
     struct RenderPassConfiguration {
@@ -26,22 +26,26 @@ namespace coffee {
         std::optional<AttachmentConfiguration> depthStencilAttachment = std::nullopt;
     };
 
-    class RenderPassImpl {
+    class RenderPass;
+    using RenderPassPtr = std::unique_ptr<RenderPass>;
+
+    class RenderPass {
     public:
-        RenderPassImpl(Device& device, const RenderPassConfiguration& configuration);
-        ~RenderPassImpl() noexcept;
+        ~RenderPass() noexcept;
+
+        static RenderPassPtr create(const GPUDevicePtr& device, const RenderPassConfiguration& configuration);
 
         inline const VkRenderPass& renderPass() const noexcept {
             return renderPass_;
         }
 
     private:
-        Device& device_;
+        RenderPass(const GPUDevicePtr& device, const RenderPassConfiguration& configuration);
+
+        GPUDevicePtr device_;
 
         VkRenderPass renderPass_ = VK_NULL_HANDLE;
     };
-
-    using RenderPass = std::unique_ptr<RenderPassImpl>;
 
 } // namespace coffee
 

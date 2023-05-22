@@ -15,7 +15,7 @@ namespace coffee {
 
     class SwapChain {
     public:
-        SwapChain(Device& device, VkSurfaceKHR surface, VkExtent2D extent, VkPresentModeKHR preferablePresentMode);
+        SwapChain(const GPUDevicePtr& device, VkSurfaceKHR surface, VkExtent2D extent, VkPresentModeKHR preferablePresentMode);
         ~SwapChain() noexcept;
 
         bool acquireNextImage();
@@ -29,7 +29,7 @@ namespace coffee {
             return currentFrame_;
         }
 
-        inline const std::vector<Image>& presentImages() const noexcept
+        inline const std::vector<ImagePtr>& presentImages() const noexcept
         {
             return images_;
         }
@@ -44,20 +44,19 @@ namespace coffee {
         void createSwapChain(VkExtent2D extent, VkPresentModeKHR preferablePresentMode, VkSwapchainKHR oldSwapchain = nullptr);
         void createSyncObjects();
 
-        Device& device_;
+        GPUDevicePtr device_;
 
         VkSurfaceKHR surface_ = VK_NULL_HANDLE;
         VkSwapchainKHR handle_ = VK_NULL_HANDLE;
 
         uint32_t currentFrame_ = 0U;
 
-        std::vector<Image> images_ {};
-        std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
-
-        std::array<VkSemaphore, Device::maxOperationsInFlight> imageAvailableSemaphores_ {};
-        std::array<VkSemaphore, Device::maxOperationsInFlight> renderFinishedSemaphores_ {};
+        std::vector<ImagePtr> images_ {};
+        std::array<VkSemaphore, GPUDevice::maxOperationsInFlight> imageAvailableSemaphores_ {};
+        std::array<VkSemaphore, GPUDevice::maxOperationsInFlight> renderFinishedSemaphores_ {};
 
         VkPresentModeKHR currentPresentMode_ = VK_PRESENT_MODE_FIFO_KHR;
+        bool relaxedFIFOSupported_ = false;
         bool mailboxSupported_ = false;
         bool immediateSupported_ = false;
     };

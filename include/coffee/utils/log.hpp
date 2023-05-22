@@ -31,6 +31,8 @@ namespace coffee {
         coffee::log(coffee::MessageSeverity::Warning, __FILE__, __LINE__, fmt::format(formatting, ##__VA_ARGS__))
 #   define COFFEE_ERROR(formatting, ...) \
         coffee::log(coffee::MessageSeverity::Error, __FILE__, __LINE__, fmt::format(formatting, ##__VA_ARGS__))
+#   define COFFEE_FATAL(formatting, ...) \
+        coffee::log(coffee::MessageSeverity::Critical, __FILE__, __LINE__, fmt::format(formatting, ##__VA_ARGS__))
 #else
 #   define COFFEE_INFO(fmt, ...) \
         static_cast<void>(nullptr)
@@ -38,14 +40,9 @@ namespace coffee {
         static_cast<void>(nullptr)
 #   define COFFEE_ERROR(fmt, ...) \
         static_cast<void>(nullptr)
+#   define COFFEE_FATAL(fmt, ...) \
+        static_cast<void>(nullptr)
 #endif
-
-#define COFFEE_THROW_IF(expr, formatting, ...) \
-    { if (static_cast<bool>(expr)) { \
-        const std::string formatted = fmt::format(formatting, ##__VA_ARGS__); \
-        coffee::log(coffee::MessageSeverity::Critical, __FILE__, __LINE__, formatted); \
-        throw std::runtime_error(formatted); \
-    } }
 
 // clang-format on
 

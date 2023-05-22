@@ -4,11 +4,14 @@
 #include <coffee/graphics/pipeline.hpp>
 
 #include <glm/glm.hpp>
-#include <volk.h>
+#include <volk/volk.h>
 
 #include <vector>
 
 namespace coffee {
+
+    // A default vertex implementation for Coffee Engine
+    // You can replace this with your own implementation
 
     class Vertex {
     public:

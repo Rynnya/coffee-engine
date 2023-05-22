@@ -22,23 +22,24 @@ namespace coffee {
         VkBorderColor borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
     };
 
-    class SamplerImpl {
-    public:
-        SamplerImpl(Device& device, const SamplerConfiguration& configuration);
-        ~SamplerImpl() noexcept;
+    class Sampler;
+    using SamplerPtr = std::shared_ptr<Sampler>;
 
-        inline const VkSampler& sampler() const noexcept
-        {
-            return sampler_;
-        }
+    class Sampler {
+    public:
+        ~Sampler() noexcept;
+
+        static SamplerPtr create(const GPUDevicePtr& device, const SamplerConfiguration& configuration);
+
+        inline const VkSampler& sampler() const noexcept { return sampler_; }
 
     private:
-        Device& device_;
+        Sampler(const GPUDevicePtr& device, const SamplerConfiguration& configuration);
+
+        GPUDevicePtr device_;
 
         VkSampler sampler_ = VK_NULL_HANDLE;
     };
-
-    using Sampler = std::shared_ptr<SamplerImpl>;
 
 } // namespace coffee
 

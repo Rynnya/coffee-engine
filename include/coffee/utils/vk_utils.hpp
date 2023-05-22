@@ -1,7 +1,7 @@
 #ifndef COFFEE_UTILS_VK_UTILS
 #define COFFEE_UTILS_VK_UTILS
 
-#include <volk.h>
+#include <volk/volk.h>
 
 #include <optional>
 #include <vector>
@@ -16,10 +16,16 @@ namespace coffee {
             VkImageTiling tiling,
             VkFormatFeatureFlags features
         );
+
         static VkFormat findDepthFormat(VkPhysicalDevice device);
+        static VkFormat findDepthStencilFormat(VkPhysicalDevice device);
+
         static uint32_t findMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
-        static VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) noexcept;
+        static VkSurfaceFormatKHR chooseSurfaceFormat(
+            VkPhysicalDevice device,
+            const std::vector<VkSurfaceFormatKHR>& availableFormats
+        ) noexcept;
         static VkPresentModeKHR choosePresentMode(
             const std::vector<VkPresentModeKHR>& availablePresentModes,
             VkPresentModeKHR preferable

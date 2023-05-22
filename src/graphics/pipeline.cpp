@@ -1,5 +1,6 @@
 #include <coffee/graphics/pipeline.hpp>
 
+#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/math.hpp>
 #include <coffee/utils/vk_utils.hpp>
@@ -8,21 +9,16 @@
 
 namespace coffee {
 
-    PipelineImpl::PipelineImpl(
-        Device& device,
-        const RenderPass& renderPass,
-        const std::vector<DescriptorLayout>& descriptorLayouts,
-        const std::vector<Shader>& shaderPrograms,
-        const PipelineConfiguration& configuration
-    )
+    Pipeline::Pipeline(const GPUDevicePtr& device, const RenderPassPtr& renderPass, const PipelineConfiguration& configuration)
         : device_ { device }
     {
+        VkResult result = VK_SUCCESS;
         VkPipelineLayoutCreateInfo createInfo { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
 
         std::vector<VkDescriptorSetLayout> setLayouts {};
         std::vector<VkPushConstantRange> pushConstantsRanges {};
 
-        for (const auto& descriptorLayout : descriptorLayouts) {
+        for (const auto& descriptorLayout : configuration.layouts) {
             setLayouts.push_back(descriptorLayout->layout());
         }
 
@@ -39,7 +35,8 @@ namespace coffee {
             auto validateSize = [](const char* name, uint32_t originalSize, uint32_t roundedSize) {
                 if (originalSize != roundedSize) {
                     COFFEE_WARNING(
-                        "Provided {} {} isn't multiple of 4 and was rounded up to {}. This might cause a strange behaviour in your shaders.",
+                        "Provided {} with size {} isn't multiple of 4 and was rounded up to {}. "
+                        "This might cause a strange behaviour in your shaders.",
                         name, originalSize, roundedSize);
                 }
             };
@@ -55,9 +52,11 @@ namespace coffee {
         createInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantsRanges.size());
         createInfo.pPushConstantRanges = pushConstantsRanges.data();
 
-        COFFEE_THROW_IF(
-            vkCreatePipelineLayout(device_.logicalDevice(), &createInfo, nullptr, &layout_) != VK_SUCCESS,
-            "Failed to create a pipeline layout!");
+        if ((result = vkCreatePipelineLayout(device_->logicalDevice(), &createInfo, nullptr, &layout_)) != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create a pipeline layout!");
+
+            throw RegularVulkanException { result };
+        }
 
         std::vector<VkVertexInputBindingDescription> bindingDescriptions {};
         std::vector<VkVertexInputAttributeDescription> attributeDescriptions {};
@@ -113,7 +112,7 @@ namespace coffee {
 
         VkPipelineMultisampleStateCreateInfo multisampleInfo { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
         multisampleInfo.rasterizationSamples =
-            VkUtils::getUsableSampleCount(configuration.multisampleInfo.sampleCount, device_.properties());
+            VkUtils::getUsableSampleCount(configuration.multisampleInfo.sampleCount, device_->properties());
         multisampleInfo.sampleShadingEnable = configuration.multisampleInfo.sampleRateShading ? VK_TRUE : VK_FALSE;
         multisampleInfo.minSampleShading = configuration.multisampleInfo.minSampleShading;
         multisampleInfo.pSampleMask = nullptr;
@@ -162,7 +161,7 @@ namespace coffee {
 
         std::vector<VkPipelineShaderStageCreateInfo> shaderStages {};
 
-        for (const auto& shader : shaderPrograms) {
+        for (const auto& shader : configuration.shaders) {
             VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
             shaderCreateInfo.stage = shader->stage;
@@ -192,15 +191,37 @@ namespace coffee {
         pipelineInfo.basePipelineIndex = -1;
         pipelineInfo.basePipelineHandle = nullptr;
 
-        COFFEE_THROW_IF(
-            vkCreateGraphicsPipelines(device_.logicalDevice(), nullptr, 1, &pipelineInfo, nullptr, &pipeline_) != VK_SUCCESS,
-            "Failed to create graphics pipeline!");
+        if ((result = vkCreateGraphicsPipelines(device_->logicalDevice(), nullptr, 1, &pipelineInfo, nullptr, &pipeline_)) != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create graphics pipeline!");
+
+            throw RegularVulkanException { result };
+        }
     }
 
-    PipelineImpl::~PipelineImpl() noexcept
+    Pipeline::~Pipeline() noexcept
     {
-        vkDestroyPipeline(device_.logicalDevice(), pipeline_, nullptr);
-        vkDestroyPipelineLayout(device_.logicalDevice(), layout_, nullptr);
+        vkDestroyPipeline(device_->logicalDevice(), pipeline_, nullptr);
+        vkDestroyPipelineLayout(device_->logicalDevice(), layout_, nullptr);
+    }
+
+    PipelinePtr Pipeline::create(const GPUDevicePtr& device, const RenderPassPtr& renderPass, const PipelineConfiguration& configuration)
+    {
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+
+        [[maybe_unused]] constexpr auto verifyDescriptorLayouts = [](const std::vector<DescriptorLayoutPtr>& layouts) noexcept -> bool {
+            bool result = true;
+
+            for (const auto& layout : layouts) {
+                result &= (layout != nullptr);
+            }
+
+            return result;
+        };
+
+        COFFEE_ASSERT(renderPass != nullptr, "Invalid renderPass provided.");
+        COFFEE_ASSERT(verifyDescriptorLayouts(configuration.layouts), "Invalid std::vector<DescriptorLayoutPtr> provided.");
+
+        return std::shared_ptr<Pipeline>(new Pipeline { device, renderPass, configuration });
     }
 
 } // namespace coffee

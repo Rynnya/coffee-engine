@@ -42,7 +42,7 @@ namespace coffee {
     };
 
     struct RasterizerationInfo {
-        VkCullModeFlags cullMode = 0;
+        VkCullModeFlags cullMode = VK_CULL_MODE_NONE;
         VkPolygonMode fillMode = VK_POLYGON_MODE_FILL;
         VkFrontFace frontFace = VK_FRONT_FACE_CLOCKWISE;
         bool depthBiasEnable = false;
@@ -82,6 +82,8 @@ namespace coffee {
     };
 
     struct PipelineConfiguration {
+        std::vector<ShaderPtr> shaders {};
+        std::vector<DescriptorLayoutPtr> layouts {};
         std::vector<InputBinding> inputBindings {};
         std::vector<PushConstantRange> constantRanges {};
         InputAssembly inputAssembly {};
@@ -91,33 +93,35 @@ namespace coffee {
         DepthStencilInfo depthStencilInfo {};
     };
 
-    class PipelineImpl {
-    public:
-        PipelineImpl(
-            Device& device,
-            const RenderPass& renderPass,
-            const std::vector<DescriptorLayout>& descriptorLayouts,
-            const std::vector<Shader>& shaderPrograms,
-            const PipelineConfiguration& configuration
-        );
-        ~PipelineImpl() noexcept;
+    class Pipeline;
+    using PipelinePtr = std::shared_ptr<Pipeline>;
 
-        inline const VkPipelineLayout& layout() const noexcept {
+    class Pipeline {
+    public:
+        ~Pipeline() noexcept;
+
+        static PipelinePtr create(const GPUDevicePtr& device, const RenderPassPtr& renderPass, const PipelineConfiguration& configuration);
+
+        inline const VkPipelineLayout& layout() const noexcept
+        {
             return layout_;
         }
 
-        inline const VkPipeline& pipeline() const noexcept {
+        inline const VkPipeline& pipeline() const noexcept
+        {
             return pipeline_;
         }
 
     private:
-        Device& device_;
+        Pipeline(const GPUDevicePtr& device, const RenderPassPtr& renderPass, const PipelineConfiguration& configuration);
+
+        GPUDevicePtr device_;
 
         VkPipelineLayout layout_ = VK_NULL_HANDLE;
         VkPipeline pipeline_ = VK_NULL_HANDLE;
     };
 
-    using Pipeline = std::unique_ptr<PipelineImpl>;
+    
 
 } // namespace coffee
 

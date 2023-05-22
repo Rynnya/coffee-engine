@@ -5,26 +5,34 @@
 
 namespace coffee {
 
-    class ShaderImpl : NonMoveable {
-    public:
-        ShaderImpl(Device& device, const std::vector<uint8_t>& byteCode, VkShaderStageFlagBits stage, const std::string& entrypoint);
-        ~ShaderImpl() noexcept;
+    using ShaderStage = VkShaderStageFlagBits;
 
-        const VkShaderStageFlagBits stage;
+    class ShaderModule;
+    using ShaderPtr = std::shared_ptr<ShaderModule>;
+
+    class ShaderModule : NonMoveable {
+    public:
+        ~ShaderModule() noexcept;
+
+        static ShaderPtr create(
+            const GPUDevicePtr& device,
+            const std::vector<uint8_t>& byteCode,
+            ShaderStage stage,
+            const std::string& entrypoint = "main"
+        );
+
+        const ShaderStage stage;
         const std::string entrypoint;
 
-        inline const VkShaderModule& shader() const noexcept
-        {
-            return shader_;
-        }
+        inline const VkShaderModule& shader() const noexcept { return shader_; }
 
     private:
-        Device& device_;
+        ShaderModule(const GPUDevicePtr& device, const std::vector<uint8_t>& byteCode, ShaderStage stage, const std::string& entrypoint);
+
+        GPUDevicePtr device_;
 
         VkShaderModule shader_ = VK_NULL_HANDLE;
     };
-
-    using Shader = std::unique_ptr<ShaderImpl>;
 
 } // namespace coffee
 

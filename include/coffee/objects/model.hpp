@@ -5,19 +5,24 @@
 
 namespace coffee {
 
-    class ModelImpl
-            : public Drawable
-            , NonMoveable {
+    class Model
+        : public Drawable
+        , NonMoveable {
     public:
-        ModelImpl(std::vector<Mesh>&& meshes);
-        virtual ~ModelImpl() noexcept = default;
+        Model(std::vector<Mesh>&& meshes, BufferPtr&& verticesBuffer, BufferPtr&& indicesBuffer);
+        virtual ~Model() noexcept = default;
+
+        void bind(const CommandBuffer& commandBuffer) const override;
+        void draw(const CommandBuffer& commandBuffer) const override;
 
         const std::vector<Mesh> meshes;
 
-        void draw(const CommandBuffer& commandBuffer) override;
+    private:
+        BufferPtr verticesBuffer_;
+        BufferPtr indicesBuffer_;
     };
 
-    using Model = std::shared_ptr<ModelImpl>;
+    using ModelPtr = std::shared_ptr<Model>;
 
 } // namespace coffee
 

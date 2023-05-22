@@ -1,11 +1,12 @@
 #include <coffee/graphics/descriptors.hpp>
 
+#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
 namespace coffee {
 
-    DescriptorLayoutImpl::DescriptorLayoutImpl(Device& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings)
+    DescriptorLayout::DescriptorLayout(const GPUDevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings)
         : bindings { bindings }
         , device_ { device }
     {
@@ -26,18 +27,25 @@ namespace coffee {
         VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         descriptorSetLayoutInfo.bindingCount = static_cast<uint32_t>(bindingsImpl.size());
         descriptorSetLayoutInfo.pBindings = bindingsImpl.data();
+        VkResult result = vkCreateDescriptorSetLayout(device_->logicalDevice(), &descriptorSetLayoutInfo, nullptr, &layout_);
 
-        COFFEE_THROW_IF(
-            vkCreateDescriptorSetLayout(device_.logicalDevice(), &descriptorSetLayoutInfo, nullptr, &layout_) != VK_SUCCESS,
-            "Failed to create descriptor set layout!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create descriptor set layout!");
+
+            throw RegularVulkanException { result };
+        }
     }
 
-    DescriptorLayoutImpl::~DescriptorLayoutImpl() noexcept
+    DescriptorLayout::~DescriptorLayout() noexcept { vkDestroyDescriptorSetLayout(device_->logicalDevice(), layout_, nullptr); }
+
+    DescriptorLayoutPtr DescriptorLayout::create(const GPUDevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings)
     {
-        vkDestroyDescriptorSetLayout(device_.logicalDevice(), layout_, nullptr);
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+
+        return std::shared_ptr<DescriptorLayout>(new DescriptorLayout { device, bindings });
     }
 
-    DescriptorWriter::DescriptorWriter(const DescriptorLayout& layout) : layout_ { layout }
+    DescriptorWriter::DescriptorWriter(const DescriptorLayoutPtr& layout) : layout_ { layout }
     {
         COFFEE_ASSERT(layout_ != nullptr, "Invalid layout provided.");
     }
@@ -73,7 +81,7 @@ namespace coffee {
         return *this;
     }
 
-    DescriptorWriter& DescriptorWriter::addBuffer(uint32_t bindingIndex, const Buffer& buffer, size_t offset, size_t totalSize)
+    DescriptorWriter& DescriptorWriter::addBuffer(uint32_t bindingIndex, const BufferPtr& buffer, size_t offset, size_t totalSize)
     {
         COFFEE_ASSERT(buffer != nullptr, "Invalid buffer provided.");
 
@@ -95,8 +103,8 @@ namespace coffee {
     DescriptorWriter& DescriptorWriter::addImage(
         uint32_t bindingIndex,
         VkImageLayout layout,
-        const ImageView& imageView,
-        const Sampler& sampler
+        const ImageViewPtr& imageView,
+        const SamplerPtr& sampler
     )
     {
         COFFEE_ASSERT(imageView != nullptr, "Invalid image view provided.");
@@ -116,13 +124,7 @@ namespace coffee {
         return *this;
     }
 
-    DescriptorWriter& DescriptorWriter::addTexture(uint32_t bindingIndex, const Texture& texture, const Sampler& sampler)
-    {
-        COFFEE_ASSERT(texture != nullptr, "Invalid Texture provided.");
-        return this->addImage(bindingIndex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture->textureView, sampler);
-    }
-
-    DescriptorWriter& DescriptorWriter::addSampler(uint32_t bindingIndex, const Sampler& sampler)
+    DescriptorWriter& DescriptorWriter::addSampler(uint32_t bindingIndex, const SamplerPtr& sampler)
     {
         COFFEE_ASSERT(sampler != nullptr, "Invalid sampler provided.");
 
@@ -139,7 +141,7 @@ namespace coffee {
         return *this;
     }
 
-    DescriptorSetImpl::DescriptorSetImpl(Device& device, const DescriptorWriter& writer) : device_ { device }
+    DescriptorSet::DescriptorSet(const GPUDevicePtr& device, const DescriptorWriter& writer) : device_ { device }
     {
         const auto& bindings = writer.layout_->bindings;
         const auto& writes = writer.writes_;
@@ -153,23 +155,30 @@ namespace coffee {
         );
 
         VkDescriptorSetAllocateInfo descriptorAllocInfo { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-        descriptorAllocInfo.descriptorPool = device_.descriptorPool();
+        descriptorAllocInfo.descriptorPool = device_->descriptorPool();
         descriptorAllocInfo.descriptorSetCount = 1;
         descriptorAllocInfo.pSetLayouts = &layout;
+        VkResult result = vkAllocateDescriptorSets(device_->logicalDevice(), &descriptorAllocInfo, &set_);
 
-        COFFEE_THROW_IF(
-            vkAllocateDescriptorSets(device_.logicalDevice(), &descriptorAllocInfo, &set_) != VK_SUCCESS,
-            "Failed to allocate descriptor set!");
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to allocate descriptor set!");
+
+            throw RegularVulkanException { result };
+        }
 
         updateDescriptor(writer);
     }
 
-    DescriptorSetImpl::~DescriptorSetImpl() noexcept
+    DescriptorSet::~DescriptorSet() noexcept { vkFreeDescriptorSets(device_->logicalDevice(), device_->descriptorPool(), 1, &set_); }
+
+    DescriptorSetPtr DescriptorSet::create(const GPUDevicePtr& device, const DescriptorWriter& writer)
     {
-        vkFreeDescriptorSets(device_.logicalDevice(), device_.descriptorPool(), 1, &set_);
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+
+        return std::shared_ptr<DescriptorSet>(new DescriptorSet { device, writer });
     }
 
-    void DescriptorSetImpl::updateDescriptor(const DescriptorWriter& writer)
+    void DescriptorSet::updateDescriptor(const DescriptorWriter& writer)
     {
         const auto& bindings = writer.layout_->bindings;
         const auto& writes = writer.writes_;
@@ -262,7 +271,7 @@ namespace coffee {
             writesImpl.push_back(std::move(writeImpl));
         }
 
-        vkUpdateDescriptorSets(device_.logicalDevice(), static_cast<uint32_t>(writesImpl.size()), writesImpl.data(), 0, nullptr);
+        vkUpdateDescriptorSets(device_->logicalDevice(), static_cast<uint32_t>(writesImpl.size()), writesImpl.data(), 0, nullptr);
     }
 
 } // namespace coffee
