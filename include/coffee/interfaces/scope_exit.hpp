@@ -1,9 +1,8 @@
 #ifndef COFFEE_INTERFACES_SCOPE_EXIT
 #define COFFEE_INTERFACES_SCOPE_EXIT
 
-#include <coffee/utils/non_copyable.hpp>
-
-#include <functional>
+#include <type_traits>
+#include <utility>
 
 namespace coffee {
 
@@ -20,7 +19,8 @@ namespace coffee {
             destructor_ = [](void* buffer) noexcept { delete reinterpret_cast<Fx*>(buffer); };
         }
 
-        ~ScopeExit() noexcept { 
+        ~ScopeExit() noexcept
+        {
             try {
                 consume();
             }

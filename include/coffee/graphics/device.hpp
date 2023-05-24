@@ -2,7 +2,6 @@
 #define COFFEE_GRAPHICS_DEVICE
 
 #include <coffee/interfaces/scope_exit.hpp>
-#include <coffee/interfaces/thread_pool.hpp>
 #include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
 #include <coffee/utils/vk_utils.hpp>
@@ -13,8 +12,6 @@
 
 #include <array>
 #include <mutex>
-#include <optional>
-#include <vector>
 
 namespace coffee {
 
@@ -39,7 +36,7 @@ namespace coffee {
 
         ~GPUDevice() noexcept;
 
-        static GPUDevicePtr create();
+        static GPUDevicePtr create(VkPhysicalDeviceType preferredDeviceType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
 
         // Called by swapchain when acquiring next image
         // Waits until previous frame is done
@@ -129,7 +126,7 @@ namespace coffee {
         inline VkFormat optimalDepthStencilFormat() const noexcept { return optimalDepthStencilFormat_; }
 
     private:
-        GPUDevice();
+        GPUDevice(VkPhysicalDeviceType deviceType);
 
         void initializeGlobalEnvironment();
         void deinitializeGlobalEnvironment();
@@ -141,7 +138,7 @@ namespace coffee {
 
         void createInstance();
         void createDebugMessenger();
-        void pickPhysicalDevice(VkSurfaceKHR surface);
+        void pickPhysicalDevice(VkSurfaceKHR surface, VkPhysicalDeviceType deviceType);
         void createLogicalDevice(VkSurfaceKHR surface);
         void createSyncObjects();
         void createDescriptorPool();

@@ -11,3 +11,4 @@
 [submodule "libs/tbb"]
 	path = libs/tbb
 	url = https://github.com/oneapi-src/oneTBB
+    ignore = dirty

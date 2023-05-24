@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COFFEE_UTILS_EXCEPTIONS
+#define COFFEE_UTILS_EXCEPTIONS
 
 #include <coffee/utils/platform.hpp>
 
@@ -79,3 +80,5 @@ namespace coffee {
     };
 
 } // namespace coffee
+
+#endif

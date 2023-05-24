@@ -17,7 +17,6 @@
 #include <coffee/interfaces/asset_manager.hpp>
 #include <coffee/interfaces/filesystem.hpp>
 #include <coffee/interfaces/loop_handler.hpp>
-#include <coffee/interfaces/thread_pool.hpp>
 
 #include <coffee/utils/log.hpp>
 

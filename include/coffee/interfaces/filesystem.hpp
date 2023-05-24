@@ -2,12 +2,14 @@
 #define COFFEE_INTERFACES_FILESYSTEM
 
 #include <coffee/interfaces/scope_exit.hpp>
+#include <coffee/utils/non_copyable.hpp>
 
 #include <mio/mio.hpp>
 
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // Stolen directly from ZSTD single-file implementation

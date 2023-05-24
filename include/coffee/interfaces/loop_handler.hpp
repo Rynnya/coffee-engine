@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COFFEE_INTERFACES_LOOP_HANDLER
+#define COFFEE_INTERFACES_LOOP_HANDLER
 
 #include <chrono>
 
@@ -41,3 +42,5 @@ namespace coffee {
     };
 
 } // namespace coffee
+
+#endif

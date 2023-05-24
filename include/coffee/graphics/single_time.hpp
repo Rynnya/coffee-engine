@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COFFEE_GRAPHICS_SINGLE_TIME
+#define COFFEE_GRAPHICS_SINGLE_TIME
 
 #include <coffee/graphics/buffer.hpp>
 #include <coffee/graphics/command_buffer.hpp>
@@ -127,3 +128,5 @@ namespace coffee {
     };
 
 } // namespace coffee
+
+#endif

@@ -40,7 +40,7 @@ namespace coffee {
 
     static std::atomic_uint32_t initializationCounter = 0;
 
-    GPUDevice::GPUDevice()
+    GPUDevice::GPUDevice(VkPhysicalDeviceType preferredDeviceType)
     {
         if (initializationCounter.fetch_add(1, std::memory_order_relaxed) == 0) {
             initializeGlobalEnvironment();
@@ -52,7 +52,7 @@ namespace coffee {
         GLFWwindow* window = createTemporaryWindow();
         VkSurfaceKHR surface = createTemporarySurface(window);
 
-        pickPhysicalDevice(surface);
+        pickPhysicalDevice(surface, preferredDeviceType);
         createLogicalDevice(surface);
 
         createSyncObjects();
@@ -100,7 +100,10 @@ namespace coffee {
         }
     }
 
-    GPUDevicePtr GPUDevice::create() { return std::shared_ptr<GPUDevice>(new GPUDevice {}); }
+    GPUDevicePtr GPUDevice::create(VkPhysicalDeviceType preferredDeviceType)
+    {
+        return std::shared_ptr<GPUDevice>(new GPUDevice { preferredDeviceType });
+    }
 
     void GPUDevice::waitForAcquire()
     {
@@ -453,7 +456,7 @@ namespace coffee {
 #endif
     }
 
-    void GPUDevice::pickPhysicalDevice(VkSurfaceKHR surface)
+    void GPUDevice::pickPhysicalDevice(VkSurfaceKHR surface, VkPhysicalDeviceType preferredDeviceType)
     {
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
@@ -473,9 +476,7 @@ namespace coffee {
 
                 vkGetPhysicalDeviceProperties(physicalDevice_, &properties_);
 
-                // If we first found suitable CPU, iGPU or vGPU, we should look for dGPU and if there's no such device, use what we have
-                // For tests: VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
-                if (properties_.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+                if (properties_.deviceType == preferredDeviceType) {
                     break;
                 }
             }
