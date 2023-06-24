@@ -1,6 +1,6 @@
 #include <coffee/interfaces/filesystem.hpp>
 
-#include <coffee/utils/exceptions.hpp>
+#include <coffee/interfaces/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/math.hpp>
 #include <coffee/utils/utils.hpp>
@@ -49,9 +49,14 @@ namespace coffee {
                 case utils::fnv1a::digest(".basis"):
                 case utils::fnv1a::digest(".ktx2"):
                     return Filesystem::FileType::BasisImage;
+                case utils::fnv1a::digest(".wav"):
+                case utils::fnv1a::digest(".wave"):
+                    return Filesystem::FileType::WAV;
+                case utils::fnv1a::digest(".ogg"):
+                    return Filesystem::FileType::OGG;
             }
 
-            return Filesystem::FileType::Unknown;
+            return Filesystem::FileType::RawBytes;
         }
 
     } // namespace detail
@@ -72,10 +77,10 @@ namespace coffee {
 
         switch (status.type()) {
             case std::filesystem::file_type::directory: {
-                return std::shared_ptr<NativeFilesystem> { new (std::nothrow) NativeFilesystem { path } };
+                return std::shared_ptr<NativeFilesystem> { new NativeFilesystem { path } };
             }
             case std::filesystem::file_type::regular: {
-                return std::shared_ptr<VirtualFilesystem> { new (std::nothrow) VirtualFilesystem { path } };
+                return std::shared_ptr<VirtualFilesystem> { new VirtualFilesystem { path } };
             }
             case std::filesystem::file_type::not_found: {
                 throw FilesystemException { FilesystemException::Type::FileNotFound,
@@ -86,8 +91,6 @@ namespace coffee {
                                             "Filesystem can only open regular files and directories!" };
             }
         }
-
-        return nullptr;
     }
 
     NativeFilesystem::NativeFilesystem(const std::string& path) : Filesystem { path } {}
@@ -129,6 +132,15 @@ namespace coffee {
         std::filesystem::path fullPath = std::filesystem::path(basePath) / path;
 
         return utils::readFile(fullPath.string());
+    }
+
+    utils::ReaderStream NativeFilesystem::getStream(const std::string& path) const
+    {
+        std::filesystem::path fullPath = std::filesystem::path(basePath) / path;
+        uint8_t* pointer = nullptr;
+        size_t size = utils::readFile(fullPath.string(), pointer);
+
+        return { pointer, size, true };
     }
 
     VirtualFilesystem::VirtualFilesystem(const std::string& path) : Filesystem { path }
@@ -279,6 +291,73 @@ namespace coffee {
         }
 
         return decompressedBytes;
+    }
+
+    utils::ReaderStream VirtualFilesystem::getStream(const std::string& path) const
+    {
+        auto it = entries_.find(XXH3_64bits(path.data(), path.size()));
+
+        if (it == entries_.end()) {
+            throw FilesystemException { FilesystemException::Type::FileNotFound, fmt::format("File '{}' doesn't exist!", path) };
+        }
+
+        auto& entry = it->second;
+
+        // Some files didn't have compression at all (or they have internal for this type compression)
+        // In this case just return raw pointer into buffer
+        if (entry.compressedSize == 0) {
+            std::vector<uint8_t> rawData {};
+
+            rawData.resize(entry.uncompressedSize);
+            detail::readIntoBuffer(archiveFile_, rawData.data(), rawData.size(), entry.position);
+
+            return { archiveFile_.data(), entry.uncompressedSize };
+        }
+
+        // Sadly, because interface must be identical for both Native and Virtual filesystems, we must handle compressed types too
+        // Which literally destroys whole reason Streams for compressed files
+        // But, calling this function for non-streamable file is literally pointless
+        // And every streamable file is uncompressed by default
+
+        // I don't trust vector::resize as it might allocate more than required
+        // Using old C-style array on other hand will allocate exact amount of bytes (unless aligned)
+        std::unique_ptr<uint8_t[]> compressedData = std::make_unique<uint8_t[]>(entry.compressedSize);
+        detail::readIntoBuffer(archiveFile_, compressedData.get(), entry.compressedSize, entry.position);
+
+        ZSTD_frameHeader frameHeader {};
+        size_t errorCode = ZSTD_getFrameHeader(&frameHeader, compressedData.get(), entry.compressedSize);
+
+        if (ZSTD_isError(errorCode)) {
+            const char* description = ZSTD_getErrorName(errorCode);
+            COFFEE_ERROR("ZSTD frame header returned error: {}!", description);
+
+            throw FilesystemException { FilesystemException::Type::DecompressionFailure,
+                                        fmt::format("ZSTD frame header returned error: {}!", description) };
+        }
+
+        size_t decompressedSize = frameHeader.frameContentSize;
+
+        // Empty files allowed too, but not very useful
+        if (decompressedSize == 0) {
+            return { nullptr, 0, false };
+        }
+
+        if (decompressedSize == ZSTD_CONTENTSIZE_UNKNOWN) {
+            throw FilesystemException { FilesystemException::Type::DecompressionFailure, "Failed to gather compressed size of frame!" };
+        }
+
+        uint8_t* decompressedBytes = new uint8_t[entry.uncompressedSize];
+        errorCode = ZSTD_decompress(decompressedBytes, entry.uncompressedSize, compressedData.get(), entry.compressedSize);
+
+        if (ZSTD_isError(errorCode)) {
+            const char* description = ZSTD_getErrorName(errorCode);
+            COFFEE_ERROR("ZSTD decompression returned error: {}!", description);
+
+            throw FilesystemException { FilesystemException::Type::DecompressionFailure,
+                                        fmt::format("ZSTD decompression returned error: {}!", description) };
+        }
+
+        return { decompressedBytes, entry.uncompressedSize, true };
     }
 
 } // namespace coffee

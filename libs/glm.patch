@@ -1,12 +1,29 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b7641a28..b53592db 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -34,12 +34,3 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
+        endif()
+
+ endif(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
+-
+-if (NOT TARGET uninstall)
+-configure_file(cmake/cmake_uninstall.cmake.in
+-               cmake_uninstall.cmake IMMEDIATE @ONLY)
+-
+-add_custom_target(uninstall
+-                  "${CMAKE_COMMAND}" -P
+-                  "${CMAKE_BINARY_DIR}/cmake_uninstall.cmake")
+-endif()
 diff --git a/glm/gtc/quaternion.inl b/glm/gtc/quaternion.inl
 index e1ef0321..97416fa7 100644
 --- a/glm/gtc/quaternion.inl
 +++ b/glm/gtc/quaternion.inl
 @@ -117,7 +117,6 @@ namespace glm
- 		case 3:
- 			return qua<T, Q>((m[0][1] - m[1][0]) * mult, (m[2][0] + m[0][2]) * mult, (m[1][2] + m[2][1]) * mult, biggestVal);
- 		default: // Silence a -Wswitch-default warning in GCC. Should never actually get here. Assert is just for sanity.
--			assert(false);
- 			return qua<T, Q>(1, 0, 0, 0);
- 		}
- 	}
+                case 3:
+                        return qua<T, Q>((m[0][1] - m[1][0]) * mult, (m[2][0] + m[0][2]) * mult, (m[1][2] + m[2][1]) * mult, biggestVal);
+                default: // Silence a -Wswitch-default warning in GCC. Should never actually get here. Assert is just for sanity.
+-                       assert(false);
+                        return qua<T, Q>(1, 0, 0, 0);
+                }
+        }

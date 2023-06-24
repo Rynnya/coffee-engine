@@ -12,3 +12,7 @@
 	path = libs/tbb
 	url = https://github.com/oneapi-src/oneTBB
     ignore = dirty
+[submodule "libs/openal"]
+	path = libs/openal
+	url = https://github.com/kcat/openal-soft
+    ignore = dirty

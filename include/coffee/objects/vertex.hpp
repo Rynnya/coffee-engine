@@ -10,9 +10,6 @@
 
 namespace coffee {
 
-    // A default vertex implementation for Coffee Engine
-    // You can replace this with your own implementation
-
     class Vertex {
     public:
         glm::vec3 position {};
@@ -20,9 +17,9 @@ namespace coffee {
         glm::uint32 texCoords {};
         glm::u16vec3 tangent {};
 
-        static inline std::vector<InputElement> getElementDescriptions()
+        static inline std::vector<graphics::InputElement> getElementDescriptions()
         {
-            std::vector<InputElement> elements {};
+            std::vector<graphics::InputElement> elements {};
 
             elements.push_back({ 0U, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) });
             elements.push_back({ 1U, VK_FORMAT_R16G16B16_SNORM, offsetof(Vertex, normal) });

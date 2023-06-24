@@ -41,12 +41,12 @@ namespace coffee {
         struct QueueFamilyIndices {
             std::optional<uint32_t> graphicsFamily = std::nullopt;
             std::optional<uint32_t> presentFamily = std::nullopt;
+            std::optional<uint32_t> computeFamily = std::nullopt;
             std::optional<uint32_t> transferFamily = std::nullopt;
 
-            inline bool isComplete() const noexcept
-            {
-                return graphicsFamily.has_value() && presentFamily.has_value() && transferFamily.has_value();
-            }
+            inline bool isSuitable() const noexcept { return graphicsFamily && presentFamily; }
+
+            inline bool isComplete() const noexcept { return graphicsFamily && presentFamily && computeFamily && transferFamily; }
         };
 
         static std::vector<VkExtensionProperties> getInstanceExtensions();

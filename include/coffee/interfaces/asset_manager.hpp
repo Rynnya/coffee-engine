@@ -1,17 +1,20 @@
-#pragma once
+#ifndef COFFEE_INTERFACES_ASSET_MANAGER
+#define COFFEE_INTERFACES_ASSET_MANAGER
 
-#include <coffee/graphics/buffer.hpp>
 #include <coffee/graphics/image.hpp>
 #include <coffee/graphics/shader.hpp>
 #include <coffee/objects/model.hpp>
 
 #include <coffee/interfaces/filesystem.hpp>
+#include <coffee/interfaces/resource_guard.hpp>
 #include <coffee/utils/utils.hpp>
 
 #include <basis_universal/basisu_transcoder.h>
-#include <oneapi/tbb/concurrent_hash_map.h>
+#include <oneapi/tbb/concurrent_unordered_map.h>
+#include <oneapi/tbb/queuing_mutex.h>
 
 #include <memory>
+#include <queue>
 #include <variant>
 
 namespace coffee {
@@ -20,28 +23,34 @@ namespace coffee {
     using AssetManagerPtr = std::shared_ptr<AssetManager>;
 
     class AssetManager {
-    public:
-        static constexpr size_t UnderlyingBufferSize = 32;
+    private:
+        using ShaderStage = graphics::ShaderStage;
 
+    public:
         ~AssetManager() noexcept = default;
 
-        static AssetManagerPtr create(const GPUDevicePtr& device);
+        static AssetManagerPtr create(const graphics::DevicePtr& device);
 
         std::vector<uint8_t> getBytes(const std::string& path);
         std::vector<uint8_t> getBytes(const FilesystemPtr& fs, const std::string& path);
-        ShaderPtr getShader(const std::string& path, ShaderStage stage, const std::string& entrypoint = "main");
-        ShaderPtr getShader(const FilesystemPtr& fs, const std::string& path, ShaderStage stage, const std::string& entrypoint = "main");
+        graphics::ShaderPtr getShader(const std::string& path, ShaderStage stage, const std::string& entrypoint = "main");
+        graphics::ShaderPtr getShader(const FilesystemPtr& fs, const std::string& path, ShaderStage stage, const std::string& e = "main");
         ModelPtr getModel(const std::string& path);
         ModelPtr getModel(const FilesystemPtr& fs, const std::string& path);
         // BEWARE: amountOfChannels ignored when image already loaded, you can extract actual amount of channels through VkFormat
-        ImagePtr getImage(const std::string& path, uint32_t amountOfChannels);
+        graphics::ImagePtr getImage(const std::string& path, uint32_t amountOfChannels);
         // BEWARE: amountOfChannels ignored for raw image types, you can extract actual amount of channels through VkFormat
-        ImagePtr getImage(const FilesystemPtr& fs, const std::string& path, uint32_t amountOfChannels);
+        graphics::ImagePtr getImage(const FilesystemPtr& fs, const std::string& path, uint32_t amountOfChannels);
+        void getSound(const std::string& path);
+        void getSound(const FilesystemPtr& fs, const std::string& path);
+        void getAudioStream(const std::string& path);
+        void getAudioStream(const FilesystemPtr& fs, const std::string& path);
 
+        // Thread-safe remove function, may cause blocking
         void removeFromCache(const std::string& path);
 
     private:
-        AssetManager(const GPUDevicePtr& device);
+        AssetManager(const graphics::DevicePtr& device);
         void createMissingTexture();
         void selectOneChannel();
         void selectTwoChannels();
@@ -49,25 +58,26 @@ namespace coffee {
         void selectFourChannels();
 
         ModelPtr loadModel(const FilesystemPtr& filesystem, const std::string& path);
-        std::string readMaterialName(utils::ReadOnlyStream<UnderlyingBufferSize>& stream);
-        ImageViewPtr loadMaterial(const FilesystemPtr& filesystem, const std::string& path, uint32_t amountOfChannels);
+        std::string readMaterialName(utils::ReaderStream& stream);
+        graphics::ImageViewPtr loadMaterial(const FilesystemPtr& filesystem, const std::string& path, uint32_t amountOfChannels);
 
-        ImagePtr loadRawImage(std::vector<uint8_t>& rawBytes);
-        ImagePtr loadBasisImage(std::vector<uint8_t>& rawBytes, uint32_t amountOfChannels);
+        ResourceGuard<graphics::ImagePtr> loadImageUnsafe(const FilesystemPtr& fs, const std::string& path, uint32_t amountOfChannels);
+        ResourceGuard<graphics::ImagePtr> loadRawImage(std::vector<uint8_t>& rawBytes);
+        ResourceGuard<graphics::ImagePtr> loadBasisImage(std::vector<uint8_t>& rawBytes, uint32_t amountOfChannels);
         VkFormat channelsToVkFormat(uint32_t amountOfChannels, bool compressed);
         basist::transcoder_texture_format channelsToBasisuFormat(uint32_t amountOfChannels);
 
         struct Asset {
-            Asset(std::vector<uint8_t> copyBytes) : type { Filesystem::FileType::Unknown }, actualObject { std::move(copyBytes) } {}
+            Asset(std::vector<uint8_t> copyBytes) : type { Filesystem::FileType::RawBytes }, actualObject { std::move(copyBytes) } {}
 
-            Asset(ShaderPtr shader) : type { Filesystem::FileType::Shader }, actualObject { std::move(shader) } {}
+            Asset(graphics::ShaderPtr shader) : type { Filesystem::FileType::Shader }, actualObject { std::move(shader) } {}
 
             Asset(ModelPtr model) : type { Filesystem::FileType::Model }, actualObject { std::move(model) } {}
 
-            Asset(ImagePtr image) : type { Filesystem::FileType::RawImage }, actualObject { std::move(image) } {}
+            Asset(graphics::ImagePtr image) : type { Filesystem::FileType::RawImage }, actualObject { std::move(image) } {}
 
             Filesystem::FileType type;
-            std::variant<std::vector<uint8_t>, ShaderPtr, ModelPtr, ImagePtr> actualObject;
+            std::variant<std::vector<uint8_t>, graphics::ShaderPtr, ModelPtr, graphics::ImagePtr> actualObject;
         };
 
         struct CompressionTypes {
@@ -82,14 +92,15 @@ namespace coffee {
             basist::transcoder_texture_format basisFourChannels = basist::transcoder_texture_format::cTFTotalTextureFormats;
         };
 
-        GPUDevicePtr device_;
-        ImagePtr missingImage_;
-        ImageViewPtr missingTexture_;
+        graphics::DevicePtr device_;
+        graphics::ImagePtr missingImage_;
+        graphics::ImageViewPtr missingTexture_;
         CompressionTypes compressionTypes_ {};
 
-        tbb::concurrent_hash_map<XXH64_hash_t, Asset> cache_ {};
-
-        using HashAccessor = tbb::concurrent_hash_map<XXH64_hash_t, AssetManager::Asset>::const_accessor;
+        tbb::queuing_mutex mutex_ {};
+        tbb::concurrent_unordered_map<XXH64_hash_t, Asset> cache_ {};
     };
 
 } // namespace coffee
+
+#endif

@@ -1,45 +1,49 @@
-#ifndef COFFEE_VK_SAMPLER
-#define COFFEE_VK_SAMPLER
+#ifndef COFFEE_GRAPHICS_SAMPLER
+#define COFFEE_GRAPHICS_SAMPLER
 
 #include <coffee/graphics/device.hpp>
 
 namespace coffee {
 
-    struct SamplerConfiguration {
-        VkFilter magFilter = VK_FILTER_NEAREST;
-        VkFilter minFilter = VK_FILTER_NEAREST;
-        VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        VkSamplerAddressMode addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        VkSamplerAddressMode addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        VkSamplerAddressMode addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        float mipLodBias = 0.0f;
-        bool anisotropyEnable = false;
-        float maxAnisotropy = 1.0f;
-        bool compareEnable = false;
-        VkCompareOp compareOp = VK_COMPARE_OP_NEVER;
-        float minLod = 0.0f;
-        float maxLod = 0.0f;
-        VkBorderColor borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-    };
+    namespace graphics {
 
-    class Sampler;
-    using SamplerPtr = std::shared_ptr<Sampler>;
+        struct SamplerConfiguration {
+            VkFilter magFilter = VK_FILTER_NEAREST;
+            VkFilter minFilter = VK_FILTER_NEAREST;
+            VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            VkSamplerAddressMode addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+            VkSamplerAddressMode addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+            VkSamplerAddressMode addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+            float mipLodBias = 0.0f;
+            bool anisotropyEnable = false;
+            float maxAnisotropy = 1.0f;
+            bool compareEnable = false;
+            VkCompareOp compareOp = VK_COMPARE_OP_NEVER;
+            float minLod = 0.0f;
+            float maxLod = 0.0f;
+            VkBorderColor borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+        };
 
-    class Sampler {
-    public:
-        ~Sampler() noexcept;
+        class Sampler;
+        using SamplerPtr = std::shared_ptr<Sampler>;
 
-        static SamplerPtr create(const GPUDevicePtr& device, const SamplerConfiguration& configuration);
+        class Sampler {
+        public:
+            ~Sampler() noexcept;
 
-        inline const VkSampler& sampler() const noexcept { return sampler_; }
+            static SamplerPtr create(const DevicePtr& device, const SamplerConfiguration& configuration);
 
-    private:
-        Sampler(const GPUDevicePtr& device, const SamplerConfiguration& configuration);
+            inline const VkSampler& sampler() const noexcept { return sampler_; }
 
-        GPUDevicePtr device_;
+        private:
+            Sampler(const DevicePtr& device, const SamplerConfiguration& configuration);
 
-        VkSampler sampler_ = VK_NULL_HANDLE;
-    };
+            DevicePtr device_;
+
+            VkSampler sampler_ = VK_NULL_HANDLE;
+        };
+
+    } // namespace graphics
 
 } // namespace coffee
 

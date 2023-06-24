@@ -4,21 +4,13 @@
 
 namespace coffee {
 
-    Mesh::Mesh(Materials&& materials, uint32_t verticesOffset, uint32_t indicesOffset, uint32_t verticesCount, uint32_t indicesCount)
-        : materials { std::move(materials) }
-        , verticesOffset { verticesOffset }
-        , indicesOffset { indicesOffset }
-        , verticesCount { verticesCount }
-        , indicesCount { indicesCount }
+    Mesh::Mesh(Materials&& mats, AABB&& aabb, uint32_t vertsOffset, uint32_t indsOffset, uint32_t vertsCount, uint32_t indsCount)
+        : materials { std::move(mats) }
+        , aabb { std::move(aabb) }
+        , verticesOffset { vertsOffset }
+        , indicesOffset { indsOffset }
+        , verticesCount { vertsCount }
+        , indicesCount { indsCount }
     {}
-
-    void Mesh::draw(const CommandBuffer& commandBuffer) const {
-        if (indicesCount == 0) {
-            vkCmdDraw(commandBuffer, verticesCount, 1U, verticesOffset, 0U);
-            return;
-        }
-
-        vkCmdDrawIndexed(commandBuffer, indicesCount, 1U, indicesOffset, verticesOffset, 0U);
-    }
 
 } // namespace coffee

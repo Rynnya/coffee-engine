@@ -2,7 +2,7 @@
 #define COFFEE_EVENTS_KEY_EVENT
 
 #include <coffee/events/event.hpp>
-#include <coffee/graphics/keys.hpp>
+#include <coffee/interfaces/keys.hpp>
 
 namespace coffee {
 

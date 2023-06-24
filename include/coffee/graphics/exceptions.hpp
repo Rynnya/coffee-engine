@@ -1,11 +1,11 @@
-#ifndef COFFEE_UTILS_EXCEPTIONS
-#define COFFEE_UTILS_EXCEPTIONS
+#ifndef COFFEE_GRAPHICS_EXCEPTIONS
+#define COFFEE_GRAPHICS_EXCEPTIONS
 
 #include <coffee/utils/platform.hpp>
 
 #include <volk/volk.h>
 
-#include <exception>
+#include <stdexcept>
 #include <string>
 
 namespace coffee {
@@ -17,17 +17,17 @@ namespace coffee {
 
     } // namespace format
 
-    class GLFWException : public std::exception {
+    class GLFWException : public std::runtime_error {
     public:
-        inline GLFWException(const std::string& message) noexcept : std::exception { message.data() } {};
+        inline GLFWException(const std::string& message) noexcept : std::runtime_error { message } {}
     };
 
     // Generic class for all Vulkan exceptions
     // This type also contains exceptions from window manager if they appear
     // Never thrown from engine
-    class VulkanException : public std::exception {
+    class VulkanException : public std::runtime_error {
     public:
-        inline VulkanException(VkResult result) noexcept : std::exception { resultToErrorMessage(result) }, result_ { result } {}
+        inline VulkanException(VkResult result) noexcept : std::runtime_error { resultToErrorMessage(result) }, result_ { result } {}
 
         constexpr operator VkResult() const noexcept { return result_; }
 
@@ -50,33 +50,6 @@ namespace coffee {
     class FatalVulkanException : public VulkanException {
     public:
         inline FatalVulkanException(VkResult result) noexcept : VulkanException { result } {}
-    };
-
-    class FilesystemException : public std::exception {
-    public:
-        const enum class Type {
-            ImplementationFailure = 0,
-            FileNotFound = 1,
-            InvalidFileType = 2,
-            InvalidFilesystemSignature = 3,
-            BadFilesystemAccess = 4,
-            DecompressionFailure = 5
-        } type;
-
-        inline FilesystemException(Type type, const std::string& message) noexcept : std::exception { message.data() }, type { type } {};
-    };
-
-    class AssetException : public std::exception {
-    public:
-        const enum class Type {
-            ImplementationFailure = 0,
-            TypeMismatch = 1,
-            NotInCache = 2,
-            InvalidFilesystem = 3,
-            InvalidRequest = 4
-        } type;
-
-        inline AssetException(Type type, const std::string& message) noexcept : std::exception { message.data() }, type { type } {};
     };
 
 } // namespace coffee

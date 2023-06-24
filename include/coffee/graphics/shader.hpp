@@ -5,34 +5,41 @@
 
 namespace coffee {
 
-    using ShaderStage = VkShaderStageFlagBits;
+    namespace graphics {
 
-    class ShaderModule;
-    using ShaderPtr = std::shared_ptr<ShaderModule>;
+        class ShaderModule;
+        using ShaderPtr = std::shared_ptr<ShaderModule>;
 
-    class ShaderModule : NonMoveable {
-    public:
-        ~ShaderModule() noexcept;
+        class ShaderModule : NonMoveable {
+        public:
+            ~ShaderModule() noexcept;
 
-        static ShaderPtr create(
-            const GPUDevicePtr& device,
-            const std::vector<uint8_t>& byteCode,
-            ShaderStage stage,
-            const std::string& entrypoint = "main"
-        );
+            static ShaderPtr create(
+                const DevicePtr& device,
+                const std::vector<uint8_t>& byteCode,
+                VkShaderStageFlagBits stage,
+                const std::string& entrypoint = "main"
+            );
 
-        const ShaderStage stage;
-        const std::string entrypoint;
+            const VkShaderStageFlagBits stage;
+            const std::string entrypoint;
 
-        inline const VkShaderModule& shader() const noexcept { return shader_; }
+            inline const VkShaderModule& shader() const noexcept { return shader_; }
 
-    private:
-        ShaderModule(const GPUDevicePtr& device, const std::vector<uint8_t>& byteCode, ShaderStage stage, const std::string& entrypoint);
+        private:
+            ShaderModule(
+                const DevicePtr& device,
+                const std::vector<uint8_t>& byteCode,
+                VkShaderStageFlagBits stage,
+                const std::string& entrypoint
+            );
 
-        GPUDevicePtr device_;
+            DevicePtr device_;
 
-        VkShaderModule shader_ = VK_NULL_HANDLE;
-    };
+            VkShaderModule shader_ = VK_NULL_HANDLE;
+        };
+
+    } // namespace graphics
 
 } // namespace coffee
 

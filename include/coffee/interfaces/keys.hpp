@@ -1,5 +1,5 @@
-#ifndef COFFEE_ABSTRACT_KEYS
-#define COFFEE_ABSTRACT_KEYS
+#ifndef COFFEE_INTERFACES_KEYS
+#define COFFEE_INTERFACES_KEYS
 
 #include <cstdint>
 

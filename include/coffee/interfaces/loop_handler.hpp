@@ -9,8 +9,9 @@ namespace coffee {
     // Can be created multiple times, but properly will work only if one is used at the time
     class LoopHandler {
     public:
-        LoopHandler() noexcept = default;
         ~LoopHandler() noexcept = default;
+
+        inline static LoopHandler create() noexcept { return {}; }
 
         LoopHandler(const LoopHandler&) noexcept = default;
         LoopHandler& operator=(const LoopHandler&) noexcept = default;
@@ -32,10 +33,13 @@ namespace coffee {
         float deltaTime() const noexcept;
         float framerateLimit() const noexcept;
 
-        // Not thread-safe
+        // Sets new framerate limit for waitFramelimit function
+        // Exception-free, not thread-safe
         void setFramerateLimit(float framerateLimit) noexcept;
 
     private:
+        LoopHandler() noexcept = default;
+
         std::chrono::high_resolution_clock::time_point lastPollTime_ {};
         float deltaTime_ = 0.0f;
         float framerateLimit_ = 60.0f;

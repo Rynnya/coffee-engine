@@ -1,0 +1,132 @@
+diff --git a/al/error.cpp b/al/error.cpp
+index c2359477..09c95d33 100644
+--- a/al/error.cpp
++++ b/al/error.cpp
+@@ -21,7 +21,6 @@
+ #include "config.h"
+ 
+ #ifdef _WIN32
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ #endif
+ 
+diff --git a/alc/alc.cpp b/alc/alc.cpp
+index e6c2f137..50efc0b9 100644
+--- a/alc/alc.cpp
++++ b/alc/alc.cpp
+@@ -23,7 +23,6 @@
+ #include "version.h"
+ 
+ #ifdef _WIN32
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ #endif
+ 
+diff --git a/alc/backends/base.cpp b/alc/backends/base.cpp
+index ab3ad028..a615590c 100644
+--- a/alc/backends/base.cpp
++++ b/alc/backends/base.cpp
+@@ -8,7 +8,6 @@
+ #include <atomic>
+ 
+ #ifdef _WIN32
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ #include <mmreg.h>
+ 
+diff --git a/alc/backends/dsound.cpp b/alc/backends/dsound.cpp
+index 54fac898..cd9342f5 100644
+--- a/alc/backends/dsound.cpp
++++ b/alc/backends/dsound.cpp
+@@ -22,7 +22,6 @@
+ 
+ #include "dsound.h"
+ 
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ 
+ #include <cguid.h>
+diff --git a/alc/backends/wasapi.cpp b/alc/backends/wasapi.cpp
+index b68a59e2..cce326a8 100644
+--- a/alc/backends/wasapi.cpp
++++ b/alc/backends/wasapi.cpp
+@@ -22,7 +22,6 @@
+ 
+ #include "wasapi.h"
+ 
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ 
+ #include <stdlib.h>
+diff --git a/common/alsem.cpp b/common/alsem.cpp
+index 6a92b35c..0ab67d5a 100644
+--- a/common/alsem.cpp
++++ b/common/alsem.cpp
+@@ -28,7 +28,6 @@
+ 
+ 
+ #ifdef _WIN32
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ 
+ #include <limits>
+diff --git a/common/althrd_setname.cpp b/common/althrd_setname.cpp
+index 22d33092..12f74b35 100644
+--- a/common/althrd_setname.cpp
++++ b/common/althrd_setname.cpp
+@@ -5,7 +5,6 @@
+ 
+ 
+ #ifdef _WIN32
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ 
+ void althrd_setname(const char *name [[maybe_unused]])
+diff --git a/common/dynload.cpp b/common/dynload.cpp
+index 86c36e00..d98e6e27 100644
+--- a/common/dynload.cpp
++++ b/common/dynload.cpp
+@@ -7,7 +7,6 @@
+ #include "strutils.h"
+ 
+ #ifdef _WIN32
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ 
+ void *LoadLib(const char *name)
+diff --git a/common/strutils.cpp b/common/strutils.cpp
+index b221b6ec..d5bc4936 100644
+--- a/common/strutils.cpp
++++ b/common/strutils.cpp
+@@ -7,7 +7,6 @@
+ 
+ 
+ #ifdef _WIN32
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ 
+ std::string wstr_to_utf8(const WCHAR *wstr)
+diff --git a/core/helpers.cpp b/core/helpers.cpp
+index 2eccc50f..c15576c2 100644
+--- a/core/helpers.cpp
++++ b/core/helpers.cpp
+@@ -4,7 +4,6 @@
+ #include "helpers.h"
+ 
+ #if defined(_WIN32)
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ #endif
+ 
+diff --git a/core/logging.cpp b/core/logging.cpp
+index 34385cf4..00c38117 100644
+--- a/core/logging.cpp
++++ b/core/logging.cpp
+@@ -13,7 +13,6 @@
+ 
+ 
+ #if defined(_WIN32)
+-#define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ #elif defined(__ANDROID__)
+ #include <android/log.h>

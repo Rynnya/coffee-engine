@@ -1,7 +1,7 @@
 #ifndef COFFEE_GRAPHICS_DEVICE
 #define COFFEE_GRAPHICS_DEVICE
 
-#include <coffee/interfaces/scope_exit.hpp>
+#include <coffee/interfaces/resource_guard.hpp>
 #include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
 #include <coffee/utils/vk_utils.hpp>
@@ -13,195 +13,229 @@
 #include <array>
 #include <mutex>
 
+// Required to remove some annoying warning about redefinition on Windows
+#undef APIENTRY
+
 namespace coffee {
 
-    struct SubmitInfo {
-        VkSwapchainKHR swapChain = VK_NULL_HANDLE;
-        VkSemaphore waitSemaphone = VK_NULL_HANDLE;
-        VkSemaphore signalSemaphone = VK_NULL_HANDLE;
-        uint32_t* currentFrame = nullptr;
-        std::vector<VkCommandBuffer> commandBuffers {};
-    };
+    namespace graphics {
 
-    class CommandBuffer;
+        struct SubmitInfo {
+            VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+            VkSemaphore waitSemaphone = VK_NULL_HANDLE;
+            VkSemaphore signalSemaphone = VK_NULL_HANDLE;
+            uint32_t* currentFrame = nullptr;
+            std::vector<VkCommandBuffer> commandBuffers {};
+        };
 
-    // Core class for GPU handling
-    // Provides low-level access for Vulkan and mandatory for most graphics wrapper
-    // Prefer using wrappers instead of raw Vulkan functions if engine supports such behaviour
-    class GPUDevice
-        : NonMoveable
-        , public std::enable_shared_from_this<GPUDevice> {
-    public:
-        static constexpr size_t maxOperationsInFlight = 2;
+        class CommandBuffer;
 
-        ~GPUDevice() noexcept;
+        // Core class for GPU handling
+        // Provides low-level access for Vulkan and mandatory for most graphics wrapper
+        // Prefer using wrappers instead of raw Vulkan functions if engine supports such behaviour
+        class Device
+            : NonMoveable
+            , public std::enable_shared_from_this<Device> {
+        public:
+            static constexpr uint32_t kMaxOperationsInFlight = 2;
 
-        static GPUDevicePtr create(VkPhysicalDeviceType preferredDeviceType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
+            ~Device() noexcept;
 
-        // Called by swapchain when acquiring next image
-        // Waits until previous frame is done
-        void waitForAcquire();
-        // Called by swapchain when resize occurs
-        // Waits until all frames in flight is done
-        void waitForRelease();
+            static DevicePtr create();
 
-        void sendCommandBuffer(
-            CommandBuffer&& commandBuffer,
-            VkSwapchainKHR swapChain = VK_NULL_HANDLE,
-            VkSemaphore waitSemaphone = VK_NULL_HANDLE,
-            VkSemaphore signalSemaphone = VK_NULL_HANDLE,
-            uint32_t* currentFrame = nullptr
-        );
-        void sendCommandBuffers(
-            std::vector<CommandBuffer>&& commandBuffers,
-            VkSwapchainKHR swapChain = VK_NULL_HANDLE,
-            VkSemaphore waitSemaphone = VK_NULL_HANDLE,
-            VkSemaphore signalSemaphone = VK_NULL_HANDLE,
-            uint32_t* currentFrame = nullptr
-        );
-        void submitPendingWork();
+            // Called by swapchain when acquiring next image
+            // Waits until previous frame is done
+            void waitForAcquire();
+            // Called by swapchain when resize occurs
+            // Waits until all frames in flight is done
+            void waitForRelease();
 
-        inline bool isUnifiedTransferGraphicsQueue() const noexcept { return transferQueue_ == VK_NULL_HANDLE; }
+            void sendCommandBuffer(
+                CommandBuffer&& commandBuffer,
+                VkSwapchainKHR swapChain = VK_NULL_HANDLE,
+                VkSemaphore waitSemaphone = VK_NULL_HANDLE,
+                VkSemaphore signalSemaphone = VK_NULL_HANDLE,
+                uint32_t* currentFrame = nullptr
+            );
+            void sendCommandBuffers(
+                std::vector<CommandBuffer>&& commandBuffers,
+                VkSwapchainKHR swapChain = VK_NULL_HANDLE,
+                VkSemaphore waitSemaphone = VK_NULL_HANDLE,
+                VkSemaphore signalSemaphone = VK_NULL_HANDLE,
+                uint32_t* currentFrame = nullptr
+            );
+            void submitPendingWork();
 
-        inline uint32_t transferQueueFamilyIndex() const noexcept
-        {
-            if (transferQueue_ == VK_NULL_HANDLE) {
-                return indices_.transferFamily.value();
+            inline uint32_t graphicsQueueFamilyIndex() const noexcept { return indices_.graphicsFamily.value(); }
+
+            inline uint32_t computeQueueFamilyIndex() const noexcept
+            {
+                if (computeQueue_ != VK_NULL_HANDLE) {
+                    return indices_.computeFamily.value();
+                }
+
+                return indices_.graphicsFamily.value();
             }
 
-            return indices_.graphicsFamily.value();
-        }
+            inline uint32_t transferQueueFamilyIndex() const noexcept
+            {
+                if (transferQueue_ != VK_NULL_HANDLE) {
+                    return indices_.transferFamily.value();
+                }
 
-        inline uint32_t graphicsQueueFamilyIndex() const noexcept { return indices_.graphicsFamily.value(); }
+                if (computeQueue_ != VK_NULL_HANDLE) {
+                    return indices_.computeFamily.value();
+                }
 
-        [[nodiscard]] ScopeExit singleTimeTransfer(std::function<void(const CommandBuffer&)>&& transferActions);
-        [[nodiscard]] ScopeExit singleTimeGraphics(std::function<void(const CommandBuffer&)>&& graphicsActions);
+                return indices_.graphicsFamily.value();
+            }
 
-        // Generic Vulkan structures
+            // Returns true when graphics and compute queue from one family; otherwise false (additional synchronization required)
+            inline bool isUnifiedGraphicsComputeQueue() const noexcept { return graphicsQueueFamilyIndex() == computeQueueFamilyIndex(); }
 
-        inline VkInstance instance() const noexcept { return instance_; }
+            // Returns true when graphics and transfer queue from one family; otherwise false (additional synchronization required)
+            inline bool isUnifiedGraphicsTransferQueue() const noexcept { return graphicsQueueFamilyIndex() == transferQueueFamilyIndex(); }
 
-        inline VkPhysicalDevice physicalDevice() const noexcept { return physicalDevice_; }
+            // Returns true when compute and transfer queue from one family; otherwise false (additional synchronization required)
+            inline bool isUnifiedComputeTransferQueue() const noexcept { return computeQueueFamilyIndex() == transferQueueFamilyIndex(); }
 
-        inline VkDevice logicalDevice() const noexcept { return logicalDevice_; }
+            [[nodiscard]] ScopeExit singleTimeTransfer(CommandBuffer&& transferCommandBuffer);
+            [[nodiscard]] ScopeExit singleTimeTransfer(std::vector<CommandBuffer>&& transferCommandBuffers);
+            [[nodiscard]] ScopeExit singleTimeCompute(CommandBuffer&& computeCommandBuffer);
+            [[nodiscard]] ScopeExit singleTimeCompute(std::vector<CommandBuffer>&& computeCommandBuffers);
+            [[nodiscard]] ScopeExit singleTimeGraphics(CommandBuffer&& graphicsCommandBuffer);
+            [[nodiscard]] ScopeExit singleTimeGraphics(std::vector<CommandBuffer>&& graphicsCommandBuffers);
 
-        inline VkDescriptorPool descriptorPool() const noexcept { return descriptorPool_; }
+            // Generic Vulkan structures
 
-        inline VmaAllocator allocator() const noexcept { return allocator_; }
+            inline VkInstance instance() const noexcept { return instance_; }
 
-        // Swapchain related functions
+            inline VkPhysicalDevice physicalDevice() const noexcept { return physicalDevice_; }
 
-        inline uint32_t imageCount() const noexcept { return imageCountForSwapChain_; }
+            inline VkDevice logicalDevice() const noexcept { return logicalDevice_; }
 
-        inline uint32_t currentOperation() const noexcept { return currentOperation_; }
+            inline VkDescriptorPool descriptorPool() const noexcept { return descriptorPool_; }
 
-        inline uint32_t currentOperationInFlight() const noexcept { return currentOperationInFlight_; }
+            inline VmaAllocator allocator() const noexcept { return allocator_; }
 
-        // Properties
+            // Swapchain related functions
 
-        inline std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> heapBudgets() const noexcept
-        {
-            std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets {};
-            vmaGetHeapBudgets(allocator_, budgets.data());
+            inline uint32_t imageCount() const noexcept { return imageCountForSwapChain_; }
 
-            return budgets;
-        }
+            inline uint32_t currentOperation() const noexcept { return currentOperation_; }
 
-        inline const VkPhysicalDeviceMemoryProperties* memoryProperties() const noexcept
-        {
-            const VkPhysicalDeviceMemoryProperties* properties = nullptr;
-            vmaGetMemoryProperties(allocator_, &properties);
+            inline uint32_t currentOperationInFlight() const noexcept { return currentOperationInFlight_; }
 
-            return properties;
-        }
+            // Properties
 
-        inline const VkPhysicalDeviceProperties& properties() const noexcept { return properties_; }
+            inline std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> heapBudgets() const noexcept
+            {
+                std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets {};
+                vmaGetHeapBudgets(allocator_, budgets.data());
 
-        // Formats
+                return budgets;
+            }
 
-        inline const VkSurfaceFormatKHR& surfaceFormat() const noexcept { return surfaceFormat_; }
+            inline const VkPhysicalDeviceMemoryProperties* memoryProperties() const noexcept
+            {
+                const VkPhysicalDeviceMemoryProperties* properties = nullptr;
+                vmaGetMemoryProperties(allocator_, &properties);
 
-        inline VkFormat optimalDepthFormat() const noexcept { return optimalDepthFormat_; }
+                return properties;
+            }
 
-        inline VkFormat optimalDepthStencilFormat() const noexcept { return optimalDepthStencilFormat_; }
+            inline const VkPhysicalDeviceProperties& properties() const noexcept { return properties_; }
 
-    private:
-        GPUDevice(VkPhysicalDeviceType deviceType);
+            // Formats
 
-        void initializeGlobalEnvironment();
-        void deinitializeGlobalEnvironment();
+            inline VkFormat surfaceFormat() const noexcept { return surfaceFormat_.format; }
 
-        GLFWwindow* createTemporaryWindow();
-        VkSurfaceKHR createTemporarySurface(GLFWwindow* window);
-        void destroyTemporarySurface(VkSurfaceKHR surface);
-        void destroyTemporaryWindow(GLFWwindow* window);
+            inline VkColorSpaceKHR surfaceColorSpace() const noexcept { return surfaceFormat_.colorSpace; }
 
-        void createInstance();
-        void createDebugMessenger();
-        void pickPhysicalDevice(VkSurfaceKHR surface, VkPhysicalDeviceType deviceType);
-        void createLogicalDevice(VkSurfaceKHR surface);
-        void createSyncObjects();
-        void createDescriptorPool();
-        void createAllocator();
+            inline VkFormat optimalDepthFormat() const noexcept { return optimalDepthFormat_; }
 
-        bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions = {});
+            inline VkFormat optimalDepthStencilFormat() const noexcept { return optimalDepthStencilFormat_; }
 
-        std::pair<VkFence, CommandBuffer> beginSingleTimeCommands(CommandBufferType type);
-        ScopeExit endSingleTimeCommands(
-            CommandBufferType type,
-            VkQueue queueToSubmit,
-            std::mutex& mutex,
-            VkFence fence,
-            CommandBuffer&& commandBuffer
-        );
+        private:
+            Device();
 
-        VkCommandPool acquireGraphicsCommandPool();
-        void returnGraphicsCommandPool(VkCommandPool pool);
-        VkCommandPool acquireTransferCommandPool();
-        void returnTransferCommandPool(VkCommandPool pool);
+            void initializeGlobalEnvironment();
+            void deinitializeGlobalEnvironment() noexcept;
 
-        void clearCommandBuffers(size_t index);
+            GLFWwindow* createTemporaryWindow();
+            VkSurfaceKHR createTemporarySurface(GLFWwindow* window);
+            void destroyTemporarySurface(VkSurfaceKHR surface);
+            void destroyTemporaryWindow(GLFWwindow* window);
 
-        uint32_t imageCountForSwapChain_ = 0;
-        uint32_t currentOperation_ = 0;         // Must be in range of [0, imageCountForSwapChain]
-        uint32_t currentOperationInFlight_ = 0; // Must be in range of [0, maxOperationsInFlight]
+            void createInstance();
+            void createDebugMessenger();
+            void pickPhysicalDevice(VkSurfaceKHR surface);
+            void createLogicalDevice(VkSurfaceKHR surface);
+            void createSyncObjects();
+            void createDescriptorPool();
+            void createAllocator();
 
-        bool dedicatedAllocationExtensionEnabled = false;
-        bool memoryPriorityAndBudgetExtensionsEnabled = false;
+            bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions = {});
 
-        VkInstance instance_ = VK_NULL_HANDLE;
-        VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
+            VkFence acquireSingleTimeFence();
+            ScopeExit endSingleTimeCommands(VkQueue queue, std::mutex& mutex, CommandBuffer&& commandBuffer);
+            ScopeExit endSingleTimeCommands(VkQueue queue, std::mutex& mutex, std::vector<CommandBuffer>&& commandBuffers);
 
-        VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-        VkDevice logicalDevice_ = VK_NULL_HANDLE;
+            VkCommandPool acquireGraphicsCommandPool();
+            void returnGraphicsCommandPool(VkCommandPool pool);
+            VkCommandPool acquireComputeCommandPool();
+            void returnComputeCommandPool(VkCommandPool pool);
+            VkCommandPool acquireTransferCommandPool();
+            void returnTransferCommandPool(VkCommandPool pool);
 
-        VkSurfaceFormatKHR surfaceFormat_ {};
-        VkFormat optimalDepthFormat_ = VK_FORMAT_UNDEFINED;
-        VkFormat optimalDepthStencilFormat_ = VK_FORMAT_UNDEFINED;
-        VkPhysicalDeviceProperties properties_ {};
-        VkUtils::QueueFamilyIndices indices_ {};
+            void clearCommandBuffers(size_t index);
 
-        VkQueue graphicsQueue_ = VK_NULL_HANDLE;
-        VkQueue presentQueue_ = VK_NULL_HANDLE;
-        VkQueue transferQueue_ = VK_NULL_HANDLE;
-        std::vector<VkFence> operationsInFlight_ {};
-        std::array<VkFence, maxOperationsInFlight> inFlightFences_ {};
-        std::mutex graphicsQueueMutex_ {};
-        std::mutex transferQueueMutex_ {};
+            uint32_t imageCountForSwapChain_ = 0;
+            uint32_t currentOperation_ = 0;         // Must be in range of [0, imageCountForSwapChain]
+            uint32_t currentOperationInFlight_ = 0; // Must be in range of [0, kMaxOperationsInFlight]
 
-        std::mutex submitMutex_ {};
-        std::vector<SubmitInfo> pendingSubmits_ {};
-        std::vector<bool> poolsAndBuffersClearFlags_ {};
-        std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
+            bool dedicatedAllocationExtensionEnabled = false;
+            bool memoryPriorityAndBudgetExtensionsEnabled = false;
 
-        tbb::concurrent_queue<VkCommandPool> graphicsPools_ {};
-        tbb::concurrent_queue<VkCommandPool> transferPools_ {};
+            VkInstance instance_ = VK_NULL_HANDLE;
+            VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
 
-        VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
-        VmaAllocator allocator_ = VK_NULL_HANDLE;
+            VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
+            VkDevice logicalDevice_ = VK_NULL_HANDLE;
 
-        friend class CommandBuffer;
-    };
+            VkSurfaceFormatKHR surfaceFormat_ {};
+            VkFormat optimalDepthFormat_ = VK_FORMAT_UNDEFINED;
+            VkFormat optimalDepthStencilFormat_ = VK_FORMAT_UNDEFINED;
+            VkPhysicalDeviceProperties properties_ {};
+            VkUtils::QueueFamilyIndices indices_ {};
+
+            VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+            VkQueue presentQueue_ = VK_NULL_HANDLE;
+            VkQueue computeQueue_ = VK_NULL_HANDLE;
+            VkQueue transferQueue_ = VK_NULL_HANDLE;
+            std::mutex graphicsQueueMutex_ {};
+            std::mutex computeQueueMutex_ {};
+            std::mutex transferQueueMutex_ {};
+
+            std::mutex submitMutex_ {};
+            std::vector<SubmitInfo> pendingSubmits_ {};
+            std::vector<VkFence> operationsInFlight_ {};
+            std::array<VkFence, kMaxOperationsInFlight> inFlightFences_ {};
+            std::vector<bool> poolsAndBuffersClearFlags_ {};
+            std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
+
+            tbb::concurrent_queue<VkCommandPool> graphicsPools_ {};
+            tbb::concurrent_queue<VkCommandPool> computePools_ {};
+            tbb::concurrent_queue<VkCommandPool> transferPools_ {};
+            tbb::concurrent_queue<VkFence> singleTimeFences_ {};
+
+            VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
+            VmaAllocator allocator_ = VK_NULL_HANDLE;
+
+            friend class CommandBuffer;
+        };
+
+    } // namespace coffee
 
 } // namespace coffee
 

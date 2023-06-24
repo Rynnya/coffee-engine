@@ -1,13 +1,23 @@
 #ifndef COFFEE_TYPES
 #define COFFEE_TYPES
 
+#include <volk/volk.h>
+
 #include <cstdint>
 #include <memory>
 
 namespace coffee {
 
-    class GPUDevice;
-    using GPUDevicePtr = std::shared_ptr<GPUDevice>;
+    namespace graphics {
+
+        class Device;
+        using DevicePtr = std::shared_ptr<Device>;
+
+        using ShaderStage = VkShaderStageFlagBits;
+
+        enum class CommandBufferType : uint32_t { Transfer = 0, Graphics = 1, Compute = 2 };
+
+    } // namespace graphics
 
     struct Float2D {
         float x = 0.0f;
@@ -24,8 +34,6 @@ namespace coffee {
         Metallic = 1 << 5,
         AmbientOcclusion = 1 << 6
     };
-
-    enum class CommandBufferType : uint32_t { Transfer = 0, Graphics = 1, Compute = 2 };
 
 } // namespace coffee
 

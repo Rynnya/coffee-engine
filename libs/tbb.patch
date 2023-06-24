@@ -1,0 +1,87 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a47dc8f8..16891691 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -139,58 +139,6 @@ endif()
+ # -------------------------------------------------------------------
+ # Files and folders naming
+ set(CMAKE_DEBUG_POSTFIX _debug)
+-
+-if (NOT DEFINED TBB_OUTPUT_DIR_BASE)
+-    if (MSVC)
+-        if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY MATCHES DLL)
+-            set(_tbb_msvc_runtime _md)
+-        else()
+-            set(_tbb_msvc_runtime _mt)
+-        endif()
+-
+-        if (WINDOWS_STORE)
+-            if (TBB_NO_APPCONTAINER)
+-                set(_tbb_win_store _wsnoappcont)
+-            else()
+-                set(_tbb_win_store _ws)
+-            endif()
+-        elseif(TBB_WINDOWS_DRIVER)
+-            set(_tbb_win_store _wd)
+-        endif()
+-    endif()
+-
+-     string(REGEX MATCH "^([0-9]+\.[0-9]+|[0-9]+)" _tbb_compiler_version_short ${CMAKE_CXX_COMPILER_VERSION})
+-     string(TOLOWER ${CMAKE_CXX_COMPILER_ID}_${_tbb_compiler_version_short}_cxx${CMAKE_CXX_STANDARD}_${TBB_ARCH}${_tbb_msvc_runtime}${_tbb_win_store} TBB_OUTPUT_DIR_BASE)
+-     unset(_tbb_msvc_runtime)
+-     unset(_tbb_win_store)
+-     unset(_tbb_compiler_version_short)
+-endif()
+-
+-foreach(output_type LIBRARY ARCHIVE PDB RUNTIME)
+-    if (CMAKE_BUILD_TYPE)
+-        string(TOLOWER ${CMAKE_BUILD_TYPE} _tbb_build_type_lower)
+-        set(CMAKE_${output_type}_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${TBB_OUTPUT_DIR_BASE}_${_tbb_build_type_lower})
+-        unset(_tbb_build_type_lower)
+-    endif()
+-
+-    if (CMAKE_CONFIGURATION_TYPES)
+-        foreach(suffix ${CMAKE_CONFIGURATION_TYPES})
+-            string(TOUPPER ${suffix} _tbb_suffix_upper)
+-            string(TOLOWER ${suffix} _tbb_suffix_lower)
+-            set(CMAKE_${output_type}_OUTPUT_DIRECTORY_${_tbb_suffix_upper} ${CMAKE_BINARY_DIR}/${TBB_OUTPUT_DIR_BASE}_${_tbb_suffix_lower})
+-        endforeach()
+-        unset(_tbb_suffix_lower)
+-        unset(_tbb_suffix_upper)
+-    endif()
+-endforeach()
+-
+-if (CMAKE_CONFIGURATION_TYPES)
+-    # We can't use generator expressions in a cmake variable name.
+-    set(TBB_TEST_WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/${TBB_OUTPUT_DIR_BASE}_$<LOWER_CASE:$<CONFIG>>)
+-else()
+-    set(TBB_TEST_WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+-endif()
+-
+ # -------------------------------------------------------------------
+ 
+ # -------------------------------------------------------------------
+diff --git a/include/oneapi/tbb/detail/_machine.h b/include/oneapi/tbb/detail/_machine.h
+index 7a4a1e31..3f27aeeb 100644
+--- a/include/oneapi/tbb/detail/_machine.h
++++ b/include/oneapi/tbb/detail/_machine.h
+@@ -28,7 +28,6 @@
+ #ifdef _WIN32
+ #include <intrin.h>
+ #ifdef __TBBMALLOC_BUILD
+-#define WIN32_LEAN_AND_MEAN
+ #ifndef NOMINMAX
+ #define NOMINMAX
+ #endif
+diff --git a/include/oneapi/tbb/task_group.h b/include/oneapi/tbb/task_group.h
+index 2bbacd55..5998ab7d 100644
+--- a/include/oneapi/tbb/task_group.h
++++ b/include/oneapi/tbb/task_group.h
+@@ -615,7 +615,6 @@ public:
+     template<typename F>
+     d2::task_handle defer(F&& f) {
+         return prepare_task_handle(std::forward<F>(f));
+-
+     }
+ 
+     template<typename F>

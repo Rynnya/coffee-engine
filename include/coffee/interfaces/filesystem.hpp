@@ -1,8 +1,8 @@
 #ifndef COFFEE_INTERFACES_FILESYSTEM
 #define COFFEE_INTERFACES_FILESYSTEM
 
-#include <coffee/interfaces/scope_exit.hpp>
-#include <coffee/utils/non_copyable.hpp>
+#include <coffee/utils/non_moveable.hpp>
+#include <coffee/utils/utils.hpp>
 
 #include <mio/mio.hpp>
 
@@ -22,13 +22,13 @@ namespace coffee {
     class Filesystem;
     using FilesystemPtr = std::shared_ptr<Filesystem>;
 
-    class Filesystem : NonCopyable {
+    class Filesystem : NonMoveable {
     public:
         // Virtual filesystem support some internal types as mandatory
         // This required because of type checking inside and for better error handling
         enum class FileType : uint8_t {
             // Applied to any file that isn't listed here
-            Unknown = 0,
+            RawBytes = 0,
             // .spv
             Shader = 1,
             // .cfa
@@ -37,12 +37,14 @@ namespace coffee {
             RawImage = 3,
             // .basis, .ktx2
             BasisImage = 4,
-            // Unknown right now
-            Audio = 5
+            // .wav, .wave
+            WAV = 5,
+            // .ogg
+            OGG = 6,
         };
 
         struct Entry {
-            FileType type = FileType::Unknown;
+            FileType type = FileType::RawBytes;
             std::string filename {};
             // This means only filesystem ZSTD compression, which isn't always applied
             // Reason for this is because some other formats uses internal for them compression
@@ -64,6 +66,7 @@ namespace coffee {
 
         virtual Filesystem::Entry getMetadata(const std::string& path) const = 0;
         virtual std::vector<uint8_t> getContent(const std::string& path) const = 0;
+        virtual utils::ReaderStream getStream(const std::string& path) const = 0;
 
         const std::string basePath;
     };
@@ -76,6 +79,7 @@ namespace coffee {
 
         Filesystem::Entry getMetadata(const std::string& path) const override;
         std::vector<uint8_t> getContent(const std::string& path) const override;
+        utils::ReaderStream getStream(const std::string& path) const override;
 
     private:
         NativeFilesystem(const std::string& path);
@@ -91,10 +95,11 @@ namespace coffee {
 
         Filesystem::Entry getMetadata(const std::string& path) const override;
         std::vector<uint8_t> getContent(const std::string& path) const override;
+        utils::ReaderStream getStream(const std::string& path) const override;
 
     private:
         struct InternalEntry {
-            FileType fileType = FileType::Unknown;
+            FileType fileType = FileType::RawBytes;
             uint8_t filepathSize = 0;
             char* filepath = nullptr;
             size_t uncompressedSize = 0;
