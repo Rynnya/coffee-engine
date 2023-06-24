@@ -11,31 +11,74 @@ namespace coffee {
         return Math::indexOfHighestBit(static_cast<uint32_t>(textureType));
     }
 
-    Materials::Materials(const ImageViewPtr& defaultTexture) : defaultTexture { defaultTexture }
+    Materials::Materials(const graphics::ImageViewPtr& defaultTexture) : defaultTexture_ { defaultTexture }
     {
         COFFEE_ASSERT(defaultTexture != nullptr, "Invalid defaultTexture provided.");
 
         textures_.fill(defaultTexture);
     }
 
-    void Materials::write(const ImageViewPtr& texture, TextureType type)
+    Materials::Materials(Materials&& other) noexcept
+        : modifiers { std::move(other.modifiers) }
+        , defaultTexture_ { other.defaultTexture_ }
+        , textures_ { std::move(other.textures_) }
+        , textureFlags_ { other.textureFlags_ }
+    {
+        other.textures_.fill(other.defaultTexture_);
+        other.textureFlags_ = TextureType::None;
+    }
+
+    Materials& Materials::operator=(Materials&& other) noexcept
+    {
+        if (this == &other) {
+            return *this;
+        }
+
+        modifiers = std::move(other.modifiers);
+        defaultTexture_ = other.defaultTexture_;
+        textures_ = std::move(other.textures_);
+        textureFlags_ = other.textureFlags_;
+
+        other.textures_.fill(other.defaultTexture_);
+        other.textureFlags_ = TextureType::None;
+
+        return *this;
+    }
+
+    void Materials::write(const graphics::ImageViewPtr& texture, TextureType type)
     {
         if (texture == nullptr) {
             return;
         }
 
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
+
         textures_[textureTypeToIndex(type)] = texture;
         reinterpret_cast<uint32_t&>(textureFlags_) |= static_cast<uint32_t>(type);
     }
 
-    const ImageViewPtr& Materials::read(TextureType type) const noexcept { return textures_[textureTypeToIndex(type)]; }
+    graphics::ImageViewPtr Materials::read(TextureType type) const noexcept
+    {
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
+
+        return textures_[textureTypeToIndex(type)];
+    }
 
     void Materials::reset(TextureType type)
     {
-        textures_[textureTypeToIndex(type)] = defaultTexture;
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
+
+        textures_[textureTypeToIndex(type)] = defaultTexture_;
         reinterpret_cast<uint32_t&>(textureFlags_) &= ~static_cast<uint32_t>(type);
     }
 
-    TextureType Materials::textureFlags() const noexcept { return textureFlags_; }
+    TextureType Materials::textureFlags() const noexcept
+    {
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
+
+        return textureFlags_;
+    }
+
+    const graphics::ImageViewPtr& Materials::defaultTexture() const noexcept { return defaultTexture_; }
 
 } // namespace coffee

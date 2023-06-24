@@ -1,11 +1,12 @@
 #include <coffee/interfaces/asset_manager.hpp>
 
 #include <coffee/graphics/single_time.hpp>
+#include <coffee/interfaces/exceptions.hpp>
 #include <coffee/objects/vertex.hpp>
-#include <coffee/utils/exceptions.hpp>
 #include <coffee/utils/utils.hpp>
 
 #include <basis_universal/basisu_transcoder.h>
+#include <oneapi/tbb/parallel_for.h>
 #include <xxh3/xxhash.h>
 
 namespace coffee {
@@ -41,9 +42,10 @@ namespace coffee {
                 case Filesystem::FileType::RawImage:
                 case Filesystem::FileType::BasisImage:
                     return "Image";
-                case Filesystem::FileType::Audio:
+                case Filesystem::FileType::WAV:
+                case Filesystem::FileType::OGG:
                     return "Audio";
-                case Filesystem::FileType::Unknown:
+                case Filesystem::FileType::RawBytes:
                 default:
                     return "Raw";
             }
@@ -51,7 +53,7 @@ namespace coffee {
 
     } // namespace detail
 
-    AssetManager::AssetManager(const GPUDevicePtr& device) : device_ { device }
+    AssetManager::AssetManager(const graphics::DevicePtr& device) : device_ { device }
     {
         createMissingTexture();
 
@@ -61,7 +63,7 @@ namespace coffee {
         selectFourChannels();
     }
 
-    AssetManagerPtr AssetManager::create(const GPUDevicePtr& device)
+    AssetManagerPtr AssetManager::create(const graphics::DevicePtr& device)
     {
         COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
 
@@ -70,16 +72,18 @@ namespace coffee {
 
     std::vector<uint8_t> AssetManager::getBytes(const std::string& path)
     {
-        HashAccessor accessor {};
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
-        if (!cache_.find(accessor, XXH3_64bits(path.data(), path.size()))) {
+        auto cacheIterator = cache_.find(XXH3_64bits(path.data(), path.size()));
+
+        if (cacheIterator == cache_.end()) {
             throw AssetException { AssetException::Type::NotInCache,
                                    fmt::format("Requested asset '{}' wasn't in cache, and filesystem wasn't provided", path) };
         }
 
-        auto& asset = accessor->second;
+        auto& asset = cacheIterator->second;
 
-        if (asset.type != Filesystem::FileType::Unknown) {
+        if (asset.type != Filesystem::FileType::RawBytes) {
             throw AssetException { AssetException::Type::TypeMismatch,
                                    fmt::format("Expected type Raw, requested type was {}", detail::fileTypeToString(asset.type)) };
         }
@@ -89,17 +93,18 @@ namespace coffee {
 
     std::vector<uint8_t> AssetManager::getBytes(const FilesystemPtr& fs, const std::string& path)
     {
-        HashAccessor accessor {};
-        XXH64_hash_t hash = XXH3_64bits(path.data(), path.size());
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
-        if (!cache_.find(accessor, hash)) {
-            if (fs == nullptr) {
-                throw AssetException { AssetException::Type::InvalidFilesystem, "Filesystem wasn't provided." };
-            }
+        XXH64_hash_t hash = XXH3_64bits(path.data(), path.size());
+        auto cacheIterator = cache_.find(hash);
+
+        if (cacheIterator == cache_.end()) {
+            // Filesystem::create always returns valid pointer, so it must be user attempt to provide invalid pointer
+            COFFEE_ASSERT(fs != nullptr, "Filesystem wasn't provided.");
 
             Filesystem::Entry entry = fs->getMetadata(path);
 
-            if (entry.type != Filesystem::FileType::Unknown) {
+            if (entry.type != Filesystem::FileType::RawBytes) {
                 throw AssetException { AssetException::Type::TypeMismatch,
                                        fmt::format("Expected type Raw, requested type was {}", detail::fileTypeToString(entry.type)) };
             }
@@ -111,64 +116,83 @@ namespace coffee {
             return rawBytes;
         }
 
-        return std::get<std::vector<uint8_t>>(accessor->second.actualObject);
+        auto& asset = cacheIterator->second;
+
+        if (asset.type != Filesystem::FileType::RawBytes) {
+            throw AssetException { AssetException::Type::TypeMismatch,
+                                   fmt::format("Expected type Raw, requested type was {}", detail::fileTypeToString(asset.type)) };
+        }
+
+        return std::get<std::vector<uint8_t>>(cacheIterator->second.actualObject);
     }
 
-    ShaderPtr AssetManager::getShader(const std::string& path, ShaderStage stage, const std::string& entrypoint)
+    graphics::ShaderPtr AssetManager::getShader(const std::string& path, ShaderStage stage, const std::string& entrypoint)
     {
-        HashAccessor accessor {};
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
-        if (!cache_.find(accessor, XXH3_64bits(path.data(), path.size()))) {
+        auto cacheIterator = cache_.find(XXH3_64bits(path.data(), path.size()));
+
+        if (cacheIterator == cache_.end()) {
             throw AssetException { AssetException::Type::NotInCache,
                                    fmt::format("Requested asset '{}' wasn't in cache, and filesystem wasn't provided", path) };
         }
 
-        auto& asset = accessor->second;
+        auto& asset = cacheIterator->second;
 
         if (asset.type != Filesystem::FileType::Shader) {
             throw AssetException { AssetException::Type::TypeMismatch,
                                    fmt::format("Expected type Shader, requested type was {}", detail::fileTypeToString(asset.type)) };
         }
 
-        return std::get<ShaderPtr>(asset.actualObject);
+        return std::get<graphics::ShaderPtr>(asset.actualObject);
     }
 
-    ShaderPtr AssetManager::getShader(const FilesystemPtr& fs, const std::string& path, ShaderStage stage, const std::string& entrypoint)
+    graphics::ShaderPtr AssetManager::getShader(const FilesystemPtr& fs, const std::string& path, ShaderStage stage, const std::string& e)
     {
-        HashAccessor accessor {};
-        XXH64_hash_t hash = XXH3_64bits(path.data(), path.size());
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
-        if (!cache_.find(accessor, hash)) {
-            if (fs == nullptr) {
-                throw AssetException { AssetException::Type::InvalidFilesystem, "Filesystem wasn't provided." };
-            }
+        XXH64_hash_t hash = XXH3_64bits(path.data(), path.size());
+        auto cacheIterator = cache_.find(hash);
+
+        if (cacheIterator == cache_.end()) {
+            // Filesystem::create always returns valid pointer, so it must be user attempt to provide invalid pointer
+            COFFEE_ASSERT(fs != nullptr, "Filesystem wasn't provided.");
 
             Filesystem::Entry entry = fs->getMetadata(path);
 
             if (entry.type != Filesystem::FileType::Shader) {
                 throw AssetException { AssetException::Type::TypeMismatch,
-                                       fmt::format("Expected type Raw, requested type was {}", detail::fileTypeToString(entry.type)) };
+                                       fmt::format("Expected type Shader, requested type was {}", detail::fileTypeToString(entry.type)) };
             }
 
-            ShaderPtr shader = ShaderModule::create(device_, fs->getContent(path), stage, entrypoint);
+            graphics::ShaderPtr shader = graphics::ShaderModule::create(device_, fs->getContent(path), stage, e);
             cache_.insert(std::make_pair(hash, Asset { shader }));
 
             return shader;
         }
 
-        return std::get<ShaderPtr>(accessor->second.actualObject);
+        auto& asset = cacheIterator->second;
+
+        if (asset.type != Filesystem::FileType::Shader) {
+            throw AssetException { AssetException::Type::TypeMismatch,
+                                   fmt::format("Expected type Shader, requested type was {}", detail::fileTypeToString(asset.type)) };
+        }
+
+        return std::get<graphics::ShaderPtr>(asset.actualObject);
     }
 
     ModelPtr AssetManager::getModel(const std::string& path)
     {
-        HashAccessor accessor {};
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
-        if (!cache_.find(accessor, XXH3_64bits(path.data(), path.size()))) {
+        auto cacheIterator = cache_.find(XXH3_64bits(path.data(), path.size()));
+
+        if (cacheIterator == cache_.end()) {
             throw AssetException { AssetException::Type::NotInCache,
                                    fmt::format("Requested asset '{}' wasn't in cache, and filesystem wasn't provided", path) };
         }
 
-        auto& asset = accessor->second;
+        auto& asset = cacheIterator->second;
 
         if (asset.type != Filesystem::FileType::Model) {
             throw AssetException { AssetException::Type::TypeMismatch,
@@ -180,13 +204,14 @@ namespace coffee {
 
     ModelPtr AssetManager::getModel(const FilesystemPtr& fs, const std::string& path)
     {
-        HashAccessor accessor {};
-        XXH64_hash_t hash = XXH3_64bits(path.data(), path.size());
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
-        if (!cache_.find(accessor, hash)) {
-            if (fs == nullptr) {
-                throw AssetException { AssetException::Type::InvalidFilesystem, "Filesystem wasn't provided." };
-            }
+        XXH64_hash_t hash = XXH3_64bits(path.data(), path.size());
+        auto cacheIterator = cache_.find(hash);
+
+        if (cacheIterator == cache_.end()) {
+            // Filesystem::create always returns valid pointer, so it must be user attempt to provide invalid pointer
+            COFFEE_ASSERT(fs != nullptr, "Filesystem wasn't provided.");
 
             Filesystem::Entry entry = fs->getMetadata(path);
 
@@ -201,7 +226,7 @@ namespace coffee {
             return model;
         }
 
-        auto& asset = accessor->second;
+        auto& asset = cacheIterator->second;
 
         if (asset.type != Filesystem::FileType::Model) {
             throw AssetException { AssetException::Type::TypeMismatch,
@@ -211,83 +236,55 @@ namespace coffee {
         return std::get<ModelPtr>(asset.actualObject);
     }
 
-    ImagePtr AssetManager::getImage(const std::string& path, uint32_t amountOfChannels)
+    graphics::ImagePtr AssetManager::getImage(const std::string& path, uint32_t amountOfChannels)
     {
         if (amountOfChannels < 1 || amountOfChannels > 4) {
             throw AssetException { AssetException::Type::InvalidRequest,
                                    fmt::format("Invalid amountOfChannels requested: {}", amountOfChannels) };
         }
 
-        HashAccessor accessor {};
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
-        if (!cache_.find(accessor, XXH3_64bits(path.data(), path.size()))) {
+        auto cacheIterator = cache_.find(XXH3_64bits(path.data(), path.size()));
+
+        if (cacheIterator == cache_.end()) {
             throw AssetException { AssetException::Type::NotInCache,
                                    fmt::format("Requested asset '{}' wasn't in cache, and filesystem wasn't provided", path) };
         }
 
-        auto& asset = accessor->second;
+        auto& asset = cacheIterator->second;
 
         if (asset.type != Filesystem::FileType::RawImage && asset.type != Filesystem::FileType::BasisImage) {
             throw AssetException { AssetException::Type::TypeMismatch,
                                    fmt::format("Expected type Image, requested type was {}", detail::fileTypeToString(asset.type)) };
         }
 
-        return std::get<ImagePtr>(asset.actualObject);
+        return std::get<graphics::ImagePtr>(asset.actualObject);
     }
 
-    ImagePtr AssetManager::getImage(const FilesystemPtr& fs, const std::string& path, uint32_t amountOfChannels)
+    graphics::ImagePtr AssetManager::getImage(const FilesystemPtr& fs, const std::string& path, uint32_t amountOfChannels)
     {
         if (amountOfChannels < 1 || amountOfChannels > 4) {
             throw AssetException { AssetException::Type::InvalidRequest,
                                    fmt::format("Invalid amountOfChannels requested: {}", amountOfChannels) };
         }
 
-        HashAccessor accessor {};
-        XXH64_hash_t hash = XXH3_64bits(path.data(), path.size());
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
-        if (!cache_.find(accessor, hash)) {
-            if (fs == nullptr) {
-                throw AssetException { AssetException::Type::InvalidFilesystem, "Filesystem wasn't provided." };
-            }
-
-            Filesystem::Entry entry = fs->getMetadata(path);
-
-            if (entry.type != Filesystem::FileType::RawImage && entry.type != Filesystem::FileType::BasisImage) {
-                throw AssetException { AssetException::Type::TypeMismatch,
-                                       fmt::format("Expected type Image, requested type was {}", detail::fileTypeToString(entry.type)) };
-            }
-
-            ImagePtr image = nullptr;
-            std::vector<uint8_t> rawBytes = fs->getContent(path);
-
-            switch (entry.type) {
-                case Filesystem::FileType::RawImage:
-                    image = loadRawImage(rawBytes);
-                    break;
-                case Filesystem::FileType::BasisImage:
-                    image = loadBasisImage(rawBytes, amountOfChannels);
-                    break;
-            }
-
-            cache_.insert(std::make_pair(hash, Asset { image }));
-
-            return image;
-        }
-
-        auto& asset = accessor->second;
-
-        if (asset.type != Filesystem::FileType::RawImage && asset.type != Filesystem::FileType::BasisImage) {
-            throw AssetException { AssetException::Type::TypeMismatch,
-                                   fmt::format("Expected type Image, requested type was {}", detail::fileTypeToString(asset.type)) };
-        }
-
-        return std::get<ImagePtr>(asset.actualObject);
+        return loadImageUnsafe(fs, path, amountOfChannels).extract();
     }
 
-    void AssetManager::removeFromCache(const std::string& path) { cache_.erase(XXH3_64bits(path.data(), path.size())); }
+    void AssetManager::removeFromCache(const std::string& path)
+    {
+        tbb::queuing_mutex::scoped_lock lock { mutex_ };
+
+        cache_.unsafe_erase(XXH3_64bits(path.data(), path.size()));
+    }
 
     void AssetManager::createMissingTexture()
     {
+        using namespace graphics;
+
         ImageConfiguration imageConfiguration {};
         imageConfiguration.imageType = VK_IMAGE_TYPE_2D;
         imageConfiguration.format = VK_FORMAT_R8G8_UNORM;
@@ -446,11 +443,17 @@ namespace coffee {
 
     ModelPtr AssetManager::loadModel(const FilesystemPtr& filesystem, const std::string& path)
     {
+        using namespace graphics;
+
         constexpr uint8_t headerMagic[4] = { 0xF0, 0x7B, 0xAE, 0x31 };
         constexpr uint8_t meshMagic[4] = { 0x13, 0xEA, 0xB7, 0xF0 };
 
         std::vector<uint8_t> modelStream = filesystem->getContent(path);
-        utils::ReadOnlyStream<UnderlyingBufferSize> stream { modelStream };
+        utils::ReaderStream stream { modelStream };
+
+        if (stream.size() < 8) {
+            throw FilesystemException { FilesystemException::Type::InvalidFileType, "Invalid header size!" };
+        }
 
         if (std::memcmp(stream.readBuffer<uint8_t, 4>(), headerMagic, 4) != 0) {
             throw FilesystemException { FilesystemException::Type::InvalidFileType, "Invalid header magic!" };
@@ -458,39 +461,58 @@ namespace coffee {
 
         uint32_t meshesSize = stream.read<uint32_t>();
 
+        struct MaterialMetadata {
+            Materials& materials;
+            std::string name;
+            uint32_t amountOfChannels;
+            TextureType type;
+        };
+
+        struct MeshMetadata {
+            AABB aabb;
+            uint32_t verticesOffset;
+            uint32_t verticesSize;
+            uint32_t indicesOffset;
+            uint32_t indicesSize;
+        };
+
         std::vector<Vertex> vertices {};
         std::vector<uint32_t> indices {};
+        std::vector<MaterialMetadata> materialsMetadata {};
+        std::vector<Materials> materials {};
+        std::vector<MeshMetadata> meshesMetadata {};
         std::vector<Mesh> meshes {};
+
+        materials.reserve(7ULL * meshesSize);
+        meshesMetadata.reserve(meshesSize);
+        meshes.reserve(meshesSize);
 
         for (uint32_t i = 0; i < meshesSize; i++) {
             if (std::memcmp(stream.readBuffer<uint8_t, 4>(), meshMagic, 4) != 0) {
                 throw FilesystemException { FilesystemException::Type::InvalidFileType, "Invalid mesh magic!" };
             }
 
-            Materials materials { missingTexture_ };
             uint32_t verticesSize = stream.read<uint32_t>();
             uint32_t indicesSize = stream.read<uint32_t>();
-            uint32_t vertexSize = stream.read<uint32_t>();
 
-            if (vertexSize != sizeof(Vertex)) {
-                throw FilesystemException { FilesystemException::Type::InvalidFileType,
-                                            "Vertex size isn't matching! Please update your model!" };
-            }
+            glm::vec3 aabbMin {};
+            glm::vec3 aabbMax {};
+            stream.readDirectly(&aabbMin);
+            stream.readDirectly(&aabbMax);
 
-            stream.readDirectly(&materials.modifiers.diffuseColor);
-            stream.readDirectly(&materials.modifiers.specularColor);
-            stream.readDirectly(&materials.modifiers.metallicFactor);
-            stream.readDirectly(&materials.modifiers.roughnessFactor);
+            materials.push_back({ missingTexture_ });
+            stream.readDirectly(&materials[i].modifiers.diffuseColor);
+            stream.readDirectly(&materials[i].modifiers.specularColor);
+            stream.readDirectly(&materials[i].modifiers.metallicFactor);
+            stream.readDirectly(&materials[i].modifiers.roughnessFactor);
 
-            uint32_t textureFlags = stream.read<uint32_t>();
-
-            materials.write(loadMaterial(filesystem, readMaterialName(stream), 4), TextureType::Diffuse);
-            materials.write(loadMaterial(filesystem, readMaterialName(stream), 1), TextureType::Specular);
-            materials.write(loadMaterial(filesystem, readMaterialName(stream), 4), TextureType::Normals);
-            materials.write(loadMaterial(filesystem, readMaterialName(stream), 4), TextureType::Emissive);
-            materials.write(loadMaterial(filesystem, readMaterialName(stream), 1), TextureType::Roughness);
-            materials.write(loadMaterial(filesystem, readMaterialName(stream), 1), TextureType::Metallic);
-            materials.write(loadMaterial(filesystem, readMaterialName(stream), 1), TextureType::AmbientOcclusion);
+            materialsMetadata.push_back({ materials[i], readMaterialName(stream), 4, TextureType::Diffuse });
+            materialsMetadata.push_back({ materials[i], readMaterialName(stream), 1, TextureType::Specular });
+            materialsMetadata.push_back({ materials[i], readMaterialName(stream), 4, TextureType::Normals });
+            materialsMetadata.push_back({ materials[i], readMaterialName(stream), 4, TextureType::Emissive });
+            materialsMetadata.push_back({ materials[i], readMaterialName(stream), 1, TextureType::Roughness });
+            materialsMetadata.push_back({ materials[i], readMaterialName(stream), 1, TextureType::Metallic });
+            materialsMetadata.push_back({ materials[i], readMaterialName(stream), 1, TextureType::AmbientOcclusion });
 
             uint32_t verticesOffset = static_cast<uint32_t>(vertices.size());
             uint32_t indicesOffset = static_cast<uint32_t>(indices.size());
@@ -500,7 +522,11 @@ namespace coffee {
             stream.readDirectly(vertices.data() + verticesOffset, verticesSize);
             stream.readDirectly(indices.data() + indicesOffset, indicesSize);
 
-            meshes.emplace_back(std::move(materials), verticesOffset, indicesOffset, verticesSize, indicesSize);
+            AABB aabb {};
+            aabb.min = glm::vec4 { aabbMin, 1.0f };
+            aabb.max = glm::vec4 { aabbMax, 1.0f };
+
+            meshesMetadata.push_back({ std::move(aabb), verticesOffset, verticesSize, indicesOffset, indicesSize });
         }
 
         size_t instanceCount = vertices.size() * sizeof(Vertex) + indices.size() * sizeof(uint32_t);
@@ -537,42 +563,67 @@ namespace coffee {
         std::memcpy(memory + vertices.size() * sizeof(Vertex), indices.data(), indices.size() * sizeof(uint32_t));
         stagingBuffer->flush();
 
-        auto copyScope = device_->singleTimeTransfer([&](const CommandBuffer& commandBuffer) {
-            VkBufferCopy verticesCopyRegion {};
-            verticesCopyRegion.srcOffset = 0;
-            verticesCopyRegion.size = vertices.size() * sizeof(Vertex);
-            vkCmdCopyBuffer(commandBuffer, stagingBuffer->buffer(), verticesBuffer->buffer(), 1, &verticesCopyRegion);
+        CommandBuffer transferCommandBuffer = CommandBuffer::createTransfer(device_);
 
-            VkBufferCopy indicesCopyRegion {};
-            indicesCopyRegion.srcOffset = vertices.size() * sizeof(Vertex);
-            indicesCopyRegion.size = indices.size() * sizeof(uint32_t);
-            vkCmdCopyBuffer(commandBuffer, stagingBuffer->buffer(), indicesBuffer->buffer(), 1, &indicesCopyRegion);
+        VkBufferCopy verticesCopyRegion {};
+        verticesCopyRegion.srcOffset = 0;
+        verticesCopyRegion.size = vertices.size() * sizeof(Vertex);
+        vkCmdCopyBuffer(transferCommandBuffer, stagingBuffer->buffer(), verticesBuffer->buffer(), 1, &verticesCopyRegion);
+
+        VkBufferCopy indicesCopyRegion {};
+        indicesCopyRegion.srcOffset = vertices.size() * sizeof(Vertex);
+        indicesCopyRegion.size = indices.size() * sizeof(uint32_t);
+        vkCmdCopyBuffer(transferCommandBuffer, stagingBuffer->buffer(), indicesBuffer->buffer(), 1, &indicesCopyRegion);
+
+        auto copyScope = device_->singleTimeTransfer(std::move(transferCommandBuffer));
+
+        tbb::parallel_for(0ULL, materialsMetadata.size() - 1, [&](size_t index) {
+            auto& metadata = materialsMetadata[index];
+
+            metadata.materials.write(loadMaterial(filesystem, metadata.name, metadata.amountOfChannels), metadata.type);
         });
+
+        for (uint32_t i = 0; i < meshesSize; i++) {
+            meshes.emplace_back(
+                std::move(materials[i]),
+                std::move(meshesMetadata[i].aabb),
+                meshesMetadata[i].verticesOffset,
+                meshesMetadata[i].indicesOffset,
+                meshesMetadata[i].verticesSize,
+                meshesMetadata[i].indicesSize
+            );
+        }
 
         return std::make_shared<Model>(std::move(meshes), std::move(verticesBuffer), std::move(indicesBuffer));
     }
 
-    std::string AssetManager::readMaterialName(utils::ReadOnlyStream<UnderlyingBufferSize>& stream)
+    std::string AssetManager::readMaterialName(utils::ReaderStream& stream)
     {
         uint8_t size = stream.read<uint8_t>();
+
+        if (size == 0) {
+            return {};
+        }
 
         std::string outputString {};
         outputString.resize(size);
 
         stream.readDirectly(outputString.data(), size);
+
         return outputString;
     }
 
-    ImageViewPtr AssetManager::loadMaterial(const FilesystemPtr& filesystem, const std::string& path, uint32_t amountOfChannels)
+    graphics::ImageViewPtr AssetManager::loadMaterial(const FilesystemPtr& filesystem, const std::string& path, uint32_t amountOfChannels)
     {
         if (path.empty()) {
-            return missingTexture_;
+            return nullptr;
         }
 
         try {
-            auto image = getImage(filesystem, path, amountOfChannels);
+            auto guardedImage = loadImageUnsafe(filesystem, path, amountOfChannels);
+            auto image = guardedImage.unsafe();
 
-            ImageViewConfiguration viewConfiguration {};
+            graphics::ImageViewConfiguration viewConfiguration {};
             viewConfiguration.viewType = VK_IMAGE_VIEW_TYPE_2D;
             viewConfiguration.format = image->imageFormat;
             viewConfiguration.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -580,7 +631,7 @@ namespace coffee {
             viewConfiguration.subresourceRange.levelCount = image->mipLevels;
             viewConfiguration.subresourceRange.baseArrayLayer = 0;
             viewConfiguration.subresourceRange.layerCount = 1;
-            return ImageView::create(image, viewConfiguration);
+            return graphics::ImageView::create(image, viewConfiguration);
         }
         catch (const AssetException& assetEx) {
             COFFEE_ERROR("Failed to load texture {}: {}", path, assetEx.what());
@@ -592,8 +643,53 @@ namespace coffee {
         return missingTexture_;
     }
 
-    ImagePtr AssetManager::loadRawImage(std::vector<uint8_t>& rawBytes)
+    ResourceGuard<graphics::ImagePtr> AssetManager::loadImageUnsafe(const FilesystemPtr& fs, const std::string& path, uint32_t channels)
     {
+        XXH64_hash_t hash = XXH3_64bits(path.data(), path.size());
+        auto cacheIterator = cache_.find(hash);
+
+        if (cacheIterator == cache_.end()) {
+            // Filesystem::create always returns valid pointer, so it must be user attempt to provide invalid pointer
+            COFFEE_ASSERT(fs != nullptr, "Filesystem wasn't provided.");
+
+            Filesystem::Entry entry = fs->getMetadata(path);
+
+            if (entry.type != Filesystem::FileType::RawImage && entry.type != Filesystem::FileType::BasisImage) {
+                throw AssetException { AssetException::Type::TypeMismatch,
+                                       fmt::format("Expected type Image, requested type was {}", detail::fileTypeToString(entry.type)) };
+            }
+
+            ResourceGuard<graphics::ImagePtr> guardedImage = nullptr;
+            std::vector<uint8_t> rawBytes = fs->getContent(path);
+
+            switch (entry.type) {
+                case Filesystem::FileType::RawImage:
+                    guardedImage = loadRawImage(rawBytes);
+                    break;
+                case Filesystem::FileType::BasisImage:
+                    guardedImage = loadBasisImage(rawBytes, channels);
+                    break;
+            }
+
+            cache_.insert(std::make_pair(hash, Asset { guardedImage.unsafe() }));
+
+            return guardedImage;
+        }
+
+        auto& asset = cacheIterator->second;
+
+        if (asset.type != Filesystem::FileType::RawImage && asset.type != Filesystem::FileType::BasisImage) {
+            throw AssetException { AssetException::Type::TypeMismatch,
+                                   fmt::format("Expected type Image, requested type was {}", detail::fileTypeToString(asset.type)) };
+        }
+
+        return std::get<graphics::ImagePtr>(asset.actualObject);
+    }
+
+    ResourceGuard<graphics::ImagePtr> AssetManager::loadRawImage(std::vector<uint8_t>& rawBytes)
+    {
+        using namespace graphics;
+
         utils::ReadOnlyStream<4> stream { rawBytes };
         uint32_t width = stream.read<uint32_t>();
         uint32_t height = stream.read<uint32_t>();
@@ -622,13 +718,15 @@ namespace coffee {
 
         std::memcpy(stagingBuffer->memory(), rawBytes.data() + stream.offset(), rawBytes.size() - stream.offset());
         stagingBuffer->flush(rawBytes.size() - stream.offset());
+        auto transferScope = SingleTime::copyBufferToImage(device_, image, stagingBuffer);
 
-        auto scopeExits = SingleTime::copyBufferToImage(device_, image, stagingBuffer);
-        return image;
+        return { image, ScopeExit::combine(std::move(transferScope), [x = std::move(stagingBuffer)]() {}) };
     }
 
-    ImagePtr AssetManager::loadBasisImage(std::vector<uint8_t>& rawBytes, uint32_t amountOfChannels)
+    ResourceGuard<graphics::ImagePtr> AssetManager::loadBasisImage(std::vector<uint8_t>& rawBytes, uint32_t amountOfChannels)
     {
+        using namespace graphics;
+
         basist::ktx2_transcoder transcoder {};
 
         if (!transcoder.init(rawBytes.data(), rawBytes.size())) {
@@ -641,7 +739,7 @@ namespace coffee {
 
         const basist::transcoder_texture_format format = channelsToBasisuFormat(amountOfChannels);
         const uint32_t bytesPerBlock = basist::basis_get_bytes_per_block_or_pixel(format);
-        const bool isBlockFormat = format != basist::transcoder_texture_format::cTFRGBA32;
+        const bool isBlockFormat = !basist::basis_transcoder_format_is_uncompressed(format);
         basist::ktx2_image_level_info levelInfo {};
         size_t allocationSize = 0ULL;
 
@@ -676,7 +774,7 @@ namespace coffee {
             for (uint32_t mipmapLevel = 0; mipmapLevel < transcoder.get_levels(); mipmapLevel++) {
                 transcoder.get_image_level_info(levelInfo, mipmapLevel, 0, faceIndex);
 
-                if (levelInfo.m_width < 16 && levelInfo.m_height < 16) {
+                if (levelInfo.m_width < 64 && levelInfo.m_height < 64) {
                     continue;
                 }
 
@@ -725,116 +823,95 @@ namespace coffee {
         imageConfiguration.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         auto image = Image::create(device_, imageConfiguration);
 
-        std::vector<ScopeExit> scopes {};
+        static constexpr auto topOfPipeStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        static constexpr auto transferStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        static constexpr auto fragmentStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
-        scopes.push_back(device_->singleTimeTransfer([&](const CommandBuffer& commandBuffer) {
-            VkImageMemoryBarrier copyBarrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-            copyBarrier.srcAccessMask = 0;
-            copyBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            copyBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            copyBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            copyBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            copyBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            copyBarrier.image = image->image();
-            copyBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copyBarrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
-            copyBarrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
-            vkCmdPipelineBarrier(
-                commandBuffer,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0,
-                0,
-                nullptr,
-                0,
-                nullptr,
-                1,
-                &copyBarrier
-            );
+        std::vector<VkBufferImageCopy> copyRegions {};
+        VkImageMemoryBarrier barrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 
-            std::vector<VkBufferImageCopy> copyRegions {};
-            copyRegions.reserve(mipmapInformations[0].size() * mipmapInformations.size());
+        CommandBuffer transferCommandBuffer = CommandBuffer::createTransfer(device_);
+        copyRegions.reserve(mipmapInformations[0].size() * mipmapInformations.size());
 
-            for (size_t faceIndex = 0; faceIndex < mipmapInformations.size(); faceIndex++) {
-                auto& face = mipmapInformations[faceIndex];
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image->image();
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
+        barrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
+        vkCmdPipelineBarrier(transferCommandBuffer, topOfPipeStage, transferStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
-                for (size_t mipmapLevel = 0; mipmapLevel < face.size(); mipmapLevel++) {
-                    auto& mipmap = face[mipmapLevel];
+        for (size_t faceIndex = 0; faceIndex < mipmapInformations.size(); faceIndex++) {
+            auto& face = mipmapInformations[faceIndex];
 
-                    VkBufferImageCopy copyRegion {};
-                    copyRegion.bufferOffset = mipmap.bufferOffset;
-                    copyRegion.bufferRowLength = 0;
-                    copyRegion.bufferImageHeight = 0;
-                    copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                    copyRegion.imageSubresource.mipLevel = mipmapLevel;
-                    copyRegion.imageSubresource.baseArrayLayer = faceIndex;
-                    copyRegion.imageSubresource.layerCount = 1;
-                    copyRegion.imageOffset = { 0, 0, 0 };
-                    copyRegion.imageExtent = { mipmap.width, mipmap.height, 1U };
+            for (size_t mipmapLevel = 0; mipmapLevel < face.size(); mipmapLevel++) {
+                auto& mipmap = face[mipmapLevel];
 
-                    copyRegions.push_back(std::move(copyRegion));
-                }
+                VkBufferImageCopy copyRegion {};
+                copyRegion.bufferOffset = mipmap.bufferOffset;
+                copyRegion.bufferRowLength = 0;
+                copyRegion.bufferImageHeight = 0;
+                copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyRegion.imageSubresource.mipLevel = mipmapLevel;
+                copyRegion.imageSubresource.baseArrayLayer = faceIndex;
+                copyRegion.imageSubresource.layerCount = 1;
+                copyRegion.imageOffset = { 0, 0, 0 };
+                copyRegion.imageExtent = { mipmap.width, mipmap.height, 1U };
+
+                copyRegions.push_back(std::move(copyRegion));
             }
-
-            commandBuffer
-                .copyBufferToImage(stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyRegions.size(), copyRegions.data());
-
-            if (device_->isUnifiedTransferGraphicsQueue()) {
-                VkImageMemoryBarrier useBarrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-                useBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                useBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                useBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                useBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                useBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                useBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                useBarrier.image = image->image();
-                useBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                useBarrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
-                useBarrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
-                vkCmdPipelineBarrier(
-                    commandBuffer,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                    0,
-                    0,
-                    nullptr,
-                    0,
-                    nullptr,
-                    1,
-                    &useBarrier
-                );
-            }
-        }));
-
-        if (!device_->isUnifiedTransferGraphicsQueue()) {
-            scopes.push_back(device_->singleTimeGraphics([&](const CommandBuffer& commandBuffer) {
-                VkImageMemoryBarrier useBarrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-                useBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                useBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                useBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                useBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                useBarrier.srcQueueFamilyIndex = device_->transferQueueFamilyIndex();
-                useBarrier.dstQueueFamilyIndex = device_->graphicsQueueFamilyIndex();
-                useBarrier.image = image->image();
-                useBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                useBarrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
-                useBarrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
-                vkCmdPipelineBarrier(
-                    commandBuffer,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                    0,
-                    0,
-                    nullptr,
-                    0,
-                    nullptr,
-                    1,
-                    &useBarrier
-                );
-            }));
         }
 
-        return image;
+        transferCommandBuffer
+            .copyBufferToImage(stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyRegions.size(), copyRegions.data());
+
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image->image();
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
+        barrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
+        VkPipelineStageFlagBits useStage = fragmentStage;
+
+        if (!device_->isUnifiedGraphicsTransferQueue()) {
+            barrier.dstAccessMask = 0;
+            barrier.srcQueueFamilyIndex = device_->transferQueueFamilyIndex();
+            barrier.dstQueueFamilyIndex = device_->graphicsQueueFamilyIndex();
+            useStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        }
+
+        vkCmdPipelineBarrier(transferCommandBuffer, transferStage, useStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        auto transferScope = device_->singleTimeTransfer(std::move(transferCommandBuffer));
+
+        if (!device_->isUnifiedGraphicsTransferQueue()) {
+            CommandBuffer ownershipCommandBuffer = CommandBuffer::createGraphics(device_);
+
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcQueueFamilyIndex = device_->transferQueueFamilyIndex();
+            barrier.dstQueueFamilyIndex = device_->graphicsQueueFamilyIndex();
+            barrier.image = image->image();
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            barrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
+            barrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
+
+            vkCmdPipelineBarrier(ownershipCommandBuffer, transferStage, fragmentStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+            auto ownershipScope = device_->singleTimeGraphics(std::move(ownershipCommandBuffer));
+
+            return { image, ScopeExit::combine(std::move(transferScope), std::move(ownershipScope), [x = std::move(stagingBuffer)]() {}) };
+        }
+
+        return { image, ScopeExit::combine(std::move(transferScope), [x = std::move(stagingBuffer)]() {}) };
     }
 
     VkFormat AssetManager::channelsToVkFormat(uint32_t amountOfChannels, bool compressed)

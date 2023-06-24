@@ -233,19 +233,19 @@ namespace coffee {
                 indices.graphicsFamily = static_cast<uint32_t>(i);
             }
             else if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
-                // TODO: Add compute queue later on
-                // Right now only required for skipping through compute queues to find dedicated transfer queue
+                indices.computeFamily = static_cast<uint32_t>(i);
             }
-            // Only use dedicated family for transfer operations if available
             else if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
                 indices.transferFamily = static_cast<uint32_t>(i);
             }
 
-            VkBool32 presentSupport = VK_FALSE;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, static_cast<uint32_t>(i), surface, &presentSupport);
+            if (!indices.presentFamily.has_value()) {
+                VkBool32 presentSupport = VK_FALSE;
+                vkGetPhysicalDeviceSurfaceSupportKHR(device, static_cast<uint32_t>(i), surface, &presentSupport);
 
-            if (presentSupport) {
-                indices.presentFamily = static_cast<uint32_t>(i);
+                if (presentSupport == VK_TRUE) {
+                    indices.presentFamily = static_cast<uint32_t>(i);
+                }
             }
 
             if (indices.isComplete()) {

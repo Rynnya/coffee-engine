@@ -24,7 +24,9 @@ namespace coffee {
         static_cast<void>(nullptr)
 #endif
 
-#ifdef COFFEE_DEBUG
+#define COFFEE_ENABLE_LOGS_IN_RELEASE
+
+#if defined(COFFEE_DEBUG) || defined(COFFEE_ENABLE_LOGS_IN_RELEASE)
 #   define COFFEE_INFO(formatting, ...) \
         coffee::log(coffee::MessageSeverity::Info, __FILE__, __LINE__, fmt::format(formatting, ##__VA_ARGS__))
 #   define COFFEE_WARNING(formatting, ...) \

@@ -7,18 +7,23 @@
 
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
+#include <tbb/queuing_mutex.h>
 
 namespace coffee {
 
     class Materials : NonCopyable {
     public:
-        Materials(const ImageViewPtr& defaultTexture);
+        Materials(const graphics::ImageViewPtr& defaultTexture);
 
-        void write(const ImageViewPtr& texture, TextureType type);
-        const ImageViewPtr& read(TextureType type) const noexcept;
+        Materials(Materials&& other) noexcept;
+        Materials& operator=(Materials&& other) noexcept;
+
+        void write(const graphics::ImageViewPtr& texture, TextureType type);
+        graphics::ImageViewPtr read(TextureType type) const noexcept;
         void reset(TextureType type);
 
         TextureType textureFlags() const noexcept;
+        const graphics::ImageViewPtr& defaultTexture() const noexcept;
 
         struct Modifiers {
             // Diffuse color component of mesh
@@ -35,10 +40,10 @@ namespace coffee {
             float roughnessFactor = 0.0f;
         } modifiers {};
 
-        const ImageViewPtr defaultTexture;
-
     private:
-        std::array<ImageViewPtr, 7> textures_;
+        mutable tbb::queuing_mutex mutex_ {};
+        graphics::ImageViewPtr defaultTexture_;
+        std::array<graphics::ImageViewPtr, 7> textures_;
         TextureType textureFlags_ = TextureType::None;
     };
 

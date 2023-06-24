@@ -2,6 +2,10 @@
 
 #include <GLFW/glfw3.h>
 
+#include <thread>
+
+#include <coffee/utils/log.hpp>
+
 namespace coffee {
 
     void LoopHandler::pollEvents() { glfwPollEvents(); }
@@ -10,9 +14,7 @@ namespace coffee {
 
     void LoopHandler::waitFramelimit() noexcept
     {
-        using period = std::chrono::seconds::period;
-
-        float frameTime = std::chrono::duration<float, period>(std::chrono::high_resolution_clock::now() - lastPollTime_).count();
+        float frameTime = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - lastPollTime_).count();
         float waitForSeconds = std::max(1.0f / framerateLimit_ - frameTime, 0.0f);
 
         if (waitForSeconds > 0.0f) {
@@ -22,7 +24,7 @@ namespace coffee {
         }
 
         auto currentTime = std::chrono::high_resolution_clock::now();
-        deltaTime_ = std::chrono::duration<float, period>(currentTime - lastPollTime_).count();
+        deltaTime_ = std::chrono::duration<float>(currentTime - lastPollTime_).count();
         lastPollTime_ = currentTime;
     }
 

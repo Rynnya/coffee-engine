@@ -1,5 +1,5 @@
-#ifndef COFFEE_VK_DESCRIPTORS
-#define COFFEE_VK_DESCRIPTORS
+#ifndef COFFEE_GRAPHICS_DESCRIPTORS
+#define COFFEE_GRAPHICS_DESCRIPTORS
 
 #include <coffee/graphics/buffer.hpp>
 #include <coffee/graphics/image.hpp>
@@ -9,93 +9,97 @@
 
 namespace coffee {
 
-    struct DescriptorBindingInfo {
-        VkDescriptorType type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        VkShaderStageFlags shaderStages = 0;
-        uint32_t descriptorCount = 1U;
-    };
+    namespace graphics {
 
-    struct DescriptorWriteInfo {
-        VkDescriptorType type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        VkDeviceSize bufferOffset = 0U;
-        VkDeviceSize bufferSize = 0U;
-        VkBuffer buffer = VK_NULL_HANDLE;
-        VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        ImageViewPtr imageView = nullptr;
-        SamplerPtr sampler = nullptr;
-    };
+        struct DescriptorBindingInfo {
+            VkDescriptorType type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            VkShaderStageFlags shaderStages = 0;
+            uint32_t descriptorCount = 1U;
+        };
 
-    class DescriptorLayout;
-    using DescriptorLayoutPtr = std::shared_ptr<DescriptorLayout>;
+        struct DescriptorWriteInfo {
+            VkDescriptorType type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            VkDeviceSize bufferOffset = 0U;
+            VkDeviceSize bufferSize = 0U;
+            VkBuffer buffer = VK_NULL_HANDLE;
+            VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            ImageViewPtr imageView = nullptr;
+            SamplerPtr sampler = nullptr;
+        };
 
-    class DescriptorSet;
-    using DescriptorSetPtr = std::shared_ptr<DescriptorSet>;
+        class DescriptorLayout;
+        using DescriptorLayoutPtr = std::shared_ptr<DescriptorLayout>;
 
-    class DescriptorLayout {
-    public:
-        ~DescriptorLayout() noexcept;
+        class DescriptorSet;
+        using DescriptorSetPtr = std::shared_ptr<DescriptorSet>;
 
-        static DescriptorLayoutPtr create(const GPUDevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings);
+        class DescriptorLayout {
+        public:
+            ~DescriptorLayout() noexcept;
 
-        inline const VkDescriptorSetLayout& layout() const noexcept { return layout_; }
+            static DescriptorLayoutPtr create(const DevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings);
 
-        const std::map<uint32_t, DescriptorBindingInfo> bindings;
+            inline const VkDescriptorSetLayout& layout() const noexcept { return layout_; }
 
-    private:
-        DescriptorLayout(const GPUDevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings);
+            const std::map<uint32_t, DescriptorBindingInfo> bindings;
 
-        GPUDevicePtr device_;
+        private:
+            DescriptorLayout(const DevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings);
 
-        VkDescriptorSetLayout layout_ = VK_NULL_HANDLE;
-    };
+            DevicePtr device_;
 
-    class DescriptorWriter {
-    public:
-        DescriptorWriter(const DescriptorLayoutPtr& layout);
+            VkDescriptorSetLayout layout_ = VK_NULL_HANDLE;
+        };
 
-        DescriptorWriter(const DescriptorWriter&);
-        DescriptorWriter(DescriptorWriter&&) noexcept;
-        DescriptorWriter& operator=(const DescriptorWriter&);
-        DescriptorWriter& operator=(DescriptorWriter&&) noexcept;
+        class DescriptorWriter {
+        public:
+            DescriptorWriter(const DescriptorLayoutPtr& layout);
 
-        DescriptorWriter& addBuffer(
-            uint32_t bindingIndex,
-            const BufferPtr& buffer,
-            size_t offset = 0,
-            size_t totalSize = std::numeric_limits<size_t>::max()
-        );
-        DescriptorWriter& addImage(
-            uint32_t bindingIndex,
-            VkImageLayout layout,
-            const ImageViewPtr& image,
-            const SamplerPtr& sampler = nullptr
-        );
-        DescriptorWriter& addSampler(uint32_t bindingIndex, const SamplerPtr& sampler);
+            DescriptorWriter(const DescriptorWriter&);
+            DescriptorWriter(DescriptorWriter&&) noexcept;
+            DescriptorWriter& operator=(const DescriptorWriter&);
+            DescriptorWriter& operator=(DescriptorWriter&&) noexcept;
 
-    private:
-        DescriptorLayoutPtr layout_;
-        std::map<uint32_t, DescriptorWriteInfo> writes_ {};
+            DescriptorWriter& addBuffer(
+                uint32_t bindingIndex,
+                const BufferPtr& buffer,
+                size_t offset = 0,
+                size_t totalSize = std::numeric_limits<size_t>::max()
+            );
+            DescriptorWriter& addImage(
+                uint32_t bindingIndex,
+                VkImageLayout layout,
+                const ImageViewPtr& image,
+                const SamplerPtr& sampler = nullptr
+            );
+            DescriptorWriter& addSampler(uint32_t bindingIndex, const SamplerPtr& sampler);
 
-        friend class DescriptorSet;
-    };
+        private:
+            DescriptorLayoutPtr layout_;
+            std::map<uint32_t, DescriptorWriteInfo> writes_ {};
 
-    class DescriptorSet : NonMoveable {
-    public:
-        ~DescriptorSet() noexcept;
+            friend class DescriptorSet;
+        };
 
-        static DescriptorSetPtr create(const GPUDevicePtr& device, const DescriptorWriter& writer);
+        class DescriptorSet : NonMoveable {
+        public:
+            ~DescriptorSet() noexcept;
 
-        void updateDescriptor(const DescriptorWriter& writer);
+            static DescriptorSetPtr create(const DevicePtr& device, const DescriptorWriter& writer);
 
-        inline const VkDescriptorSet& set() const noexcept { return set_; }
+            void updateDescriptor(const DescriptorWriter& writer);
 
-    private:
-        DescriptorSet(const GPUDevicePtr& device, const DescriptorWriter& writer);
+            inline const VkDescriptorSet& set() const noexcept { return set_; }
 
-        GPUDevicePtr device_;
+        private:
+            DescriptorSet(const DevicePtr& device, const DescriptorWriter& writer);
 
-        VkDescriptorSet set_ = VK_NULL_HANDLE;
-    };
+            DevicePtr device_;
+
+            VkDescriptorSet set_ = VK_NULL_HANDLE;
+        };
+
+    } // namespace graphics
 
 } // namespace coffee
 

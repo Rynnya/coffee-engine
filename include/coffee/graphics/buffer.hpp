@@ -6,76 +6,80 @@
 
 namespace coffee {
 
-    struct BufferConfiguration {
-        uint32_t instanceSize = 1U;
-        uint32_t instanceCount = 1U;
-        VkBufferUsageFlags usageFlags = 0;
-        VkMemoryPropertyFlags memoryProperties = 0;
-        VmaAllocationCreateFlags allocationFlags = 0;
-        VmaMemoryUsage allocationUsage = VMA_MEMORY_USAGE_AUTO;
-        float priority = 0.5f;
-    };
+    namespace graphics {
 
-    struct FSBufferConfiguration {
-        std::string path {};
-        VkDeviceSize size = std::numeric_limits<VkDeviceSize>::max();
-        VkDeviceSize offset = 0;
-        VkBufferUsageFlags usageFlags = 0;
-        VkMemoryPropertyFlags memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        VmaAllocationCreateFlags allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-        VmaMemoryUsage allocationUsage = VMA_MEMORY_USAGE_AUTO;
-        float priority = 0.5f;
-    };
+        struct BufferConfiguration {
+            uint32_t instanceSize = 1U;
+            uint32_t instanceCount = 1U;
+            VkBufferUsageFlags usageFlags = 0;
+            VkMemoryPropertyFlags memoryProperties = 0;
+            VmaAllocationCreateFlags allocationFlags = 0;
+            VmaMemoryUsage allocationUsage = VMA_MEMORY_USAGE_AUTO;
+            float priority = 0.5f;
+        };
 
-    class Buffer;
-    using BufferPtr = std::unique_ptr<Buffer>;
+        struct FSBufferConfiguration {
+            std::string path {};
+            VkDeviceSize size = std::numeric_limits<VkDeviceSize>::max();
+            VkDeviceSize offset = 0;
+            VkBufferUsageFlags usageFlags = 0;
+            VkMemoryPropertyFlags memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            VmaAllocationCreateFlags allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+            VmaMemoryUsage allocationUsage = VMA_MEMORY_USAGE_AUTO;
+            float priority = 0.5f;
+        };
 
-    class Buffer : NonMoveable {
-    public:
-        ~Buffer() noexcept;
+        class Buffer;
+        using BufferPtr = std::unique_ptr<Buffer>;
 
-        static BufferPtr create(const GPUDevicePtr& device, const BufferConfiguration& configuration);
-        // TODO: Replace FilesystemPtr with std::vector<uint8_t> so AssetManager can call this
-        //static BufferPtr create(
-        //    const GPUDevicePtr& device,
-        //    const FilesystemPtr& filesystem,
-        //    const FSBufferConfiguration& configuration,
-        //    const ThreadContext& ctx = {}
-        //);
+        class Buffer : NonMoveable {
+        public:
+            ~Buffer() noexcept;
 
-        void* map();
-        void unmap() noexcept;
-        void flush(size_t size = VK_WHOLE_SIZE, size_t offset = 0U);
-        void invalidate(size_t size, size_t offset = 0U);
+            static BufferPtr create(const DevicePtr& device, const BufferConfiguration& configuration);
+            // TODO: Replace FilesystemPtr with std::vector<uint8_t> so AssetManager can call this
+            // static BufferPtr create(
+            //    const DevicePtr& device,
+            //    const FilesystemPtr& filesystem,
+            //    const FSBufferConfiguration& configuration,
+            //    const ThreadContext& ctx = {}
+            //);
 
-        const VkDeviceSize instanceSize = 1U;
-        const VkDeviceSize instanceCount = 1U;
-        const VkBufferUsageFlags usageFlags = 0;
-        const VkMemoryPropertyFlags memoryProperties = 0;
+            void* map();
+            void unmap() noexcept;
+            void flush(size_t size = VK_WHOLE_SIZE, size_t offset = 0U);
+            void invalidate(size_t size, size_t offset = 0U);
 
-        inline const VkBuffer& buffer() const noexcept { return buffer_; }
+            const VkDeviceSize instanceSize = 1U;
+            const VkDeviceSize instanceCount = 1U;
+            const VkBufferUsageFlags usageFlags = 0;
+            const VkMemoryPropertyFlags memoryProperties = 0;
 
-        // WARNING: This pointer point to the beginning of buffer, so you must always apply offset to it
-        // Map doesn't have such flaw because it does offset automatically
-        inline void* memory() const noexcept { return mappedMemory_; }
+            inline const VkBuffer& buffer() const noexcept { return buffer_; }
 
-        inline bool isHostVisible() const noexcept { return isHostVisible_; }
+            // WARNING: This pointer point to the beginning of buffer, so you must always apply offset to it
+            // Map doesn't have such flaw because it does offset automatically
+            inline void* memory() const noexcept { return mappedMemory_; }
 
-        inline bool isHostCoherent() const noexcept { return isHostCoherent_; }
+            inline bool isHostVisible() const noexcept { return isHostVisible_; }
 
-    private:
-        Buffer(const GPUDevicePtr& device, const BufferConfiguration& configuration);
+            inline bool isHostCoherent() const noexcept { return isHostCoherent_; }
 
-        GPUDevicePtr device_;
+        private:
+            Buffer(const DevicePtr& device, const BufferConfiguration& configuration);
 
-        VmaAllocation allocation_ = VK_NULL_HANDLE;
-        VkBuffer buffer_ = VK_NULL_HANDLE;
-        void* mappedMemory_ = nullptr;
-        std::atomic_uint16_t mapCount_ = 0;
+            DevicePtr device_;
 
-        bool isHostVisible_ = false;
-        bool isHostCoherent_ = false;
-    };
+            VmaAllocation allocation_ = VK_NULL_HANDLE;
+            VkBuffer buffer_ = VK_NULL_HANDLE;
+            void* mappedMemory_ = nullptr;
+            std::atomic_uint16_t mapCount_ = 0;
+
+            bool isHostVisible_ = false;
+            bool isHostCoherent_ = false;
+        };
+
+    } // namespace graphics
 
 } // namespace coffee
 

@@ -1,14 +1,13 @@
-#ifndef COFFEE_ABSTRACT_WINDOW
-#define COFFEE_ABSTRACT_WINDOW
-
-#include <coffee/graphics/cursor.hpp>
-#include <coffee/graphics/keys.hpp>
-#include <coffee/graphics/swap_chain.hpp>
-#include <coffee/interfaces/event_handler.hpp>
+#ifndef COFFEE_GRAPHICS_WINDOW
+#define COFFEE_GRAPHICS_WINDOW
 
 #include <coffee/events/key_event.hpp>
 #include <coffee/events/mouse_event.hpp>
 #include <coffee/events/window_event.hpp>
+#include <coffee/graphics/cursor.hpp>
+#include <coffee/graphics/swap_chain.hpp>
+#include <coffee/interfaces/event_handler.hpp>
+#include <coffee/interfaces/keys.hpp>
 
 #include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
@@ -19,97 +18,99 @@
 
 namespace coffee {
 
-    struct WindowSettings {
-        // Leave as 0 to automatic selection
-        VkExtent2D extent {};
-        // FIFO - Available always, fallback if provided method isn't available
-        // FIFO Relaxed - Automatically set as replacement for FIFO if supported by GPU
-        // Mailbox - Applied if supported
-        // Immediate - Applied if supported
-        VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-        // Window will be hidden when created, so you can do actual things before presenting anything to user
-        // Works only if windowed mode is used
-        bool hiddenOnStart = true;
-        // Defines if window should have borders (not recommended with fullscreen mode)
-        bool borderless = false;
-        // Defines if window should take full monitor resolution size (not recommended with borderless mode)
-        bool fullscreen = false;
-        // Allows cursor to have unlimited bounds, which is perfect solution for 3D
-        bool cursorDisabled = false;
-        // Defines if user input should be accelerated by an OS
-        bool rawInput = true;
-    };
+    namespace graphics {
 
-    enum class CursorState : uint32_t {
-        // Cursor visible and not bounded to window
-        Visible = 0,
-        // Cursor not visible, but still not bounded to window
-        Hidden = 1,
-        // Cursor not visible and bounded to window, meaning it can expand it positions up to double max
-        Disabled = 2
-    };
+        struct WindowSettings {
+            // Leave as 0 to automatic selection
+            VkExtent2D extent {};
+            // FIFO - Available always, fallback if provided method isn't available
+            // FIFO Relaxed - Automatically set as replacement for FIFO if supported by GPU
+            // Mailbox - Applied if supported
+            // Immediate - Applied if supported
+            VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+            // Window will be hidden when created, so you can do actual things before presenting anything to user
+            // Works only if windowed mode is used
+            bool hiddenOnStart = true;
+            // Defines if window should have borders (not recommended with fullscreen mode)
+            bool borderless = false;
+            // Defines if window should take full monitor resolution size (not recommended with borderless mode)
+            bool fullscreen = false;
+            // Allows cursor to have unlimited bounds, which is perfect solution for 3D
+            bool cursorDisabled = false;
+            // Defines if user input should be accelerated by an OS
+            bool rawInput = true;
+        };
 
-    class Window;
-    using WindowPtr = std::unique_ptr<Window>;
+        enum class CursorState : uint32_t {
+            // Cursor visible and not bounded to window
+            Visible = 0,
+            // Cursor not visible, but still not bounded to window
+            Hidden = 1,
+            // Cursor not visible and bounded to window, meaning it can expand it positions up to double max
+            Disabled = 2
+        };
 
-    class Window : NonMoveable {
-    public:
-        ~Window() noexcept;
+        class Window;
+        using WindowPtr = std::unique_ptr<Window>;
 
-        static WindowPtr create(const GPUDevicePtr& device, WindowSettings settings, const std::string& windowName = "Coffee");
+        class Window : NonMoveable {
+        public:
+            ~Window() noexcept;
 
-        const std::vector<ImagePtr>& presentImages() const noexcept;
-        uint32_t currentImageIndex() const noexcept;
+            static WindowPtr create(const DevicePtr& device, WindowSettings settings, const std::string& windowName = "Coffee");
 
-        bool acquireNextImage();
-        void sendCommandBuffer(CommandBuffer&& commandBuffer);
-        void sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers);
+            const std::vector<ImagePtr>& presentImages() const noexcept;
+            uint32_t currentImageIndex() const noexcept;
 
-        void changePresentMode(VkPresentModeKHR newMode);
+            bool acquireNextImage();
+            void sendCommandBuffer(CommandBuffer&& commandBuffer);
+            void sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers);
 
-        const std::string& getWindowTitle() const noexcept;
-        void setWindowTitle(const std::string& newTitle) const noexcept;
+            void changePresentMode(VkPresentModeKHR newMode);
 
-        bool isFocused() const noexcept;
-        void focusWindow() const noexcept;
+            const std::string& getWindowTitle() const noexcept;
+            void setWindowTitle(const std::string& newTitle) const noexcept;
 
-        bool isIconified() const noexcept;
-        void hideWindow() const noexcept;
-        void showWindow() const noexcept;
+            bool isFocused() const noexcept;
+            void focusWindow() const noexcept;
 
-        bool isBorderless() const noexcept;
-        void makeBorderless() const noexcept;
-        void revertBorderless() const noexcept;
+            bool isIconified() const noexcept;
+            void hideWindow() const noexcept;
+            void showWindow() const noexcept;
 
-        bool isPassthrough() const noexcept;
-        void enablePassthrough() const noexcept;
-        void disablePassthrough() const noexcept;
+            bool isBorderless() const noexcept;
+            void makeBorderless() const noexcept;
+            void revertBorderless() const noexcept;
 
-        CursorState cursorState() const noexcept;
-        void showCursor() const noexcept;
-        void hideCursor() const noexcept;
-        void disableCursor() const noexcept;
+            bool isPassthrough() const noexcept;
+            void enablePassthrough() const noexcept;
+            void disablePassthrough() const noexcept;
 
-        void setCursor(const CursorPtr& cursor) const noexcept;
-        void resetCursor() const noexcept;
+            CursorState cursorState() const noexcept;
+            void showCursor() const noexcept;
+            void hideCursor() const noexcept;
+            void disableCursor() const noexcept;
 
-        Float2D mousePosition() const noexcept;
-        VkOffset2D windowPosition() const noexcept;
-        VkExtent2D windowSize() const noexcept;
-        VkExtent2D framebufferSize() const noexcept;
-        void setMousePosition(const Float2D& position) const noexcept;
-        void setWindowPosition(const VkOffset2D& position) const noexcept;
-        void setWindowSize(const VkExtent2D& size) const noexcept;
+            void setCursor(const CursorPtr& cursor) const noexcept;
+            void resetCursor() const noexcept;
 
-        static std::string clipboard();
-        static void setClipboard(const std::string& clipboard);
+            Float2D mousePosition() const noexcept;
+            VkOffset2D windowPosition() const noexcept;
+            VkExtent2D windowSize() const noexcept;
+            VkExtent2D framebufferSize() const noexcept;
+            void setMousePosition(const Float2D& position) const noexcept;
+            void setWindowPosition(const VkOffset2D& position) const noexcept;
+            void setWindowSize(const VkExtent2D& size) const noexcept;
 
-        bool isButtonPressed(Keys key) const noexcept;
-        bool isButtonPressed(MouseButton mouseButton) const noexcept;
+            static std::string clipboard();
+            static void setClipboard(const std::string& clipboard);
 
-        bool shouldClose() const noexcept;
+            bool isButtonPressed(Keys key) const noexcept;
+            bool isButtonPressed(MouseButton mouseButton) const noexcept;
 
-        // clang-format off
+            bool shouldClose() const noexcept;
+
+            // clang-format off
 
         mutable Invokable<const Window&, const ResizeEvent&>            windowResizeEvent {};
         mutable Invokable<const Window&, const WindowEnterEvent&>       windowEnterEvent {};
@@ -123,51 +124,53 @@ namespace coffee {
         mutable Invokable<const Window&, char32_t>                      charEvent {};
         mutable Invokable<const Window&, VkPresentModeKHR>              presentModeEvent {};
 
-        // clang-format on
+            // clang-format on
 
-        mutable std::any userData;
+            mutable std::any userData;
 
-    private:
-        Window(const GPUDevicePtr& device, WindowSettings settings, const std::string& windowName);
+        private:
+            Window(const DevicePtr& device, WindowSettings settings, const std::string& windowName);
 
-        static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
-        static void resizeCallback(GLFWwindow* window, int width, int height);
-        static void windowEnterCallback(GLFWwindow* window, int entered);
-        static void windowPositionCallback(GLFWwindow* window, int xpos, int ypos);
-        static void windowCloseCallback(GLFWwindow* window);
-        static void focusCallback(GLFWwindow* window, int focused);
+            static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+            static void resizeCallback(GLFWwindow* window, int width, int height);
+            static void windowEnterCallback(GLFWwindow* window, int entered);
+            static void windowPositionCallback(GLFWwindow* window, int xpos, int ypos);
+            static void windowCloseCallback(GLFWwindow* window);
+            static void focusCallback(GLFWwindow* window, int focused);
 
-        static void mouseClickCallback(GLFWwindow* window, int button, int action, int mods);
-        static void mousePositionCallback(GLFWwindow* window, double xpos, double ypos);
-        static void mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset);
+            static void mouseClickCallback(GLFWwindow* window, int button, int action, int mods);
+            static void mousePositionCallback(GLFWwindow* window, double xpos, double ypos);
+            static void mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset);
 
-        static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-        static void charCallback(GLFWwindow* window, unsigned int codepoint);
+            static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+            static void charCallback(GLFWwindow* window, unsigned int codepoint);
 
-        GPUDevicePtr device_;
+            DevicePtr device_;
 
-        GLFWwindow* windowHandle_ = nullptr;
-        GLFWmonitor* monitorHandle_ = nullptr;
-        VkSurfaceKHR surfaceHandle_ = VK_NULL_HANDLE;
+            GLFWwindow* windowHandle_ = nullptr;
+            GLFWmonitor* monitorHandle_ = nullptr;
+            VkSurfaceKHR surfaceHandle_ = VK_NULL_HANDLE;
 
-        mutable std::string titleName_ {};
+            mutable std::string titleName_ {};
 
-        mutable uint32_t windowWidth_ = 0U;
-        mutable uint32_t windowHeight_ = 0U;
-        mutable uint32_t framebufferWidth_ = 0U;
-        mutable uint32_t framebufferHeight_ = 0U;
+            mutable uint32_t windowWidth_ = 0U;
+            mutable uint32_t windowHeight_ = 0U;
+            mutable uint32_t framebufferWidth_ = 0U;
+            mutable uint32_t framebufferHeight_ = 0U;
 
-        mutable double xMousePosition_ = 0.0;
-        mutable double yMousePosition_ = 0.0;
-        mutable int32_t xWindowPosition_ = 0;
-        mutable int32_t yWindowPosition_ = 0;
+            mutable double xMousePosition_ = 0.0;
+            mutable double yMousePosition_ = 0.0;
+            mutable int32_t xWindowPosition_ = 0;
+            mutable int32_t yWindowPosition_ = 0;
 
-        mutable bool windowFocused_ = false;
-        mutable bool windowIconified_ = false;
-        mutable bool rawInputEnabled_ = false;
+            mutable bool windowFocused_ = false;
+            mutable bool windowIconified_ = false;
+            mutable bool rawInputEnabled_ = false;
 
-        std::unique_ptr<SwapChain> swapChain = nullptr;
-    };
+            std::unique_ptr<SwapChain> swapChain = nullptr;
+        };
+
+    } // namespace graphics
 
 } // namespace coffee
 
