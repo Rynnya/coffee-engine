@@ -17,7 +17,8 @@ namespace coffee {
 
         static std::chrono::system_clock::time_point startupTime = std::chrono::system_clock::now();
 
-        constexpr const char* getFileName(const char* path) {
+        constexpr const char* getFileName(const char* path)
+        {
             for (auto ptr = path; *ptr; ++ptr) {
                 if (*ptr == '/' || *ptr == '\\') {
                     path = ptr + 1;
@@ -27,7 +28,8 @@ namespace coffee {
             return path;
         }
 
-        constexpr fmt::text_style toColor(MessageSeverity severity) {
+        constexpr fmt::text_style toColor(MessageSeverity severity)
+        {
             switch (severity) {
                 case MessageSeverity::Info:
                     return fmt::fg(fmt::color::white_smoke);
@@ -42,7 +44,8 @@ namespace coffee {
             }
         }
 
-        constexpr std::string_view toString(MessageSeverity severity) {
+        constexpr std::string_view toString(MessageSeverity severity)
+        {
             switch (severity) {
                 case MessageSeverity::Info:
                     return "INFO";
@@ -57,7 +60,8 @@ namespace coffee {
             }
         }
 
-        std::string escape(const char* str) {
+        std::string escape(const char* str)
+        {
             std::string ret {};
 
             for (auto ptr = str; *ptr; ++ptr) {
@@ -79,7 +83,8 @@ namespace coffee {
 
     } // namespace detail
 
-    void mustBe(bool exprResult, const char* exprString, const char* filePath, const unsigned line, const std::string& message) {
+    void mustBe(bool exprResult, const char* exprString, const char* filePath, const unsigned line, const std::string& message)
+    {
         if (exprResult) {
             return;
         }
@@ -96,7 +101,8 @@ namespace coffee {
         ::abort();
     }
 
-    void log(MessageSeverity severity, const char* filePath, const unsigned line, const std::string& message) {
+    void log(MessageSeverity severity, const char* filePath, const unsigned line, const std::string& message)
+    {
         const auto now = std::chrono::system_clock::now();
         const auto diff = std::chrono::duration_cast<std::chrono::seconds>(now - detail::startupTime).count();
         const auto formatted = fmt::format(

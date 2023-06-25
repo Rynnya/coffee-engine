@@ -7,11 +7,10 @@ namespace coffee {
 
         class Stream {
         public:
-
         };
 
-    }
+    } // namespace audio
 
-}
+} // namespace coffee
 
 #endif

@@ -137,10 +137,7 @@ namespace coffee {
             return *this;
         }
 
-        ~ResourceGuard() noexcept
-        {
-            guard_.consume(std::nothrow);
-        }
+        ~ResourceGuard() noexcept { guard_.consume(std::nothrow); }
 
         // Extract is doing waiting only once, further calls will return value without waiting, not thread-safe
         T extract()

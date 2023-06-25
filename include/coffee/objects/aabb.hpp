@@ -11,6 +11,7 @@ namespace coffee {
         static constexpr size_t kAmountOfPoints = 8;
 
         inline glm::vec4& operator[](size_t index) noexcept { return points[index]; }
+
         inline const glm::vec4& operator[](size_t index) const noexcept { return points[index]; }
 
         // w component is always 1.0f

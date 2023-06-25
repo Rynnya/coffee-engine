@@ -142,13 +142,9 @@ namespace coffee {
 
     enum class MouseButton : uint8_t { Left, Right, Middle, Button4, Button5, Button6, Button7, Button8 };
 
-    constexpr uint16_t operator*(Keys key) {
-        return static_cast<uint16_t>(key);
-    }
+    constexpr uint16_t operator*(Keys key) { return static_cast<uint16_t>(key); }
 
-    constexpr uint8_t operator*(MouseButton button) {
-        return static_cast<uint8_t>(button);
-    }
+    constexpr uint8_t operator*(MouseButton button) { return static_cast<uint8_t>(button); }
 
 } // namespace coffee
 
