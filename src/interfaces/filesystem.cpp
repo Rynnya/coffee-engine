@@ -275,12 +275,7 @@ namespace coffee {
         std::vector<uint8_t> decompressedBytes {};
         decompressedBytes.resize(entry.uncompressedSize);
 
-        errorCode = ZSTD_decompress(
-            decompressedBytes.data(),
-            decompressedBytes.size(),
-            compressedData.get(),
-            entry.compressedSize
-        );
+        errorCode = ZSTD_decompress(decompressedBytes.data(), decompressedBytes.size(), compressedData.get(), entry.compressedSize);
 
         if (ZSTD_isError(errorCode)) {
             const char* description = ZSTD_getErrorName(errorCode);

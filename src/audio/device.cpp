@@ -66,8 +66,7 @@ namespace coffee {
                         throw AudioException { AudioException::Type::DeviceCreationFailure, "Failed to create device" };
                     }
 
-                    std::shared_ptr<Device> DevicePtr =
-                        std::shared_ptr<Device>(new Device { deviceHandle, devices + index });
+                    std::shared_ptr<Device> DevicePtr = std::shared_ptr<Device>(new Device { deviceHandle, devices + index });
 
                     if (primaryDevice_ == nullptr) {
                         primaryDevice_ = DevicePtr;
@@ -84,8 +83,7 @@ namespace coffee {
                     throw AudioException { AudioException::Type::DeviceCreationFailure, "Failed to create primary device" };
                 }
 
-                primaryDevice_ =
-                    std::shared_ptr<Device>(new Device { primaryDeviceHandle, alcGetString(nullptr, ALC_DEVICE_SPECIFIER) });
+                primaryDevice_ = std::shared_ptr<Device>(new Device { primaryDeviceHandle, alcGetString(nullptr, ALC_DEVICE_SPECIFIER) });
                 devices_.push_back(primaryDevice_);
             }
 

@@ -236,7 +236,7 @@ namespace coffee {
             friend class CommandBuffer;
         };
 
-    } // namespace coffee
+    } // namespace graphics
 
 } // namespace coffee
 

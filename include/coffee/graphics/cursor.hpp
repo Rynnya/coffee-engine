@@ -4,8 +4,11 @@
 #include <coffee/types.hpp>
 
 // Required this order because implementation uses glfwCreateWindowSurface which not defined without volk ;-;
+
+// clang-format off
 #include <volk/volk.h>
 #include <GLFW/glfw3.h>
+// clang-format on
 
 #include <vector>
 

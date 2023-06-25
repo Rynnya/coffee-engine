@@ -33,7 +33,8 @@ namespace coffee {
         return buffer;
     }
 
-    size_t utils::readFile(const std::string& fileName, uint8_t*& memoryPointer) { 
+    size_t utils::readFile(const std::string& fileName, uint8_t*& memoryPointer)
+    {
         std::error_code ec;
         uintmax_t fileSize = std::filesystem::file_size(fileName, ec);
 

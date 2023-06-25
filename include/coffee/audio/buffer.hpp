@@ -20,12 +20,11 @@ namespace coffee {
 
             void upload();
 
-            private:
-
+        private:
         };
 
-    }
+    } // namespace audio
 
-}
+} // namespace coffee
 
 #endif

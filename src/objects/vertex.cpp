@@ -2,19 +2,19 @@
 
 namespace coffee {
 
-    bool Vertex::operator==(const Vertex& other) {
+    bool Vertex::operator==(const Vertex& other)
+    {
         return position == other.position && normal == other.normal && texCoords == other.texCoords && tangent == other.tangent;
     }
 
-    bool Vertex::operator!=(const Vertex& other) {
-        return !operator==(other);
-    }
+    bool Vertex::operator!=(const Vertex& other) { return !operator==(other); }
 
 } // namespace coffee
 
 namespace std {
 
-    size_t hash<coffee::Vertex>::operator()(const coffee::Vertex& vertex) const {
+    size_t hash<coffee::Vertex>::operator()(const coffee::Vertex& vertex) const
+    {
         size_t positionSeed = 0;
         size_t normalSeed = 0;
         size_t texCoordsSeed = 0;
