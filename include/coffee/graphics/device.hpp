@@ -9,6 +9,7 @@
 #include <GLFW/glfw3.h>
 #include <oneapi/tbb/concurrent_queue.h>
 #include <vma/vk_mem_alloc.h>
+// Volk already included through vk_utils.hpp
 
 #include <array>
 #include <mutex>
@@ -181,12 +182,12 @@ namespace coffee {
             ScopeExit endSingleTimeCommands(VkQueue queue, std::mutex& mutex, CommandBuffer&& commandBuffer);
             ScopeExit endSingleTimeCommands(VkQueue queue, std::mutex& mutex, std::vector<CommandBuffer>&& commandBuffers);
 
-            VkCommandPool acquireGraphicsCommandPool();
-            void returnGraphicsCommandPool(VkCommandPool pool);
-            VkCommandPool acquireComputeCommandPool();
-            void returnComputeCommandPool(VkCommandPool pool);
-            VkCommandPool acquireTransferCommandPool();
-            void returnTransferCommandPool(VkCommandPool pool);
+            std::pair<VkCommandPool, VkCommandBuffer> acquireGraphicsCommandPoolAndBuffer();
+            void returnGraphicsCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer);
+            std::pair<VkCommandPool, VkCommandBuffer> acquireComputeCommandPoolAndBuffer();
+            void returnComputeCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer);
+            std::pair<VkCommandPool, VkCommandBuffer> acquireTransferCommandPoolAndBuffer();
+            void returnTransferCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer);
 
             void clearCommandBuffers(size_t index);
 
@@ -224,9 +225,9 @@ namespace coffee {
             std::vector<bool> poolsAndBuffersClearFlags_ {};
             std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
 
-            tbb::concurrent_queue<VkCommandPool> graphicsPools_ {};
-            tbb::concurrent_queue<VkCommandPool> computePools_ {};
-            tbb::concurrent_queue<VkCommandPool> transferPools_ {};
+            tbb::concurrent_queue<std::pair<VkCommandPool, VkCommandBuffer>> graphicsPools_ {};
+            tbb::concurrent_queue<std::pair<VkCommandPool, VkCommandBuffer>> computePools_ {};
+            tbb::concurrent_queue<std::pair<VkCommandPool, VkCommandBuffer>> transferPools_ {};
             tbb::concurrent_queue<VkFence> singleTimeFences_ {};
 
             VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
