@@ -12,10 +12,11 @@
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
 #define VMA_IMPLEMENTATION
 
+#include <volk/volk.h>
+
 #include <GLFW/glfw3.h>
 #include <basis_universal/basisu_transcoder.cpp>
 #include <vma/vk_mem_alloc.h>
-#include <volk/volk.h>
 
 #include <array>
 #include <set>
@@ -77,22 +78,28 @@ namespace coffee {
         {
             vkDeviceWaitIdle(logicalDevice_);
 
-            VkCommandPool pool = VK_NULL_HANDLE;
+            std::pair<VkCommandPool, VkCommandBuffer> poolAndBuffer { VK_NULL_HANDLE, VK_NULL_HANDLE };
 
             for (size_t i = 0; i < poolsAndBuffers_.size(); i++) {
                 clearCommandBuffers(i);
             }
 
-            while (graphicsPools_.try_pop(pool)) {
-                vkDestroyCommandPool(logicalDevice_, pool, nullptr);
+            while (graphicsPools_.try_pop(poolAndBuffer)) {
+                auto& [commandPool, commandBuffer] = poolAndBuffer;
+                vkFreeCommandBuffers(logicalDevice_, commandPool, 1, &commandBuffer);
+                vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
             }
 
-            while (computePools_.try_pop(pool)) {
-                vkDestroyCommandPool(logicalDevice_, pool, nullptr);
+            while (computePools_.try_pop(poolAndBuffer)) {
+                auto& [commandPool, commandBuffer] = poolAndBuffer;
+                vkFreeCommandBuffers(logicalDevice_, commandPool, 1, &commandBuffer);
+                vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
             }
 
-            while (transferPools_.try_pop(pool)) {
-                vkDestroyCommandPool(logicalDevice_, pool, nullptr);
+            while (transferPools_.try_pop(poolAndBuffer)) {
+                auto& [commandPool, commandBuffer] = poolAndBuffer;
+                vkFreeCommandBuffers(logicalDevice_, commandPool, 1, &commandBuffer);
+                vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
             }
 
             VkFence fence = VK_NULL_HANDLE;
@@ -926,18 +933,21 @@ namespace coffee {
             });
         }
 
-        VkCommandPool Device::acquireGraphicsCommandPool()
+        std::pair<VkCommandPool, VkCommandBuffer> Device::acquireGraphicsCommandPoolAndBuffer()
         {
-            VkCommandPool pool = VK_NULL_HANDLE;
+            std::pair<VkCommandPool, VkCommandBuffer> poolAndBuffer { VK_NULL_HANDLE, VK_NULL_HANDLE };
 
-            if (graphicsPools_.try_pop(pool)) {
-                return pool;
+            if (graphicsPools_.try_pop(poolAndBuffer)) {
+                return poolAndBuffer;
             }
 
+            auto& [commandPool, commandBuffer] = poolAndBuffer;
+            VkResult result = VK_SUCCESS;
+
             VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-            poolInfo.flags = 0;
+            poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
             poolInfo.queueFamilyIndex = indices_.graphicsFamily.value();
-            VkResult result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &pool);
+            result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &commandPool);
 
             if (result != VK_SUCCESS) {
                 COFFEE_ERROR("Failed to create command pool from graphics queue!");
@@ -945,27 +955,47 @@ namespace coffee {
                 throw RegularVulkanException { result };
             }
 
-            return pool;
+            VkCommandBufferAllocateInfo allocateInfo { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+            allocateInfo.commandPool = commandPool;
+            allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocateInfo.commandBufferCount = 1;
+
+            if ((result = vkAllocateCommandBuffers(logicalDevice_, &allocateInfo, &commandBuffer)) != VK_SUCCESS) {
+                COFFEE_ERROR("Failed to allocate command buffer!");
+
+                vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
+
+                throw RegularVulkanException { result };
+            }
+
+            return poolAndBuffer;
         }
 
-        void Device::returnGraphicsCommandPool(VkCommandPool pool) { graphicsPools_.push(pool); }
+        void Device::returnGraphicsCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer)
+        {
+            vkResetCommandBuffer(buffer.second, 0);
+            graphicsPools_.push(buffer);
+        }
 
-        VkCommandPool Device::acquireComputeCommandPool()
+        std::pair<VkCommandPool, VkCommandBuffer> Device::acquireComputeCommandPoolAndBuffer()
         {
             if (computeQueue_ == VK_NULL_HANDLE) {
-                return acquireGraphicsCommandPool();
+                return acquireGraphicsCommandPoolAndBuffer();
             }
 
-            VkCommandPool pool = VK_NULL_HANDLE;
+            std::pair<VkCommandPool, VkCommandBuffer> poolAndBuffer { VK_NULL_HANDLE, VK_NULL_HANDLE };
 
-            if (computePools_.try_pop(pool)) {
-                return pool;
+            if (computePools_.try_pop(poolAndBuffer)) {
+                return poolAndBuffer;
             }
+
+            auto& [commandPool, commandBuffer] = poolAndBuffer;
+            VkResult result = VK_SUCCESS;
 
             VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-            poolInfo.flags = 0;
+            poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
             poolInfo.queueFamilyIndex = indices_.computeFamily.value();
-            VkResult result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &pool);
+            result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &commandPool);
 
             if (result != VK_SUCCESS) {
                 COFFEE_ERROR("Failed to create command pool from compute queue!");
@@ -973,27 +1003,47 @@ namespace coffee {
                 throw RegularVulkanException { result };
             }
 
-            return pool;
+            VkCommandBufferAllocateInfo allocateInfo { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+            allocateInfo.commandPool = commandPool;
+            allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocateInfo.commandBufferCount = 1;
+
+            if ((result = vkAllocateCommandBuffers(logicalDevice_, &allocateInfo, &commandBuffer)) != VK_SUCCESS) {
+                COFFEE_ERROR("Failed to allocate command buffer!");
+
+                vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
+
+                throw RegularVulkanException { result };
+            }
+
+            return poolAndBuffer;
         }
 
-        void Device::returnComputeCommandPool(VkCommandPool pool) { computePools_.push(pool); }
+        void Device::returnComputeCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer)
+        {
+            vkResetCommandBuffer(buffer.second, 0);
+            computePools_.push(buffer);
+        }
 
-        VkCommandPool Device::acquireTransferCommandPool()
+        std::pair<VkCommandPool, VkCommandBuffer> Device::acquireTransferCommandPoolAndBuffer()
         {
             if (transferQueue_ == VK_NULL_HANDLE) {
-                return acquireComputeCommandPool();
+                return acquireComputeCommandPoolAndBuffer();
             }
 
-            VkCommandPool pool = VK_NULL_HANDLE;
+            std::pair<VkCommandPool, VkCommandBuffer> poolAndBuffer { VK_NULL_HANDLE, VK_NULL_HANDLE };
 
-            if (transferPools_.try_pop(pool)) {
-                return pool;
+            if (transferPools_.try_pop(poolAndBuffer)) {
+                return poolAndBuffer;
             }
+
+            auto& [commandPool, commandBuffer] = poolAndBuffer;
+            VkResult result = VK_SUCCESS;
 
             VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-            poolInfo.flags = 0;
+            poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
             poolInfo.queueFamilyIndex = indices_.transferFamily.value();
-            VkResult result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &pool);
+            result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &commandPool);
 
             if (result != VK_SUCCESS) {
                 COFFEE_ERROR("Failed to create command pool from transfer queue!");
@@ -1001,18 +1051,34 @@ namespace coffee {
                 throw RegularVulkanException { result };
             }
 
-            return pool;
+            VkCommandBufferAllocateInfo allocateInfo { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+            allocateInfo.commandPool = commandPool;
+            allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            allocateInfo.commandBufferCount = 1;
+
+            if ((result = vkAllocateCommandBuffers(logicalDevice_, &allocateInfo, &commandBuffer)) != VK_SUCCESS) {
+                COFFEE_ERROR("Failed to allocate command buffer!");
+
+                vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
+
+                throw RegularVulkanException { result };
+            }
+
+            return poolAndBuffer;
         }
 
-        void Device::returnTransferCommandPool(VkCommandPool pool) { transferPools_.push(pool); }
+        void Device::returnTransferCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer)
+        {
+            vkResetCommandBuffer(buffer.second, 0);
+            transferPools_.push(buffer);
+        }
 
         void Device::clearCommandBuffers(size_t index)
         {
             waitForAcquire();
 
-            for (auto& [commandPool, commandBuffer] : poolsAndBuffers_[index]) {
-                vkFreeCommandBuffers(logicalDevice_, commandPool, 1, &commandBuffer);
-                returnGraphicsCommandPool(commandPool);
+            for (auto& commandPoolAndBuffer : poolsAndBuffers_[index]) {
+                returnGraphicsCommandPoolAndBuffer(commandPoolAndBuffer);
             }
 
             poolsAndBuffers_[index].clear();
