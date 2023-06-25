@@ -1,10 +1,10 @@
 #include <coffee/interfaces/loop_handler.hpp>
 
+#include <coffee/utils/log.hpp>
+
 #include <GLFW/glfw3.h>
 
-#include <thread>
-
-#include <coffee/utils/log.hpp>
+#include <chrono>
 
 namespace coffee {
 
