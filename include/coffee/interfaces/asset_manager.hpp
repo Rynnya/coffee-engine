@@ -23,9 +23,6 @@ namespace coffee {
     using AssetManagerPtr = std::shared_ptr<AssetManager>;
 
     class AssetManager {
-    private:
-        using ShaderStage = graphics::ShaderStage;
-
     public:
         ~AssetManager() noexcept = default;
 
@@ -33,8 +30,8 @@ namespace coffee {
 
         std::vector<uint8_t> getBytes(const std::string& path);
         std::vector<uint8_t> getBytes(const FilesystemPtr& fs, const std::string& path);
-        graphics::ShaderPtr getShader(const std::string& path, ShaderStage stage, const std::string& entrypoint = "main");
-        graphics::ShaderPtr getShader(const FilesystemPtr& fs, const std::string& path, ShaderStage stage, const std::string& e = "main");
+        graphics::ShaderPtr getShader(const std::string& path, const std::string& entrypoint = "main");
+        graphics::ShaderPtr getShader(const FilesystemPtr& fs, const std::string& path, const std::string& entrypoint = "main");
         ModelPtr getModel(const std::string& path);
         ModelPtr getModel(const FilesystemPtr& fs, const std::string& path);
         // BEWARE: amountOfChannels ignored when image already loaded, you can extract actual amount of channels through VkFormat

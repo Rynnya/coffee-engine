@@ -163,16 +163,43 @@ namespace coffee {
 
             std::vector<VkPipelineShaderStageCreateInfo> shaderStages {};
 
-            for (const auto& shader : configuration.shaders) {
+            if (configuration.vertexShader) {
                 VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
-                shaderCreateInfo.stage = shader->stage;
-                shaderCreateInfo.module = shader->shader();
-                shaderCreateInfo.pName = shader->entrypoint.data();
+                auto& vertexShader = configuration.vertexShader.value();
+                shaderCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+                shaderCreateInfo.module = vertexShader->shader();
+                shaderCreateInfo.pName = vertexShader->entrypoint.data();
                 shaderCreateInfo.pSpecializationInfo = nullptr;
 
                 shaderStages.push_back(std::move(shaderCreateInfo));
             }
+
+            if (configuration.fragmentShader) {
+                VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+
+                auto& fragmentShader = configuration.fragmentShader.value();
+                shaderCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+                shaderCreateInfo.module = fragmentShader->shader();
+                shaderCreateInfo.pName = fragmentShader->entrypoint.data();
+                shaderCreateInfo.pSpecializationInfo = nullptr;
+
+                shaderStages.push_back(std::move(shaderCreateInfo));
+            }
+
+            if (configuration.computeShader) {
+                VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+
+                auto& computeShader = configuration.computeShader.value();
+                shaderCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+                shaderCreateInfo.module = computeShader->shader();
+                shaderCreateInfo.pName = computeShader->entrypoint.data();
+                shaderCreateInfo.pSpecializationInfo = nullptr;
+
+                shaderStages.push_back(std::move(shaderCreateInfo));
+            }
+
+            COFFEE_ASSERT(!shaderStages.empty(), "Shaders wasn't provided, at least one shader must be provided.");
 
             VkGraphicsPipelineCreateInfo pipelineInfo { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
             pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());

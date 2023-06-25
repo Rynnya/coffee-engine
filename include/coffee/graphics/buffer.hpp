@@ -18,17 +18,6 @@ namespace coffee {
             float priority = 0.5f;
         };
 
-        struct FSBufferConfiguration {
-            std::string path {};
-            VkDeviceSize size = std::numeric_limits<VkDeviceSize>::max();
-            VkDeviceSize offset = 0;
-            VkBufferUsageFlags usageFlags = 0;
-            VkMemoryPropertyFlags memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            VmaAllocationCreateFlags allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-            VmaMemoryUsage allocationUsage = VMA_MEMORY_USAGE_AUTO;
-            float priority = 0.5f;
-        };
-
         class Buffer;
         using BufferPtr = std::unique_ptr<Buffer>;
 
@@ -37,13 +26,6 @@ namespace coffee {
             ~Buffer() noexcept;
 
             static BufferPtr create(const DevicePtr& device, const BufferConfiguration& configuration);
-            // TODO: Replace FilesystemPtr with std::vector<uint8_t> so AssetManager can call this
-            // static BufferPtr create(
-            //    const DevicePtr& device,
-            //    const FilesystemPtr& filesystem,
-            //    const FSBufferConfiguration& configuration,
-            //    const ThreadContext& ctx = {}
-            //);
 
             void* map();
             void unmap() noexcept;
