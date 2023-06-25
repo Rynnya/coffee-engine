@@ -84,7 +84,9 @@ namespace coffee {
         };
 
         struct PipelineConfiguration {
-            std::vector<ShaderPtr> shaders {};
+            std::optional<ShaderPtr> vertexShader = std::nullopt;
+            std::optional<ShaderPtr> fragmentShader = std::nullopt;
+            std::optional<ShaderPtr> computeShader = std::nullopt;
             std::vector<DescriptorLayoutPtr> layouts {};
             std::vector<InputBinding> inputBindings {};
             std::vector<PushConstantRange> constantRanges {};

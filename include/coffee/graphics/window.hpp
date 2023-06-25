@@ -112,17 +112,17 @@ namespace coffee {
 
             // clang-format off
 
-        mutable Invokable<const Window&, const ResizeEvent&>            windowResizeEvent {};
-        mutable Invokable<const Window&, const WindowEnterEvent&>       windowEnterEvent {};
-        mutable Invokable<const Window&, const WindowPositionEvent&>    windowPositionEvent {};
-        mutable Invokable<const Window&>                                windowCloseEvent {};
-        mutable Invokable<const Window&, const WindowFocusEvent&>       windowFocusEvent {};
-        mutable Invokable<const Window&, const MouseClickEvent&>        mouseClickEvent {};
-        mutable Invokable<const Window&, const MouseMoveEvent&>         mouseMoveEvent {};
-        mutable Invokable<const Window&, const MouseWheelEvent&>        mouseWheelEvent {};
-        mutable Invokable<const Window&, const KeyEvent&>               keyEvent {};
-        mutable Invokable<const Window&, char32_t>                      charEvent {};
-        mutable Invokable<const Window&, VkPresentModeKHR>              presentModeEvent {};
+            mutable Invokable<const Window&, const ResizeEvent&>            windowResizeEvent {};
+            mutable Invokable<const Window&, const WindowEnterEvent&>       windowEnterEvent {};
+            mutable Invokable<const Window&, const WindowPositionEvent&>    windowPositionEvent {};
+            mutable Invokable<const Window&>                                windowCloseEvent {};
+            mutable Invokable<const Window&, const WindowFocusEvent&>       windowFocusEvent {};
+            mutable Invokable<const Window&, const MouseClickEvent&>        mouseClickEvent {};
+            mutable Invokable<const Window&, const MouseMoveEvent&>         mouseMoveEvent {};
+            mutable Invokable<const Window&, const MouseWheelEvent&>        mouseWheelEvent {};
+            mutable Invokable<const Window&, const KeyEvent&>               keyEvent {};
+            mutable Invokable<const Window&, char32_t>                      charEvent {};
+            mutable Invokable<const Window&, VkPresentModeKHR>              presentModeEvent {};
 
             // clang-format on
 

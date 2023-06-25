@@ -15,16 +15,11 @@ namespace coffee {
 
         namespace detail {
 
-            template <typename T>
-            class MovableIL {
-            public:
-                MovableIL(T&& object) noexcept(std::is_nothrow_move_constructible_v<T>) : object_ { std::move(object) } {}
+            template <typename... Ts>
+            struct are_same : std::integral_constant<bool, (std::is_same_v<typename std::tuple_element_t<0, std::tuple<Ts...>>, Ts> && ...)> {};
 
-                constexpr operator T() const&& noexcept(std::is_nothrow_move_constructible_v<T>) { return std::move(object_); }
-
-            private:
-                mutable T object_;
-            };
+            template <typename... Ts>
+            inline constexpr bool are_same_v = are_same<Ts...>::value;
 
         } // namespace detail
 
@@ -35,15 +30,10 @@ namespace coffee {
 
         // Wrapper that allow compiler to properly move initializer list
         // Must be used for move-only objects that wanna be created through initializer list
-        template <typename Base, typename Desirable>
-        static Desirable moveList(std::initializer_list<detail::MovableIL<Base>> initializerList)
+        template <typename Desirable, typename... Args>
+        static std::enable_if_t<detail::are_same_v<Args...>, Desirable> moveList(Args&&... args)
         {
-            static_assert(
-                std::is_constructible_v<Desirable, decltype(initializerList.begin()), decltype(initializerList.end())>,
-                "Desirable list must be constructable from initializer list begin and end iterators."
-            );
-
-            return { std::make_move_iterator(initializerList.begin()), std::make_move_iterator(initializerList.end()) };
+            return { std::forward<Args>(args)... };
         }
 
         // From: https://stackoverflow.com/a/57595105

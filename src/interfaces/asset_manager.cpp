@@ -126,7 +126,7 @@ namespace coffee {
         return std::get<std::vector<uint8_t>>(cacheIterator->second.actualObject);
     }
 
-    graphics::ShaderPtr AssetManager::getShader(const std::string& path, ShaderStage stage, const std::string& entrypoint)
+    graphics::ShaderPtr AssetManager::getShader(const std::string& path, const std::string& entrypoint)
     {
         tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
@@ -147,7 +147,7 @@ namespace coffee {
         return std::get<graphics::ShaderPtr>(asset.actualObject);
     }
 
-    graphics::ShaderPtr AssetManager::getShader(const FilesystemPtr& fs, const std::string& path, ShaderStage stage, const std::string& e)
+    graphics::ShaderPtr AssetManager::getShader(const FilesystemPtr& fs, const std::string& path, const std::string& entrypoint)
     {
         tbb::queuing_mutex::scoped_lock lock { mutex_ };
 
@@ -165,7 +165,7 @@ namespace coffee {
                                        fmt::format("Expected type Shader, requested type was {}", detail::fileTypeToString(entry.type)) };
             }
 
-            graphics::ShaderPtr shader = graphics::ShaderModule::create(device_, fs->getContent(path), stage, e);
+            graphics::ShaderPtr shader = graphics::ShaderModule::create(device_, fs->getContent(path), entrypoint);
             cache_.insert(std::make_pair(hash, Asset { shader }));
 
             return shader;
