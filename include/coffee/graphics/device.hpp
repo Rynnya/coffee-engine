@@ -286,9 +286,6 @@ namespace coffee {
             tbb::queuing_mutex submitMutex_ {};
             std::vector<SubmitInfo> pendingSubmits_ {};
 
-            std::atomic_bool cleanupRunning_ {};
-            tbb::queuing_mutex cleanupMutex_ {};
-            std::thread cleanupThread_ {};
             RunningGPUTask pendingTask_ {};
             std::vector<RunningGPUTask> runningTasks_ {};
 
