@@ -27,6 +27,12 @@ namespace coffee {
 
             static BufferPtr create(const DevicePtr& device, const BufferConfiguration& configuration);
 
+            template <typename T>
+            T& map()
+            {
+                return *reinterpret_cast<T*>(map());
+            }
+
             void* map();
             void unmap() noexcept;
             void flush(size_t size = VK_WHOLE_SIZE, size_t offset = 0U);

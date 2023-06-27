@@ -184,7 +184,6 @@ namespace coffee {
         {
             const auto& bindings = writer.layout_->bindings;
             const auto& writes = writer.writes_;
-            VkDescriptorSetLayout layout = writer.layout_->layout();
 
             std::vector<VkWriteDescriptorSet> writesImpl {};
             std::vector<VkDescriptorBufferInfo> bufferInfos {};

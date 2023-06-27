@@ -13,8 +13,8 @@ namespace coffee {
             : swapChainImage { false }
             , imageType { configuration.imageType }
             , imageFormat { configuration.format }
-            , extent { configuration.extent.width, configuration.extent.height, std::max(configuration.extent.depth, 1U) }
             , sampleCount { VkUtils::getUsableSampleCount(configuration.samples, device->properties()) }
+            , extent { configuration.extent.width, configuration.extent.height, std::max(configuration.extent.depth, 1U) }
             , mipLevels { configuration.mipLevels }
             , arrayLayers { configuration.arrayLayers }
             , device_ { device }
@@ -52,8 +52,8 @@ namespace coffee {
             : swapChainImage { true }
             , imageType { VK_IMAGE_TYPE_2D }
             , imageFormat { imageFormat }
-            , extent { width, height, 1 }
             , sampleCount { VK_SAMPLE_COUNT_1_BIT }
+            , extent { width, height, 1 }
             , mipLevels { 1U }
             , arrayLayers { 1U }
             , device_ { device }

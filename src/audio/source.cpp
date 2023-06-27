@@ -21,7 +21,7 @@ namespace coffee {
             initialize();
         }
 
-        Source::~Source()
+        Source::~Source() noexcept
         {
             if (sourceHandle_ != AL_INVALID) {
                 alDeleteSources(1, &sourceHandle_);

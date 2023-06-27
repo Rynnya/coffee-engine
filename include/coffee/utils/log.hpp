@@ -16,6 +16,8 @@ namespace coffee {
 
 // clang-format off
 
+#define COFFEE_ASSERT_ENABLE
+
 #ifdef COFFEE_ASSERT_ENABLE
 #   define COFFEE_ASSERT(expr, formatting, ...) \
         coffee::mustBe(expr, #expr, __FILE__, __LINE__, fmt::format(formatting, ##__VA_ARGS__))

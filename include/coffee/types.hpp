@@ -13,9 +13,11 @@ namespace coffee {
         class Device;
         using DevicePtr = std::shared_ptr<Device>;
 
+        class CommandBuffer;
+
         using ShaderStage = VkShaderStageFlagBits;
 
-        enum class CommandBufferType : uint32_t { Transfer = 0, Graphics = 1, Compute = 2 };
+        enum class CommandBufferType : uint32_t { Transfer = 0, Compute = 1, Graphics = 2 };
 
     } // namespace graphics
 

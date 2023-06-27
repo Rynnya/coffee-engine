@@ -22,14 +22,8 @@ namespace coffee {
 
         static uint32_t findMemoryType(VkPhysicalDevice device, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
-        static VkSurfaceFormatKHR chooseSurfaceFormat(
-            VkPhysicalDevice device,
-            const std::vector<VkSurfaceFormatKHR>& availableFormats
-        ) noexcept;
-        static VkPresentModeKHR choosePresentMode(
-            const std::vector<VkPresentModeKHR>& availablePresentModes,
-            VkPresentModeKHR preferable
-        ) noexcept;
+        static VkSurfaceFormatKHR chooseSurfaceFormat(VkPhysicalDevice device, const std::vector<VkSurfaceFormatKHR>& availableFormats) noexcept;
+        static VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes, VkPresentModeKHR preferable) noexcept;
         static VkExtent2D chooseExtent(const VkExtent2D& extent, const VkSurfaceCapabilitiesKHR& capabilities) noexcept;
 
         struct SwapChainSupportDetails {
@@ -64,10 +58,7 @@ namespace coffee {
         static VkDescriptorType getBufferDescriptorType(VkBufferUsageFlags bufferFlags, bool isDynamic = false) noexcept;
         static VkDescriptorType getImageDescriptorType(VkImageUsageFlags imageFlags, bool withSampler = false) noexcept;
 
-        static VkSampleCountFlagBits getUsableSampleCount(
-            VkSampleCountFlagBits sampleCount,
-            const VkPhysicalDeviceProperties& properties
-        ) noexcept;
+        static VkSampleCountFlagBits getUsableSampleCount(VkSampleCountFlagBits sampleCount, const VkPhysicalDeviceProperties& properties) noexcept;
     };
 
 } // namespace coffee

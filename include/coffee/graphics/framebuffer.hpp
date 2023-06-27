@@ -24,11 +24,7 @@ namespace coffee {
         public:
             ~Framebuffer() noexcept;
 
-            static FramebufferPtr create(
-                const DevicePtr& device,
-                const RenderPassPtr& renderPass,
-                const FramebufferConfiguration& configuration
-            );
+            static FramebufferPtr create(const DevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration);
 
             const uint32_t width;
             const uint32_t height;

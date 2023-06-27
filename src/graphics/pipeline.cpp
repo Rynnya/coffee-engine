@@ -11,8 +11,7 @@ namespace coffee {
 
     namespace graphics {
 
-        Pipeline::Pipeline(const DevicePtr& device, const RenderPassPtr& renderPass, const PipelineConfiguration& configuration)
-            : device_ { device }
+        Pipeline::Pipeline(const DevicePtr& device, const RenderPassPtr& renderPass, const PipelineConfiguration& configuration) : device_ { device }
         {
             VkResult result = VK_SUCCESS;
             VkPipelineLayoutCreateInfo createInfo { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
@@ -113,8 +112,7 @@ namespace coffee {
             rasterizationInfo.lineWidth = 1.0f;
 
             VkPipelineMultisampleStateCreateInfo multisampleInfo { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-            multisampleInfo.rasterizationSamples =
-                VkUtils::getUsableSampleCount(configuration.multisampleInfo.sampleCount, device_->properties());
+            multisampleInfo.rasterizationSamples = VkUtils::getUsableSampleCount(configuration.multisampleInfo.sampleCount, device_->properties());
             multisampleInfo.sampleShadingEnable = configuration.multisampleInfo.sampleRateShading ? VK_TRUE : VK_FALSE;
             multisampleInfo.minSampleShading = configuration.multisampleInfo.minSampleShading;
             multisampleInfo.pSampleMask = nullptr;
@@ -220,8 +218,7 @@ namespace coffee {
             pipelineInfo.basePipelineIndex = -1;
             pipelineInfo.basePipelineHandle = nullptr;
 
-            if ((result = vkCreateGraphicsPipelines(device_->logicalDevice(), nullptr, 1, &pipelineInfo, nullptr, &pipeline_)) !=
-                VK_SUCCESS) {
+            if ((result = vkCreateGraphicsPipelines(device_->logicalDevice(), nullptr, 1, &pipelineInfo, nullptr, &pipeline_)) != VK_SUCCESS) {
                 COFFEE_ERROR("Failed to create graphics pipeline!");
 
                 throw RegularVulkanException { result };

@@ -46,13 +46,13 @@ namespace coffee {
             if (pool_ != VK_NULL_HANDLE) {
                 switch (type) {
                     case CommandBufferType::Graphics:
-                        device_->returnGraphicsCommandPoolAndBuffer({ pool_, buffer_ });
+                        device_->returnGraphicsCommandPoolAndBuffer(pool_, buffer_);
                         break;
                     case CommandBufferType::Compute:
-                        device_->returnComputeCommandPoolAndBuffer({ pool_, buffer_ });
+                        device_->returnComputeCommandPoolAndBuffer(pool_, buffer_);
                         break;
                     case CommandBufferType::Transfer:
-                        device_->returnTransferCommandPoolAndBuffer({ pool_, buffer_ });
+                        device_->returnTransferCommandPoolAndBuffer(pool_, buffer_);
                         break;
                 }
             }

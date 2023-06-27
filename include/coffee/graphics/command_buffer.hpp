@@ -20,7 +20,6 @@ namespace coffee {
     // Most of functions will be inlined anyway, so there little to no performance difference
     // Because of this there also will be added some asserts which will be deleted on release
     // Sometimes this can provide a easier way to handle routine, e.g vkCmdSetViewport
-    // Some functions like vkCmdPipelineBarrier won't be declared here as they pretty big and must be handled by user instead
 
     namespace graphics {
 
@@ -109,14 +108,7 @@ namespace coffee {
                 COFFEE_ASSERT(regionCount <= kUIntMax, "regionCount must be less than {}.", kUIntMax);
                 COFFEE_ASSERT(pRegions != nullptr, "pRegions must be a valid pointer.");
 
-                vkCmdCopyBufferToImage(
-                    buffer_,
-                    srcBuffer->buffer(),
-                    dstImage->image(),
-                    dstImageLayout,
-                    static_cast<uint32_t>(regionCount),
-                    pRegions
-                );
+                vkCmdCopyBufferToImage(buffer_, srcBuffer->buffer(), dstImage->image(), dstImageLayout, static_cast<uint32_t>(regionCount), pRegions);
             }
 
             inline void copyImageToBuffer(
@@ -139,14 +131,7 @@ namespace coffee {
                 COFFEE_ASSERT(regionCount <= kUIntMax, "regionCount must be less than {}.", kUIntMax);
                 COFFEE_ASSERT(pRegions != nullptr, "pRegions must be a valid pointer.");
 
-                vkCmdCopyImageToBuffer(
-                    buffer_,
-                    srcImage->image(),
-                    srcImageLayout,
-                    dstBuffer->buffer(),
-                    static_cast<uint32_t>(regionCount),
-                    pRegions
-                );
+                vkCmdCopyImageToBuffer(buffer_, srcImage->image(), srcImageLayout, dstBuffer->buffer(), static_cast<uint32_t>(regionCount), pRegions);
             }
 
             inline void blitImage(
@@ -258,10 +243,7 @@ namespace coffee {
                 COFFEE_ASSERT(thirdDescriptor != nullptr, "thirdDescriptor must be a valid pointer.");
                 COFFEE_ASSERT(fourthDescriptor != nullptr, "fourthDescriptor must be a valid pointer.");
 
-                VkDescriptorSet sets[4] = { firstDescriptor->set(),
-                                            secondDescriptor->set(),
-                                            thirdDescriptor->set(),
-                                            fourthDescriptor->set() };
+                VkDescriptorSet sets[4] = { firstDescriptor->set(), secondDescriptor->set(), thirdDescriptor->set(), fourthDescriptor->set() };
                 vkCmdBindDescriptorSets(buffer_, bindPoint, pipeline->layout(), 0, 4, sets, 0, nullptr);
             }
 
@@ -281,14 +263,7 @@ namespace coffee {
                 COFFEE_ASSERT(pValues != nullptr, "pValues must be a valid pointer.");
                 COFFEE_ASSERT(offset <= kUIntMax, "offset must be less than {}.", kUIntMax);
 
-                vkCmdPushConstants(
-                    buffer_,
-                    pipeline->layout(),
-                    stageFlags,
-                    static_cast<uint32_t>(offset),
-                    static_cast<uint32_t>(size),
-                    pValues
-                );
+                vkCmdPushConstants(buffer_, pipeline->layout(), stageFlags, static_cast<uint32_t>(offset), static_cast<uint32_t>(size), pValues);
             }
 
             inline void beginRenderPass(
@@ -304,10 +279,7 @@ namespace coffee {
                 COFFEE_ASSERT(renderPass != nullptr, "Invalid renderPass provided.");
                 COFFEE_ASSERT(framebuffer != nullptr, "Invalid framebuffer provided.");
 
-                COFFEE_ASSERT(
-                    renderArea.extent.width > 0 && renderArea.extent.height > 0,
-                    "renderArea extent members must be greater than 0."
-                );
+                COFFEE_ASSERT(renderArea.extent.width > 0 && renderArea.extent.height > 0, "renderArea extent members must be greater than 0.");
 
                 VkRenderPassBeginInfo renderPassBeginInfo { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
                 renderPassBeginInfo.renderPass = renderPass->renderPass();
@@ -365,12 +337,8 @@ namespace coffee {
                 }
             }
 
-            inline void bindVertexBuffers(
-                size_t bindingCount,
-                const VkBuffer* pBuffers,
-                const VkDeviceSize* pOffsets,
-                size_t firstBinding = 0U
-            ) const noexcept
+            inline void bindVertexBuffers(size_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, size_t firstBinding = 0U)
+                const noexcept
             {
                 COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
 
@@ -380,13 +348,7 @@ namespace coffee {
                 COFFEE_ASSERT(pOffsets != nullptr, "pOffsets must be a valid pointer.");
                 COFFEE_ASSERT(firstBinding <= kUIntMax, "firstBinding must be less than {}.", kUIntMax);
 
-                vkCmdBindVertexBuffers(
-                    buffer_,
-                    static_cast<uint32_t>(firstBinding),
-                    static_cast<uint32_t>(bindingCount),
-                    pBuffers,
-                    pOffsets
-                );
+                vkCmdBindVertexBuffers(buffer_, static_cast<uint32_t>(firstBinding), static_cast<uint32_t>(bindingCount), pBuffers, pOffsets);
             }
 
             inline void bindIndexBuffer(const BufferPtr& indexBuffer, VkDeviceSize offset = 0ULL) const noexcept
@@ -398,8 +360,7 @@ namespace coffee {
                 vkCmdBindIndexBuffer(buffer_, indexBuffer->buffer(), offset, VK_INDEX_TYPE_UINT32);
             }
 
-            inline void draw(uint32_t vertexCount, uint32_t instanceCount = 1U, uint32_t firstVertex = 0U, uint32_t firstInstance = 0U)
-                const noexcept
+            inline void draw(uint32_t vertexCount, uint32_t instanceCount = 1U, uint32_t firstVertex = 0U, uint32_t firstInstance = 0U) const noexcept
             {
                 COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
 
@@ -461,12 +422,8 @@ namespace coffee {
                 vkCmdDrawIndirect(buffer_, drawBuffer->buffer(), offset, drawCount, stride);
             }
 
-            inline void drawIndexedIndirect(
-                const BufferPtr& drawBuffer,
-                VkDeviceSize offset = 0U,
-                uint32_t drawCount = 1U,
-                uint32_t stride = 0U
-            ) const noexcept
+            inline void drawIndexedIndirect(const BufferPtr& drawBuffer, VkDeviceSize offset = 0U, uint32_t drawCount = 1U, uint32_t stride = 0U)
+                const noexcept
             {
                 COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
 
@@ -491,21 +448,123 @@ namespace coffee {
                 vkCmdDispatchIndirect(buffer_, dispatchBuffer->buffer(), offset);
             }
 
+            inline void memoryPipelineBarrier(
+                VkPipelineStageFlags srcStageMask,
+                VkPipelineStageFlags dstStageMask,
+                VkDependencyFlags dependencyFlags,
+                size_t memoryBarrierCount,
+                const VkMemoryBarrier* pMemoryBarriers
+            ) const noexcept
+            {
+                COFFEE_ASSERT(memoryBarrierCount > 0 && pMemoryBarriers != nullptr, "Invalid memory barriers provided.");
+
+                vkCmdPipelineBarrier(
+                    buffer_,
+                    srcStageMask,
+                    dstStageMask,
+                    dependencyFlags,
+                    memoryBarrierCount,
+                    pMemoryBarriers,
+                    0,
+                    nullptr,
+                    0,
+                    nullptr
+                );
+            }
+
+            inline void bufferPipelineBarrier(
+                VkPipelineStageFlags srcStageMask,
+                VkPipelineStageFlags dstStageMask,
+                VkDependencyFlags dependencyFlags,
+                size_t bufferMemoryBarrierCount,
+                const VkBufferMemoryBarrier* pBufferMemoryBarriers
+            ) const noexcept
+            {
+                COFFEE_ASSERT(bufferMemoryBarrierCount > 0 && pBufferMemoryBarriers != nullptr, "Invalid buffer memory barriers provided.");
+
+                vkCmdPipelineBarrier(
+                    buffer_,
+                    srcStageMask,
+                    dstStageMask,
+                    dependencyFlags,
+                    0,
+                    nullptr,
+                    bufferMemoryBarrierCount,
+                    pBufferMemoryBarriers,
+                    0,
+                    nullptr
+                );
+            }
+
+            inline void imagePipelineBarrier(
+                VkPipelineStageFlags srcStageMask,
+                VkPipelineStageFlags dstStageMask,
+                VkDependencyFlags dependencyFlags,
+                size_t imageMemoryBarrierCount,
+                const VkImageMemoryBarrier* pImageMemoryBarriers
+            ) const noexcept
+            {
+                COFFEE_ASSERT(imageMemoryBarrierCount > 0 && pImageMemoryBarriers != nullptr, "Invalid image memory barriers provided.");
+
+                vkCmdPipelineBarrier(
+                    buffer_,
+                    srcStageMask,
+                    dstStageMask,
+                    dependencyFlags,
+                    0,
+                    nullptr,
+                    0,
+                    nullptr,
+                    imageMemoryBarrierCount,
+                    pImageMemoryBarriers
+                );
+            }
+
+            inline void pipelineBarrier(
+                VkPipelineStageFlags srcStageMask,
+                VkPipelineStageFlags dstStageMask,
+                VkDependencyFlags dependencyFlags,
+                size_t memoryBarrierCount,
+                const VkMemoryBarrier* pMemoryBarriers,
+                size_t bufferMemoryBarrierCount,
+                const VkBufferMemoryBarrier* pBufferMemoryBarriers,
+                size_t imageMemoryBarrierCount,
+                const VkImageMemoryBarrier* pImageMemoryBarriers
+            ) const noexcept
+            {
+                COFFEE_ASSERT(memoryBarrierCount == 0 || pMemoryBarriers != nullptr, "Invalid memory barriers provided.");
+                COFFEE_ASSERT(bufferMemoryBarrierCount == 0 || pBufferMemoryBarriers != nullptr, "Invalid buffer memory barriers provided.");
+                COFFEE_ASSERT(imageMemoryBarrierCount == 0 || pImageMemoryBarriers != nullptr, "Invalid image memory barriers provided.");
+
+                vkCmdPipelineBarrier(
+                    buffer_,
+                    srcStageMask,
+                    dstStageMask,
+                    dependencyFlags,
+                    memoryBarrierCount,
+                    pMemoryBarriers,
+                    bufferMemoryBarrierCount,
+                    pBufferMemoryBarriers,
+                    imageMemoryBarrierCount,
+                    pImageMemoryBarriers
+                );
+            }
+
             // Provides strong pipeline synchronization between two scopes
             // WARNING: Must not be used in production as can cause huge overhead
             // Use this only as debugging tool to catch some nesty bugs
             inline void fullPipelineBarrier() const noexcept
             {
-                constexpr VkAccessFlags allAccessFlags =
+                constexpr VkAccessFlags kAllAccessFlags =
                     VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
-                    VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
-                    VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-                    VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT;
+                    VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
+                    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT |
+                    VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT;
 
                 VkMemoryBarrier memoryBarrier { VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-                memoryBarrier.srcAccessMask = allAccessFlags;
-                memoryBarrier.dstAccessMask = allAccessFlags;
+                memoryBarrier.srcAccessMask = kAllAccessFlags;
+                memoryBarrier.dstAccessMask = kAllAccessFlags;
 
                 vkCmdPipelineBarrier(
                     buffer_,

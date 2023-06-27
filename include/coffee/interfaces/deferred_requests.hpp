@@ -3,8 +3,9 @@
 
 #include <coffee/utils/non_moveable.hpp>
 
+#include <oneapi/tbb/queuing_mutex.h>
+
 #include <functional>
-#include <mutex>
 #include <vector>
 
 namespace coffee {
@@ -26,7 +27,7 @@ namespace coffee {
 
     private:
         std::vector<std::function<void()>> requests_ {};
-        mutable std::mutex mtx_ {};
+        mutable tbb::queuing_mutex mtx_ {};
     };
 
 } // namespace coffee

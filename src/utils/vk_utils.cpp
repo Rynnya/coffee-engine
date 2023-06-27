@@ -83,10 +83,7 @@ namespace coffee {
         throw std::runtime_error("Failed to find suitable memory type!");
     }
 
-    VkSurfaceFormatKHR VkUtils::chooseSurfaceFormat(
-        VkPhysicalDevice device,
-        const std::vector<VkSurfaceFormatKHR>& availableFormats
-    ) noexcept
+    VkSurfaceFormatKHR VkUtils::chooseSurfaceFormat(VkPhysicalDevice device, const std::vector<VkSurfaceFormatKHR>& availableFormats) noexcept
     {
         VkImageFormatProperties properties {};
 
@@ -124,10 +121,7 @@ namespace coffee {
         return availableFormats[0];
     }
 
-    VkPresentModeKHR VkUtils::choosePresentMode(
-        const std::vector<VkPresentModeKHR>& availablePresentModes,
-        VkPresentModeKHR preferable
-    ) noexcept
+    VkPresentModeKHR VkUtils::choosePresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes, VkPresentModeKHR preferable) noexcept
     {
         for (const auto& availablePresentMode : availablePresentModes) {
             if (availablePresentMode == preferable) {
@@ -148,8 +142,7 @@ namespace coffee {
         VkExtent2D actualExtent = extent;
 
         actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
-        actualExtent.height =
-            std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+        actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
 
         return actualExtent;
     }
@@ -167,7 +160,6 @@ namespace coffee {
 
     std::vector<VkExtensionProperties> VkUtils::getDeviceExtensions(VkPhysicalDevice device)
     {
-
         uint32_t extensionCount;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
@@ -307,10 +299,7 @@ namespace coffee {
         return VK_DESCRIPTOR_TYPE_MAX_ENUM;
     }
 
-    VkSampleCountFlagBits VkUtils::getUsableSampleCount(
-        VkSampleCountFlagBits sampleCount,
-        const VkPhysicalDeviceProperties& properties
-    ) noexcept
+    VkSampleCountFlagBits VkUtils::getUsableSampleCount(VkSampleCountFlagBits sampleCount, const VkPhysicalDeviceProperties& properties) noexcept
     {
         VkSampleCountFlags counts = properties.limits.framebufferColorSampleCounts & properties.limits.framebufferDepthSampleCounts;
 

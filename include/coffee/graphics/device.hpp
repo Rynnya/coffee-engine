@@ -1,18 +1,20 @@
 #ifndef COFFEE_GRAPHICS_DEVICE
 #define COFFEE_GRAPHICS_DEVICE
 
+#include <coffee/graphics/semaphore.hpp>
 #include <coffee/interfaces/resource_guard.hpp>
-#include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
 #include <GLFW/glfw3.h>
 #include <oneapi/tbb/concurrent_queue.h>
+#include <oneapi/tbb/queuing_mutex.h>
+#include <oneapi/tbb/task_group.h>
 #include <vma/vk_mem_alloc.h>
+
 // Volk already included through vk_utils.hpp
 
 #include <array>
-#include <mutex>
 
 // Required to remove some annoying warning about redefinition on Windows
 #undef APIENTRY
@@ -20,16 +22,6 @@
 namespace coffee {
 
     namespace graphics {
-
-        struct SubmitInfo {
-            VkSwapchainKHR swapChain = VK_NULL_HANDLE;
-            VkSemaphore waitSemaphone = VK_NULL_HANDLE;
-            VkSemaphore signalSemaphone = VK_NULL_HANDLE;
-            uint32_t* currentFrame = nullptr;
-            std::vector<VkCommandBuffer> commandBuffers {};
-        };
-
-        class CommandBuffer;
 
         // Core class for GPU handling
         // Provides low-level access for Vulkan and mandatory for most graphics wrapper
@@ -53,17 +45,16 @@ namespace coffee {
 
             void sendCommandBuffer(
                 CommandBuffer&& commandBuffer,
-                VkSwapchainKHR swapChain = VK_NULL_HANDLE,
-                VkSemaphore waitSemaphone = VK_NULL_HANDLE,
-                VkSemaphore signalSemaphone = VK_NULL_HANDLE,
-                uint32_t* currentFrame = nullptr
+                const std::vector<SemaphorePtr>& waitSemaphores = {},
+                const std::vector<VkPipelineStageFlags>& waitDstStageMasks = {},
+                const std::vector<SemaphorePtr>& signalSemaphores = {}
             );
             void sendCommandBuffers(
+                CommandBufferType submitType,
                 std::vector<CommandBuffer>&& commandBuffers,
-                VkSwapchainKHR swapChain = VK_NULL_HANDLE,
-                VkSemaphore waitSemaphone = VK_NULL_HANDLE,
-                VkSemaphore signalSemaphone = VK_NULL_HANDLE,
-                uint32_t* currentFrame = nullptr
+                const std::vector<SemaphorePtr>& waitSemaphores = {},
+                const std::vector<VkPipelineStageFlags>& waitDstStageMasks = {},
+                const std::vector<SemaphorePtr>& signalSemaphores = {}
             );
             void submitPendingWork();
 
@@ -158,6 +149,68 @@ namespace coffee {
             inline VkFormat optimalDepthStencilFormat() const noexcept { return optimalDepthStencilFormat_; }
 
         private:
+            struct RunningCommandBuffer {
+                CommandBufferType commandBufferType = CommandBufferType::Graphics;
+                VkCommandPool pool = VK_NULL_HANDLE;
+                VkCommandBuffer buffer = VK_NULL_HANDLE;
+            };
+
+            struct RunningGPUTask {
+                RunningGPUTask() noexcept = default;
+
+                RunningGPUTask(const RunningGPUTask&) noexcept = delete;
+                RunningGPUTask& operator=(const RunningGPUTask&) noexcept = delete;
+
+                RunningGPUTask(RunningGPUTask&& other) noexcept
+                    : graphicsCompletionFence { std::exchange(other.graphicsCompletionFence, VK_NULL_HANDLE) }
+                    , computeCompletionFence { std::exchange(other.computeCompletionFence, VK_NULL_HANDLE) }
+                    , transferCompletionFence { std::exchange(other.transferCompletionFence, VK_NULL_HANDLE) }
+                    , commandBuffers { std::move(other.commandBuffers) }
+                {}
+
+                RunningGPUTask& operator=(RunningGPUTask&& other) noexcept
+                {
+                    if (this == &other) {
+                        return *this;
+                    }
+
+                    graphicsCompletionFence = std::exchange(other.graphicsCompletionFence, VK_NULL_HANDLE);
+                    computeCompletionFence = std::exchange(other.computeCompletionFence, VK_NULL_HANDLE);
+                    transferCompletionFence = std::exchange(other.transferCompletionFence, VK_NULL_HANDLE);
+                    commandBuffers = std::move(other.commandBuffers);
+
+                    return *this;
+                }
+
+                void clear() noexcept
+                {
+                    graphicsCompletionFence = VK_NULL_HANDLE;
+                    computeCompletionFence = VK_NULL_HANDLE;
+                    transferCompletionFence = VK_NULL_HANDLE;
+
+                    commandBuffers.clear();
+                }
+
+                VkFence graphicsCompletionFence = VK_NULL_HANDLE;
+                VkFence computeCompletionFence = VK_NULL_HANDLE;
+                VkFence transferCompletionFence = VK_NULL_HANDLE;
+                std::vector<RunningCommandBuffer> commandBuffers {};
+            };
+
+            struct SubmitInfo {
+                CommandBufferType submitType = CommandBufferType::Graphics;
+                uint32_t commandBuffersCount = 0U;
+                uint32_t waitSemaphoresCount = 0U;
+                uint32_t signalSemaphoresCount = 0U;
+                std::unique_ptr<VkCommandBuffer[]> commandBuffers = nullptr;
+                std::unique_ptr<VkSemaphore[]> waitSemaphores = nullptr;
+                std::unique_ptr<VkPipelineStageFlags[]> waitDstStageMasks = nullptr;
+                std::unique_ptr<VkSemaphore[]> signalSemaphores = nullptr;
+                VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+                VkSemaphore swapChainWaitSemaphore = VK_NULL_HANDLE;
+                uint32_t* currentFrame = nullptr;
+            };
+
             Device();
 
             void initializeGlobalEnvironment();
@@ -178,18 +231,30 @@ namespace coffee {
 
             bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions = {});
 
-            VkFence acquireSingleTimeFence();
-            ScopeExit endSingleTimeCommands(VkQueue queue, std::mutex& mutex, CommandBuffer&& commandBuffer);
-            ScopeExit endSingleTimeCommands(VkQueue queue, std::mutex& mutex, std::vector<CommandBuffer>&& commandBuffers);
+            void translateSemaphores(
+                SubmitInfo& submitInfo,
+                const std::vector<SemaphorePtr>& waitSemaphores,
+                const std::vector<VkPipelineStageFlags>& waitDstStageMasks,
+                const std::vector<SemaphorePtr>& signalSemaphores
+            );
+            void transferSubmitInfo(SubmitInfo&& submitInfo, std::vector<CommandBuffer>&& commandBuffers);
+
+            VkFence acquireFence();
+            void returnFence(VkFence fence);
+
+            ScopeExit endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, CommandBuffer&& commandBuffer);
+            ScopeExit endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, std::vector<CommandBuffer>&& commandBuffers);
+            void endSubmit(VkQueue queue, tbb::queuing_mutex& mutex, const std::vector<VkSubmitInfo>& submits, VkFence fence);
 
             std::pair<VkCommandPool, VkCommandBuffer> acquireGraphicsCommandPoolAndBuffer();
-            void returnGraphicsCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer);
+            void returnGraphicsCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer);
             std::pair<VkCommandPool, VkCommandBuffer> acquireComputeCommandPoolAndBuffer();
-            void returnComputeCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer);
+            void returnComputeCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer);
             std::pair<VkCommandPool, VkCommandBuffer> acquireTransferCommandPoolAndBuffer();
-            void returnTransferCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer);
+            void returnTransferCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer);
 
-            void clearCommandBuffers(size_t index);
+            static bool isCommandBufferAllowedForSubmitType(CommandBufferType submitType, CommandBufferType commandBufferType);
+            void clearCompletedCommandBuffers();
 
             uint32_t imageCountForSwapChain_ = 0;
             uint32_t currentOperation_ = 0;         // Must be in range of [0, imageCountForSwapChain]
@@ -214,26 +279,32 @@ namespace coffee {
             VkQueue presentQueue_ = VK_NULL_HANDLE;
             VkQueue computeQueue_ = VK_NULL_HANDLE;
             VkQueue transferQueue_ = VK_NULL_HANDLE;
-            std::mutex graphicsQueueMutex_ {};
-            std::mutex computeQueueMutex_ {};
-            std::mutex transferQueueMutex_ {};
+            tbb::queuing_mutex graphicsQueueMutex_ {};
+            tbb::queuing_mutex computeQueueMutex_ {};
+            tbb::queuing_mutex transferQueueMutex_ {};
 
-            std::mutex submitMutex_ {};
+            tbb::queuing_mutex submitMutex_ {};
             std::vector<SubmitInfo> pendingSubmits_ {};
+
+            std::atomic_bool cleanupRunning_ {};
+            tbb::queuing_mutex cleanupMutex_ {};
+            std::thread cleanupThread_ {};
+            RunningGPUTask pendingTask_ {};
+            std::vector<RunningGPUTask> runningTasks_ {};
+
             std::vector<VkFence> operationsInFlight_ {};
-            std::array<VkFence, kMaxOperationsInFlight> inFlightFences_ {};
-            std::vector<bool> poolsAndBuffersClearFlags_ {};
-            std::vector<std::vector<std::pair<VkCommandPool, VkCommandBuffer>>> poolsAndBuffers_ {};
+            std::array<VkFence, kMaxOperationsInFlight> fencesInFlight_ {};
 
             tbb::concurrent_queue<std::pair<VkCommandPool, VkCommandBuffer>> graphicsPools_ {};
             tbb::concurrent_queue<std::pair<VkCommandPool, VkCommandBuffer>> computePools_ {};
             tbb::concurrent_queue<std::pair<VkCommandPool, VkCommandBuffer>> transferPools_ {};
-            tbb::concurrent_queue<VkFence> singleTimeFences_ {};
+            tbb::concurrent_queue<VkFence> fencesPool_ {};
 
             VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
             VmaAllocator allocator_ = VK_NULL_HANDLE;
 
             friend class CommandBuffer;
+            friend class SwapChain;
         };
 
     } // namespace graphics

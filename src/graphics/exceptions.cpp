@@ -4,26 +4,25 @@
 
 #include <vulkan/vk_enum_string_helper.h>
 
-#define COFFEE_DECLARE_CONVERT_FUNC(FUNC_NAME, VK_NAME)                                                                                    \
-    std::string format::##FUNC_NAME(VK_NAME##Flags flags)                                                                                  \
-    {                                                                                                                                      \
-        if (flags == 0) {                                                                                                                  \
-            return "None";                                                                                                                 \
-        }                                                                                                                                  \
-                                                                                                                                           \
-        std::string result {};                                                                                                             \
-                                                                                                                                           \
-        for (size_t bits = static_cast<size_t>(flags); bits > 0; bits = coffee::Math::excludeLowestBit(bits)) {                            \
-            result.append(string_##VK_NAME##FlagBits(static_cast<VK_NAME##FlagBits>(1U << coffee::Math::getLowestBit(bits))))              \
-                .append(" |");                                                                                                             \
-        }                                                                                                                                  \
-                                                                                                                                           \
-        if (result.empty()) {                                                                                                              \
-            return "None";                                                                                                                 \
-        }                                                                                                                                  \
-                                                                                                                                           \
-        result.resize(result.size() - 2);                                                                                                  \
-        return result;                                                                                                                     \
+#define COFFEE_DECLARE_CONVERT_FUNC(FUNC_NAME, VK_NAME)                                                                                              \
+    std::string format::FUNC_NAME(VK_NAME##Flags flags)                                                                                              \
+    {                                                                                                                                                \
+        if (flags == 0) {                                                                                                                            \
+            return "None";                                                                                                                           \
+        }                                                                                                                                            \
+                                                                                                                                                     \
+        std::string result {};                                                                                                                       \
+                                                                                                                                                     \
+        for (size_t bits = static_cast<size_t>(flags); bits > 0; bits = coffee::Math::excludeLowestBit(bits)) {                                      \
+            result.append(string_##VK_NAME##FlagBits(static_cast<VK_NAME##FlagBits>(1U << coffee::Math::getLowestBit(bits)))).append(" |");          \
+        }                                                                                                                                            \
+                                                                                                                                                     \
+        if (result.empty()) {                                                                                                                        \
+            return "None";                                                                                                                           \
+        }                                                                                                                                            \
+                                                                                                                                                     \
+        result.resize(result.size() - 2);                                                                                                            \
+        return result;                                                                                                                               \
     }
 
 namespace coffee {

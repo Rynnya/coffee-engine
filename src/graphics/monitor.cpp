@@ -7,10 +7,7 @@ namespace coffee {
 
     namespace graphics {
 
-        Monitor::Monitor(GLFWmonitor* handle, uint32_t uniqueID)
-            : uniqueID { uniqueID }
-            , name { glfwGetMonitorName(handle) }
-            , handle_ { handle }
+        Monitor::Monitor(GLFWmonitor* handle, uint32_t uniqueID) : uniqueID { uniqueID }, name { glfwGetMonitorName(handle) }, handle_ { handle }
         {
             COFFEE_ASSERT(handle_ != nullptr, "Invalid monitor handle provided.");
 

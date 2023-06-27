@@ -57,9 +57,6 @@ namespace coffee {
         Filesystem(const std::string& path);
         virtual ~Filesystem() noexcept = default;
 
-        Filesystem(Filesystem&&) noexcept = default;
-        Filesystem& operator=(Filesystem&&) noexcept = default;
-
         static FilesystemPtr create(const std::string& path);
 
         virtual bool contains(const std::string& path) const noexcept = 0;

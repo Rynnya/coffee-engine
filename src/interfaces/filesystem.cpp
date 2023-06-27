@@ -87,8 +87,7 @@ namespace coffee {
                                             fmt::format("File or directory doesn't exist in path '{}'!", path) };
             }
             default: {
-                throw FilesystemException { FilesystemException::Type::InvalidFileType,
-                                            "Filesystem can only open regular files and directories!" };
+                throw FilesystemException { FilesystemException::Type::InvalidFileType, "Filesystem can only open regular files and directories!" };
             }
         }
     }
@@ -146,8 +145,7 @@ namespace coffee {
     VirtualFilesystem::VirtualFilesystem(const std::string& path) : Filesystem { path }
     {
         if (!std::filesystem::exists(path)) {
-            throw FilesystemException { FilesystemException::Type::FileNotFound,
-                                        fmt::format("Failed to open stream to archive '{}'!", path) };
+            throw FilesystemException { FilesystemException::Type::FileNotFound, fmt::format("Failed to open stream to archive '{}'!", path) };
         }
 
         std::error_code ec {};
