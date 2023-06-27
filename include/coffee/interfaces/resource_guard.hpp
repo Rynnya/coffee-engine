@@ -10,7 +10,7 @@
 namespace coffee {
 
     // Type-erasing function wrapper which have support for move-only lambda
-    // Sadly, it's allocates memory for each instance, but it doesn't care about function types
+    // Sadly, it's allocates memory for each instance
     class ScopeExit : NonCopyable {
     public:
         ScopeExit() noexcept = default;

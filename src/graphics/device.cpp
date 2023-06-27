@@ -72,16 +72,6 @@ namespace coffee {
 
             destroyTemporarySurface(surface);
             destroyTemporaryWindow(window);
-
-            cleanupRunning_ = true;
-
-            cleanupThread_ = std::thread([&]() {
-                while (cleanupRunning_.load(std::memory_order_relaxed)) {
-                    clearCompletedCommandBuffers();
-                    
-                    std::this_thread::sleep_for(std::chrono::milliseconds { 100 });
-                }
-            });
         }
 
         Device::~Device() noexcept
@@ -126,9 +116,6 @@ namespace coffee {
 
             vkDestroyDevice(logicalDevice_, nullptr);
             vkDestroyInstance(instance_, nullptr);
-
-            cleanupRunning_ = false;
-            cleanupThread_.join();
 
             tbb::queuing_mutex::scoped_lock lock { initializationMutex };
 
@@ -192,6 +179,10 @@ namespace coffee {
                 return;
             }
 
+            if (currentOperation_ % imageCountForSwapChain_ == 0) {
+                clearCompletedCommandBuffers();
+            }
+
             std::vector<VkSubmitInfo> graphicsInfos {};
             std::vector<VkSubmitInfo> computeInfos {};
             std::vector<VkSubmitInfo> transferInfos {};
@@ -241,9 +232,6 @@ namespace coffee {
             presentInfo.swapchainCount = static_cast<uint32_t>(swapChains.size());
             presentInfo.pSwapchains = swapChains.data();
             presentInfo.pImageIndices = imageIndices.data();
-
-            // Lock required here because vkGetFenceStatus can be called during vkQueuePresent with fencesInFlight_
-            tbb::queuing_mutex::scoped_lock cleanupLock { cleanupMutex_ };
 
             if (operationsInFlight_[currentOperation_] != nullptr) {
                 vkWaitForFences(logicalDevice_, 1, &operationsInFlight_[currentOperation_], VK_TRUE, std::numeric_limits<uint64_t>::max());
@@ -1169,8 +1157,6 @@ namespace coffee {
 
         void Device::clearCompletedCommandBuffers()
         {
-            tbb::queuing_mutex::scoped_lock lock { cleanupMutex_ };
-
             auto removePosition = std::remove_if(runningTasks_.begin(), runningTasks_.end(), [&](const RunningGPUTask& running) {
                 bool canBeSafelyDeleted = true;
 
