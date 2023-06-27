@@ -28,8 +28,7 @@ namespace coffee {
                 VkBufferCopy copyRegion {};
                 copyRegion.srcOffset = srcOffset;
                 copyRegion.dstOffset = dstOffset;
-                copyRegion.size =
-                    std::min(dstBuffer->instanceCount * dstBuffer->instanceSize, srcBuffer->instanceCount * srcBuffer->instanceSize);
+                copyRegion.size = std::min(dstBuffer->instanceCount * dstBuffer->instanceSize, srcBuffer->instanceCount * srcBuffer->instanceSize);
                 vkCmdCopyBuffer(commandBuffer, srcBuffer->buffer(), dstBuffer->buffer(), 1, &copyRegion);
 
                 return device->singleTimeTransfer(std::move(commandBuffer));
@@ -37,10 +36,6 @@ namespace coffee {
 
             static ScopeExit copyBufferToImage(const DevicePtr& device, const ImagePtr& dstImage, const BufferPtr& srcBuffer)
             {
-                static constexpr auto topOfPipeStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-                static constexpr auto transferStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                static constexpr auto fragmentStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-
                 VkImageMemoryBarrier barrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
                 VkBufferImageCopy copyRegion {};
 
@@ -56,7 +51,7 @@ namespace coffee {
                 barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 barrier.subresourceRange.levelCount = 1;
                 barrier.subresourceRange.layerCount = 1;
-                vkCmdPipelineBarrier(transferCommandBuffer, topOfPipeStage, transferStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+                transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &barrier);
 
                 copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 copyRegion.imageSubresource.layerCount = 1;
@@ -75,7 +70,7 @@ namespace coffee {
                 barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 barrier.subresourceRange.levelCount = 1;
                 barrier.subresourceRange.layerCount = 1;
-                VkPipelineStageFlagBits useStage = fragmentStage;
+                VkPipelineStageFlagBits useStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
                 if (!device->isUnifiedGraphicsTransferQueue()) {
                     barrier.dstAccessMask = 0;
@@ -84,7 +79,7 @@ namespace coffee {
                     useStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
                 }
 
-                vkCmdPipelineBarrier(transferCommandBuffer, transferStage, useStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+                transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
                 auto transferScope = device->singleTimeTransfer(std::move(transferCommandBuffer));
 
                 if (!device->isUnifiedGraphicsTransferQueue()) {
@@ -101,7 +96,8 @@ namespace coffee {
                     barrier.subresourceRange.levelCount = 1;
                     barrier.subresourceRange.layerCount = 1;
 
-                    vkCmdPipelineBarrier(ownershipCommandBuffer, topOfPipeStage, fragmentStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+                    ownershipCommandBuffer
+                        .imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &barrier);
                     return ScopeExit::combine(std::move(transferScope), device->singleTimeGraphics(std::move(ownershipCommandBuffer)));
                 }
 

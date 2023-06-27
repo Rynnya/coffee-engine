@@ -66,12 +66,7 @@ namespace coffee {
                 size_t offset = 0,
                 size_t totalSize = std::numeric_limits<size_t>::max()
             );
-            DescriptorWriter& addImage(
-                uint32_t bindingIndex,
-                VkImageLayout layout,
-                const ImageViewPtr& image,
-                const SamplerPtr& sampler = nullptr
-            );
+            DescriptorWriter& addImage(uint32_t bindingIndex, VkImageLayout layout, const ImageViewPtr& image, const SamplerPtr& sampler = nullptr);
             DescriptorWriter& addSampler(uint32_t bindingIndex, const SamplerPtr& sampler);
 
         private:

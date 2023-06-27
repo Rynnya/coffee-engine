@@ -116,13 +116,11 @@ namespace coffee {
 
             if (configuration.depthStencilAttachment.has_value()) {
                 subpassDependencies[0].srcStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-                subpassDependencies[0].dstStageMask |=
-                    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                subpassDependencies[0].dstStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
                 subpassDependencies[0].srcAccessMask |= VK_ACCESS_SHADER_READ_BIT;
                 subpassDependencies[0].dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-                subpassDependencies[1].srcStageMask |=
-                    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                subpassDependencies[1].srcStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
                 subpassDependencies[1].dstStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
                 subpassDependencies[1].srcAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
                 subpassDependencies[1].dstAccessMask |= VK_ACCESS_SHADER_READ_BIT;
@@ -147,7 +145,7 @@ namespace coffee {
             }
         }
 
-        RenderPass::~RenderPass() { vkDestroyRenderPass(device_->logicalDevice(), renderPass_, nullptr); }
+        RenderPass::~RenderPass() noexcept { vkDestroyRenderPass(device_->logicalDevice(), renderPass_, nullptr); }
 
         RenderPassPtr RenderPass::create(const DevicePtr& device, const RenderPassConfiguration& configuration)
         {

@@ -63,13 +63,29 @@ namespace coffee {
 
         void SwapChain::submitCommandBuffers(std::vector<CommandBuffer>&& commandBuffers)
         {
-            device_->sendCommandBuffers(
-                std::move(commandBuffers),
-                handle_,
-                imageAvailableSemaphores_[device_->currentOperationInFlight()],
-                renderFinishedSemaphores_[device_->currentOperationInFlight()],
-                &currentFrame_
-            );
+            COFFEE_ASSERT(!commandBuffers.empty(), "Application shouldn't send empty command buffer list.");
+
+            // Swapchain only must take care of semaphores, command buffers will be translated inside Device
+            Device::SubmitInfo info {};
+
+            info.submitType = CommandBufferType::Graphics;
+            info.waitSemaphoresCount = 1U;
+            info.signalSemaphoresCount = 1U;
+
+            info.waitSemaphores = std::make_unique<VkSemaphore[]>(1);
+            info.waitSemaphores[0] = imageAvailableSemaphores_[device_->currentOperationInFlight()];
+
+            info.waitDstStageMasks = std::make_unique<VkPipelineStageFlags[]>(1);
+            info.waitDstStageMasks[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+            info.signalSemaphores = std::make_unique<VkSemaphore[]>(1);
+            info.signalSemaphores[0] = renderFinishedSemaphores_[device_->currentOperationInFlight()];
+
+            info.swapChain = handle_;
+            info.swapChainWaitSemaphore = renderFinishedSemaphores_[device_->currentOperationInFlight()];
+            info.currentFrame = &currentFrame_;
+            
+            device_->transferSubmitInfo(std::move(info), std::move(commandBuffers));
         }
 
         void SwapChain::recreate(uint32_t width, uint32_t height, VkPresentModeKHR mode)
@@ -87,10 +103,9 @@ namespace coffee {
         {
             VkUtils::SwapChainSupportDetails swapChainSupport = VkUtils::querySwapChainSupport(device_->physicalDevice(), surface_);
 
-            relaxedFIFOSupported_ = VkUtils::choosePresentMode(swapChainSupport.presentModes, VK_PRESENT_MODE_FIFO_RELAXED_KHR) ==
-                                    VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-            mailboxSupported_ =
-                VkUtils::choosePresentMode(swapChainSupport.presentModes, VK_PRESENT_MODE_MAILBOX_KHR) == VK_PRESENT_MODE_MAILBOX_KHR;
+            relaxedFIFOSupported_ =
+                VkUtils::choosePresentMode(swapChainSupport.presentModes, VK_PRESENT_MODE_FIFO_RELAXED_KHR) == VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+            mailboxSupported_ = VkUtils::choosePresentMode(swapChainSupport.presentModes, VK_PRESENT_MODE_MAILBOX_KHR) == VK_PRESENT_MODE_MAILBOX_KHR;
             immediateSupported_ =
                 VkUtils::choosePresentMode(swapChainSupport.presentModes, VK_PRESENT_MODE_IMMEDIATE_KHR) == VK_PRESENT_MODE_IMMEDIATE_KHR;
         }

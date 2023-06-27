@@ -55,11 +55,7 @@ namespace coffee {
 
         Framebuffer::~Framebuffer() noexcept { vkDestroyFramebuffer(device_->logicalDevice(), framebuffer_, nullptr); }
 
-        FramebufferPtr Framebuffer::create(
-            const DevicePtr& device,
-            const RenderPassPtr& renderPass,
-            const FramebufferConfiguration& configuration
-        )
+        FramebufferPtr Framebuffer::create(const DevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration)
         {
             COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
             COFFEE_ASSERT(renderPass != nullptr, "Invalid renderPass provided.");

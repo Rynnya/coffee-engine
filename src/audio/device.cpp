@@ -4,12 +4,11 @@
 #include <coffee/utils/log.hpp>
 
 #include <al.h>
-
-#include <mutex>
+#include <oneapi/tbb/queuing_mutex.h>
 
 namespace coffee {
 
-    static std::mutex initializationMutex {};
+    static tbb::queuing_mutex initializationMutex {};
 
     namespace audio {
 
@@ -42,7 +41,7 @@ namespace coffee {
 
         DevicePtr Device::create()
         {
-            std::unique_lock<std::mutex> lock { initializationMutex };
+            tbb::queuing_mutex::scoped_lock lock { initializationMutex };
 
             if (primaryDevice_ == nullptr) {
                 initialize();

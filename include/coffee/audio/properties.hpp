@@ -8,100 +8,100 @@
 #include <AL/al.h>
 #include <glm/vec3.hpp>
 
-#define DEFINE_FLOAT_AUDIO_PROPERTY(NAME, PROPERTY_NAME)                                                                                   \
-    namespace properties {                                                                                                                 \
-        class NAME##Control : NonCopyable {                                                                                                \
-        public:                                                                                                                            \
-            inline NAME##Control() noexcept = default;                                                                                     \
-                                                                                                                                           \
-            inline NAME##Control(ALuint source) noexcept : sourceHandle { source }                                                         \
-            {                                                                                                                              \
-                alGetSourcef(sourceHandle, PROPERTY_NAME, &value);                                                                         \
-            }                                                                                                                              \
-                                                                                                                                           \
-            inline const float& get() const noexcept                                                                                       \
-            {                                                                                                                              \
-                return value;                                                                                                              \
-            }                                                                                                                              \
-                                                                                                                                           \
-            inline const float& set(const float& newValue) noexcept                                                                        \
-            {                                                                                                                              \
-                alSourcef(sourceHandle, PROPERTY_NAME, newValue);                                                                          \
-                alGetSourcef(sourceHandle, PROPERTY_NAME, &value);                                                                         \
-                return value;                                                                                                              \
-            }                                                                                                                              \
-                                                                                                                                           \
-        private:                                                                                                                           \
-            ALuint sourceHandle = AL_INVALID;                                                                                              \
-            float value = 0.0f;                                                                                                            \
-        };                                                                                                                                 \
-    }                                                                                                                                      \
-                                                                                                                                           \
-    using NAME##Property = coffee::PropertyImpl<float, properties::##NAME##Control>;
+#define DEFINE_FLOAT_AUDIO_PROPERTY(NAME, PROPERTY_NAME)                                                                                             \
+    namespace properties {                                                                                                                           \
+        class NAME##Control : NonCopyable {                                                                                                          \
+        public:                                                                                                                                      \
+            inline NAME##Control() noexcept = default;                                                                                               \
+                                                                                                                                                     \
+            inline NAME##Control(ALuint source) noexcept : sourceHandle { source }                                                                   \
+            {                                                                                                                                        \
+                alGetSourcef(sourceHandle, PROPERTY_NAME, &value);                                                                                   \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+            inline const float& get() const noexcept                                                                                                 \
+            {                                                                                                                                        \
+                return value;                                                                                                                        \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+            inline const float& set(const float& newValue) noexcept                                                                                  \
+            {                                                                                                                                        \
+                alSourcef(sourceHandle, PROPERTY_NAME, newValue);                                                                                    \
+                alGetSourcef(sourceHandle, PROPERTY_NAME, &value);                                                                                   \
+                return value;                                                                                                                        \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+        private:                                                                                                                                     \
+            ALuint sourceHandle = AL_INVALID;                                                                                                        \
+            float value = 0.0f;                                                                                                                      \
+        };                                                                                                                                           \
+    }                                                                                                                                                \
+                                                                                                                                                     \
+    using NAME##Property = coffee::PropertyImpl<float, properties::NAME##Control>;
 
-#define DEFINE_VEC3_AUDIO_PROPERTY(NAME, PROPERTY_NAME)                                                                                    \
-    namespace properties {                                                                                                                 \
-        class NAME##Control : NonCopyable {                                                                                                \
-        public:                                                                                                                            \
-            inline NAME##Control() noexcept = default;                                                                                     \
-                                                                                                                                           \
-            inline NAME##Control(ALuint source) noexcept : sourceHandle { source }                                                         \
-            {                                                                                                                              \
-                alGetSourcefv(sourceHandle, PROPERTY_NAME, reinterpret_cast<float*>(&value));                                              \
-            }                                                                                                                              \
-                                                                                                                                           \
-            inline const glm::vec3& get() const noexcept                                                                                   \
-            {                                                                                                                              \
-                return value;                                                                                                              \
-            }                                                                                                                              \
-                                                                                                                                           \
-            inline const glm::vec3& set(const glm::vec3& newValue) noexcept                                                                \
-            {                                                                                                                              \
-                alSourcefv(sourceHandle, PROPERTY_NAME, reinterpret_cast<const float*>(&newValue));                                        \
-                alGetSourcefv(sourceHandle, PROPERTY_NAME, reinterpret_cast<float*>(&value));                                              \
-                return value;                                                                                                              \
-            }                                                                                                                              \
-                                                                                                                                           \
-        private:                                                                                                                           \
-            ALuint sourceHandle = AL_INVALID;                                                                                              \
-            glm::vec3 value { 0.0f };                                                                                                      \
-        };                                                                                                                                 \
-    }                                                                                                                                      \
-                                                                                                                                           \
-    using NAME##Property = coffee::PropertyImpl<glm::vec3, properties::##NAME##Control>;
+#define DEFINE_VEC3_AUDIO_PROPERTY(NAME, PROPERTY_NAME)                                                                                              \
+    namespace properties {                                                                                                                           \
+        class NAME##Control : NonCopyable {                                                                                                          \
+        public:                                                                                                                                      \
+            inline NAME##Control() noexcept = default;                                                                                               \
+                                                                                                                                                     \
+            inline NAME##Control(ALuint source) noexcept : sourceHandle { source }                                                                   \
+            {                                                                                                                                        \
+                alGetSourcefv(sourceHandle, PROPERTY_NAME, reinterpret_cast<float*>(&value));                                                        \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+            inline const glm::vec3& get() const noexcept                                                                                             \
+            {                                                                                                                                        \
+                return value;                                                                                                                        \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+            inline const glm::vec3& set(const glm::vec3& newValue) noexcept                                                                          \
+            {                                                                                                                                        \
+                alSourcefv(sourceHandle, PROPERTY_NAME, reinterpret_cast<const float*>(&newValue));                                                  \
+                alGetSourcefv(sourceHandle, PROPERTY_NAME, reinterpret_cast<float*>(&value));                                                        \
+                return value;                                                                                                                        \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+        private:                                                                                                                                     \
+            ALuint sourceHandle = AL_INVALID;                                                                                                        \
+            glm::vec3 value { 0.0f };                                                                                                                \
+        };                                                                                                                                           \
+    }                                                                                                                                                \
+                                                                                                                                                     \
+    using NAME##Property = coffee::PropertyImpl<glm::vec3, properties::NAME##Control>;
 
-#define DEFINE_CUSTOM_AUDIO_PROPERTY(NAME, PROPERTY_NAME, TYPE)                                                                            \
-    namespace properties {                                                                                                                 \
-        class NAME##Control : NonCopyable {                                                                                                \
-        public:                                                                                                                            \
-            inline NAME##Control() noexcept = default;                                                                                     \
-                                                                                                                                           \
-            inline NAME##Control(ALuint source) noexcept : sourceHandle { source }                                                         \
-            {                                                                                                                              \
-                alGetSourcei(sourceHandle, PROPERTY_NAME, &actualValue);                                                                   \
-            }                                                                                                                              \
-                                                                                                                                           \
-            inline const TYPE##& get() const noexcept                                                                                      \
-            {                                                                                                                              \
-                return reinterpret_cast<const TYPE##&>(actualValue);                                                                       \
-            }                                                                                                                              \
-                                                                                                                                           \
-            inline const TYPE##& set(const TYPE##& newValue) noexcept                                                                      \
-            {                                                                                                                              \
-                bufferValue = static_cast<ALint>(newValue);                                                                                \
-                alSourcei(sourceHandle, PROPERTY_NAME, bufferValue);                                                                       \
-                alGetSourcei(sourceHandle, PROPERTY_NAME, &actualValue);                                                                   \
-                return reinterpret_cast<const TYPE##&>(actualValue);                                                                       \
-            }                                                                                                                              \
-                                                                                                                                           \
-        private:                                                                                                                           \
-            ALuint sourceHandle = AL_INVALID;                                                                                              \
-            ALint bufferValue = 0;                                                                                                         \
-            ALint actualValue = 0;                                                                                                         \
-        };                                                                                                                                 \
-    }                                                                                                                                      \
-                                                                                                                                           \
-    using NAME##Property = coffee::PropertyImpl<TYPE##, properties::##NAME##Control>;
+#define DEFINE_CUSTOM_AUDIO_PROPERTY(NAME, PROPERTY_NAME, TYPE)                                                                                      \
+    namespace properties {                                                                                                                           \
+        class NAME##Control : NonCopyable {                                                                                                          \
+        public:                                                                                                                                      \
+            inline NAME##Control() noexcept = default;                                                                                               \
+                                                                                                                                                     \
+            inline NAME##Control(ALuint source) noexcept : sourceHandle { source }                                                                   \
+            {                                                                                                                                        \
+                alGetSourcei(sourceHandle, PROPERTY_NAME, &actualValue);                                                                             \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+            inline const TYPE& get() const noexcept                                                                                                  \
+            {                                                                                                                                        \
+                return reinterpret_cast<const TYPE&>(actualValue);                                                                                   \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+            inline const TYPE& set(const TYPE& newValue) noexcept                                                                                    \
+            {                                                                                                                                        \
+                bufferValue = static_cast<ALint>(newValue);                                                                                          \
+                alSourcei(sourceHandle, PROPERTY_NAME, bufferValue);                                                                                 \
+                alGetSourcei(sourceHandle, PROPERTY_NAME, &actualValue);                                                                             \
+                return reinterpret_cast<const TYPE&>(actualValue);                                                                                   \
+            }                                                                                                                                        \
+                                                                                                                                                     \
+        private:                                                                                                                                     \
+            ALuint sourceHandle = AL_INVALID;                                                                                                        \
+            ALint bufferValue = 0;                                                                                                                   \
+            ALint actualValue = 0;                                                                                                                   \
+        };                                                                                                                                           \
+    }                                                                                                                                                \
+                                                                                                                                                     \
+    using NAME##Property = coffee::PropertyImpl<TYPE, properties::NAME##Control>;
 
 namespace coffee {
 

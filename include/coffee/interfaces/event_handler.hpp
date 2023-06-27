@@ -1,8 +1,9 @@
 #ifndef COFFEE_INTERFACES_EVENT_HANDLER
 #define COFFEE_INTERFACES_EVENT_HANDLER
 
+#include <oneapi/tbb/queuing_mutex.h>
+
 #include <functional>
-#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -69,7 +70,7 @@ namespace coffee {
     public:
         void operator+=(const Callback<Args...>& cb)
         {
-            std::scoped_lock<std::mutex> lock { mtx_ };
+            tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
             if (std::find(callbacks_.begin(), callbacks_.end(), cb) == callbacks_.end()) {
                 callbacks_.push_back(cb);
@@ -78,7 +79,7 @@ namespace coffee {
 
         void operator+=(Callback<Args...>&& cb)
         {
-            std::scoped_lock<std::mutex> lock { mtx_ };
+            tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
             if (std::find(callbacks_.begin(), callbacks_.end(), cb) == callbacks_.end()) {
                 callbacks_.push_back(std::move(cb));
@@ -87,55 +88,38 @@ namespace coffee {
 
         void operator-=(const Callback<Args...>& cb)
         {
-            std::scoped_lock<std::mutex> lock { mtx_ };
+            tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
-            auto it = callbacks_.begin();
-
-            while (it != callbacks_.end()) {
-                if (it->hash_code() == cb.hash_code()) {
-                    it = callbacks_.erase(it);
-                }
-                else {
-                    it++;
-                }
-            }
+            auto it = std::remove_if(callbacks_.begin(), callbacks_.end(), [&cb](auto& callback) { return callback.hash_code() == cb.hash_code(); });
+            callbacks_.erase(it, callbacks_.end());
         }
 
         void operator-=(Callback<Args...>&& cb)
         {
-            std::scoped_lock<std::mutex> lock { mtx_ };
+            tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
-            auto it = callbacks_.begin();
-
-            while (it != callbacks_.end()) {
-                if (it->hash_code() == cb.hash_code()) {
-                    it = callbacks_.erase(it);
-                }
-                else {
-                    it++;
-                }
-            }
+            auto it = std::remove_if(callbacks_.begin(), callbacks_.end(), [&cb](auto& callback) { return callback.hash_code() == cb.hash_code(); });
+            callbacks_.erase(it, callbacks_.end());
         }
 
         void operator()(Args&&... args) const
         {
-            std::scoped_lock<std::mutex> lock { mtx_ };
+            tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
             for (const Callback<Args...>& cb : callbacks_) {
-                // TODO: args will be moved and cannot be properly used, right?
                 cb.invoke(std::forward<Args>(args)...);
             }
         }
 
         void clear()
         {
-            std::scoped_lock<std::mutex> lock { mtx_ };
+            tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
             callbacks_.clear();
         }
 
     private:
-        mutable std::mutex mtx_;
+        mutable tbb::queuing_mutex mtx_;
         std::vector<Callback<Args...>> callbacks_;
     };
 

@@ -4,14 +4,15 @@
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/platform.hpp>
 
+#include <oneapi/tbb/queuing_mutex.h>
+
 #include <atomic>
 #include <functional>
-#include <mutex>
 #include <unordered_map>
 
 namespace coffee {
 
-    static std::mutex creationMutex {};
+    static tbb::queuing_mutex creationMutex {};
 
     namespace graphics {
 
@@ -24,7 +25,7 @@ namespace coffee {
             }
 
             {
-                std::scoped_lock<std::mutex> lock { creationMutex };
+                tbb::queuing_mutex::scoped_lock lock { creationMutex };
 
                 glfwDefaultWindowHints();
                 glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -65,8 +66,7 @@ namespace coffee {
                         throw GLFWException { "Failed to retreave main video mode of primary monitor!" };
                     }
 
-                    settings.extent.width =
-                        static_cast<uint32_t>(settings.fullscreen ? videoMode->width : videoMode->width - videoMode->width / 2);
+                    settings.extent.width = static_cast<uint32_t>(settings.fullscreen ? videoMode->width : videoMode->width - videoMode->width / 2);
                     settings.extent.height =
                         static_cast<uint32_t>(settings.fullscreen ? videoMode->height : videoMode->height - videoMode->height / 2);
                 }
@@ -171,10 +171,7 @@ namespace coffee {
             swapChain->submitCommandBuffers(std::move(commandBuffers));
         }
 
-        void Window::sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers)
-        {
-            swapChain->submitCommandBuffers(std::move(commandBuffers));
-        }
+        void Window::sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers) { swapChain->submitCommandBuffers(std::move(commandBuffers)); }
 
         void Window::changePresentMode(VkPresentModeKHR newMode)
         {
@@ -215,10 +212,7 @@ namespace coffee {
 
         void Window::revertBorderless() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_DECORATED, GLFW_TRUE); }
 
-        bool Window::isPassthrough() const noexcept
-        {
-            return static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH));
-        }
+        bool Window::isPassthrough() const noexcept { return static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH)); }
 
         void Window::enablePassthrough() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH, GLFW_TRUE); }
 
@@ -252,10 +246,7 @@ namespace coffee {
 
         void Window::resetCursor() const noexcept { glfwSetCursor(windowHandle_, nullptr); }
 
-        Float2D Window::mousePosition() const noexcept
-        {
-            return { static_cast<float>(xMousePosition_), static_cast<float>(yMousePosition_) };
-        }
+        Float2D Window::mousePosition() const noexcept { return { static_cast<float>(xMousePosition_), static_cast<float>(yMousePosition_) }; }
 
         VkOffset2D Window::windowPosition() const noexcept { return { xWindowPosition_, yWindowPosition_ }; }
 
@@ -268,10 +259,7 @@ namespace coffee {
             glfwSetCursorPos(windowHandle_, static_cast<double>(position.x), static_cast<double>(position.y));
         }
 
-        void Window::setWindowPosition(const VkOffset2D& position) const noexcept
-        {
-            glfwSetWindowPos(windowHandle_, position.x, position.y);
-        }
+        void Window::setWindowPosition(const VkOffset2D& position) const noexcept { glfwSetWindowPos(windowHandle_, position.x, position.y); }
 
         void Window::setWindowSize(const VkExtent2D& size) const noexcept
         {
@@ -286,10 +274,7 @@ namespace coffee {
 
         bool Window::isButtonPressed(Keys key) const noexcept { return glfwGetKey(windowHandle_, *key) == GLFW_PRESS; }
 
-        bool Window::isButtonPressed(MouseButton mouseButton) const noexcept
-        {
-            return glfwGetMouseButton(windowHandle_, *mouseButton) == GLFW_PRESS;
-        }
+        bool Window::isButtonPressed(MouseButton mouseButton) const noexcept { return glfwGetMouseButton(windowHandle_, *mouseButton) == GLFW_PRESS; }
 
         bool Window::shouldClose() const noexcept { return static_cast<bool>(glfwWindowShouldClose(windowHandle_)); }
 
@@ -364,9 +349,7 @@ namespace coffee {
         {
             Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
-            const MouseClickEvent mouseClickEvent { glfwToCoffeeState(action),
-                                                    static_cast<MouseButton>(button),
-                                                    static_cast<uint32_t>(mods) };
+            const MouseClickEvent mouseClickEvent { glfwToCoffeeState(action), static_cast<MouseButton>(button), static_cast<uint32_t>(mods) };
             windowPtr->mouseClickEvent(*windowPtr, mouseClickEvent);
         }
 

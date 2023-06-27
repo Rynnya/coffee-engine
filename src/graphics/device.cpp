@@ -39,7 +39,7 @@ namespace coffee {
     static const std::vector<const char*> instanceDebugLayers = {};
 #endif
 
-    static std::mutex initializationMutex {};
+    static tbb::queuing_mutex initializationMutex {};
     static uint32_t initializationCounter = 0;
 
     namespace graphics {
@@ -47,7 +47,7 @@ namespace coffee {
         Device::Device()
         {
             {
-                std::unique_lock<std::mutex> lock { initializationMutex };
+                tbb::queuing_mutex::scoped_lock lock { initializationMutex };
 
                 if (initializationCounter == 0) {
                     initializeGlobalEnvironment();
@@ -72,6 +72,16 @@ namespace coffee {
 
             destroyTemporarySurface(surface);
             destroyTemporaryWindow(window);
+
+            cleanupRunning_ = true;
+
+            cleanupThread_ = std::thread([&]() {
+                while (cleanupRunning_.load(std::memory_order_relaxed)) {
+                    clearCompletedCommandBuffers();
+                    
+                    std::this_thread::sleep_for(std::chrono::milliseconds { 100 });
+                }
+            });
         }
 
         Device::~Device() noexcept
@@ -80,31 +90,26 @@ namespace coffee {
 
             std::pair<VkCommandPool, VkCommandBuffer> poolAndBuffer { VK_NULL_HANDLE, VK_NULL_HANDLE };
 
-            for (size_t i = 0; i < poolsAndBuffers_.size(); i++) {
-                clearCommandBuffers(i);
-            }
+            clearCompletedCommandBuffers();
 
             while (graphicsPools_.try_pop(poolAndBuffer)) {
                 auto& [commandPool, commandBuffer] = poolAndBuffer;
-                vkFreeCommandBuffers(logicalDevice_, commandPool, 1, &commandBuffer);
                 vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
             }
 
             while (computePools_.try_pop(poolAndBuffer)) {
                 auto& [commandPool, commandBuffer] = poolAndBuffer;
-                vkFreeCommandBuffers(logicalDevice_, commandPool, 1, &commandBuffer);
                 vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
             }
 
             while (transferPools_.try_pop(poolAndBuffer)) {
                 auto& [commandPool, commandBuffer] = poolAndBuffer;
-                vkFreeCommandBuffers(logicalDevice_, commandPool, 1, &commandBuffer);
                 vkDestroyCommandPool(logicalDevice_, commandPool, nullptr);
             }
 
             VkFence fence = VK_NULL_HANDLE;
 
-            while (singleTimeFences_.try_pop(fence)) {
+            while (fencesPool_.try_pop(fence)) {
                 vkDestroyFence(logicalDevice_, fence, nullptr);
             }
 
@@ -116,13 +121,16 @@ namespace coffee {
             vkDestroyDescriptorPool(logicalDevice_, descriptorPool_, nullptr);
 
             for (size_t i = 0; i < kMaxOperationsInFlight; i++) {
-                vkDestroyFence(logicalDevice_, inFlightFences_[i], nullptr);
+                vkDestroyFence(logicalDevice_, fencesInFlight_[i], nullptr);
             }
 
             vkDestroyDevice(logicalDevice_, nullptr);
             vkDestroyInstance(instance_, nullptr);
 
-            std::unique_lock<std::mutex> lock { initializationMutex };
+            cleanupRunning_ = false;
+            cleanupThread_.join();
+
+            tbb::queuing_mutex::scoped_lock lock { initializationMutex };
 
             if (initializationCounter-- == 1) {
                 deinitializeGlobalEnvironment();
@@ -133,105 +141,60 @@ namespace coffee {
 
         void Device::waitForAcquire()
         {
-            vkWaitForFences(logicalDevice_, 1U, &inFlightFences_[currentOperationInFlight_], VK_TRUE, std::numeric_limits<uint64_t>::max());
+            vkWaitForFences(logicalDevice_, 1U, &fencesInFlight_[currentOperationInFlight_], VK_TRUE, std::numeric_limits<uint64_t>::max());
         }
 
         void Device::waitForRelease()
         {
-            vkWaitForFences(
-                logicalDevice_,
-                static_cast<uint32_t>(inFlightFences_.size()),
-                inFlightFences_.data(),
-                VK_TRUE,
-                std::numeric_limits<uint64_t>::max()
-            );
+            uint32_t fencesSize = static_cast<uint32_t>(fencesInFlight_.size());
+            vkWaitForFences(logicalDevice_, fencesSize, fencesInFlight_.data(), VK_TRUE, std::numeric_limits<uint64_t>::max());
         }
 
         void Device::sendCommandBuffer(
             CommandBuffer&& commandBuffer,
-            VkSwapchainKHR swapChain,
-            VkSemaphore waitSemaphone,
-            VkSemaphore signalSemaphone,
-            uint32_t* currentFrame
+            const std::vector<SemaphorePtr>& waitSemaphores,
+            const std::vector<VkPipelineStageFlags>& waitDstStageMasks,
+            const std::vector<SemaphorePtr>& signalSemaphores
         )
         {
             SubmitInfo info {};
-            info.swapChain = swapChain;
-            info.waitSemaphone = waitSemaphone;
-            info.signalSemaphone = signalSemaphone;
-            info.currentFrame = currentFrame;
-            VkResult result = VK_SUCCESS;
 
-            std::scoped_lock<std::mutex> lock { submitMutex_ };
+            info.submitType = commandBuffer.type;
+            translateSemaphores(info, waitSemaphores, waitDstStageMasks, signalSemaphores);
 
-            if (poolsAndBuffersClearFlags_[currentOperation_]) {
-                clearCommandBuffers(currentOperation_);
-            }
+            std::vector<CommandBuffer> commandBuffers {};
+            commandBuffers.push_back(std::move(commandBuffer));
 
-            if ((result = vkEndCommandBuffer(commandBuffer)) != VK_SUCCESS) {
-                COFFEE_FATAL("Failed to end command buffer!");
-
-                // Having this issue most likely mean that command buffer construction is broken
-                // So our only valid case is throw fatal exception, even tho device might be active and everything is working correctly
-                throw FatalVulkanException { result };
-            }
-
-            poolsAndBuffers_[currentOperation_].push_back({ std::exchange(commandBuffer.pool_, VK_NULL_HANDLE), commandBuffer });
-            info.commandBuffers.push_back(commandBuffer);
-            pendingSubmits_.push_back(std::move(info));
+            transferSubmitInfo(std::move(info), std::move(commandBuffers));
         }
 
         void Device::sendCommandBuffers(
+            CommandBufferType submitType,
             std::vector<CommandBuffer>&& commandBuffers,
-            VkSwapchainKHR swapChain,
-            VkSemaphore waitSemaphone,
-            VkSemaphore signalSemaphone,
-            uint32_t* currentFrame
+            const std::vector<SemaphorePtr>& waitSemaphores,
+            const std::vector<VkPipelineStageFlags>& waitDstStageMasks,
+            const std::vector<SemaphorePtr>& signalSemaphores
         )
         {
             SubmitInfo info {};
-            info.swapChain = swapChain;
-            info.waitSemaphone = waitSemaphone;
-            info.signalSemaphone = signalSemaphone;
-            info.currentFrame = currentFrame;
-            VkResult result = VK_SUCCESS;
 
-            std::scoped_lock<std::mutex> lock { submitMutex_ };
+            info.submitType = submitType;
+            translateSemaphores(info, waitSemaphores, waitDstStageMasks, signalSemaphores);
 
-            if (poolsAndBuffersClearFlags_[currentOperation_]) {
-                clearCommandBuffers(currentOperation_);
-            }
-
-            for (auto& commandBuffer : commandBuffers) {
-                if ((result = vkEndCommandBuffer(commandBuffer)) != VK_SUCCESS) {
-                    COFFEE_FATAL("Failed to end command buffer!");
-
-                    // Having this issue most likely mean that command buffer construction is broken
-                    // So our only valid case is throw fatal exception, even tho device might be active and everything is working correctly
-                    throw FatalVulkanException { result };
-                }
-
-                poolsAndBuffers_[currentOperation_].push_back({ std::exchange(commandBuffer.pool_, VK_NULL_HANDLE), commandBuffer });
-                info.commandBuffers.push_back(commandBuffer);
-            }
-
-            pendingSubmits_.push_back(std::move(info));
-            commandBuffers.clear();
+            transferSubmitInfo(std::move(info), std::move(commandBuffers));
         }
 
         void Device::submitPendingWork()
         {
-            // This WHOLE operation must be atomic, that's why using tbb container here irrelevant
-            std::scoped_lock<std::mutex> submitLock { submitMutex_ };
+            tbb::queuing_mutex::scoped_lock submitLock { submitMutex_ };
 
             if (pendingSubmits_.empty()) {
                 return;
             }
 
-            static constexpr VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-            poolsAndBuffersClearFlags_[currentOperation_] = true;
-
-            std::vector<VkSubmitInfo> submitInfos {};
+            std::vector<VkSubmitInfo> graphicsInfos {};
+            std::vector<VkSubmitInfo> computeInfos {};
+            std::vector<VkSubmitInfo> transferInfos {};
             std::vector<VkSwapchainKHR> swapChains {};
             std::vector<VkSemaphore> swapChainSemaphores {};
             std::vector<uint32_t> imageIndices {};
@@ -239,65 +202,110 @@ namespace coffee {
             for (const auto& submitInfo : pendingSubmits_) {
                 VkSubmitInfo nativeSubmitInfo { VK_STRUCTURE_TYPE_SUBMIT_INFO };
 
+                nativeSubmitInfo.commandBufferCount = submitInfo.commandBuffersCount;
+                nativeSubmitInfo.pCommandBuffers = submitInfo.commandBuffers.get();
+                nativeSubmitInfo.waitSemaphoreCount = submitInfo.waitSemaphoresCount;
+                nativeSubmitInfo.pWaitSemaphores = submitInfo.waitSemaphores.get();
+                nativeSubmitInfo.pWaitDstStageMask = submitInfo.waitDstStageMasks.get();
+                nativeSubmitInfo.signalSemaphoreCount = submitInfo.signalSemaphoresCount;
+                nativeSubmitInfo.pSignalSemaphores = submitInfo.signalSemaphores.get();
+
                 if (submitInfo.swapChain != VK_NULL_HANDLE) {
-                    COFFEE_ASSERT(submitInfo.waitSemaphone != VK_NULL_HANDLE, "Invalid wait semaphore provided.");
-                    COFFEE_ASSERT(submitInfo.signalSemaphone != VK_NULL_HANDLE, "Invalid signal semaphore provided.");
-                    COFFEE_ASSERT(submitInfo.currentFrame != nullptr, "Invalid current frame pointer provided.");
-
-                    nativeSubmitInfo.waitSemaphoreCount = 1;
-                    nativeSubmitInfo.pWaitSemaphores = &submitInfo.waitSemaphone;
-                    nativeSubmitInfo.pWaitDstStageMask = waitStages;
-
-                    nativeSubmitInfo.signalSemaphoreCount = 1;
-                    nativeSubmitInfo.pSignalSemaphores = &submitInfo.signalSemaphone;
+                    // Swapchain always submitted through Graphics queue, so we don't need to check request type
+                    // Same applies for currentFrame which is always not nullptr
 
                     swapChains.push_back(submitInfo.swapChain);
-                    swapChainSemaphores.push_back(submitInfo.signalSemaphone);
+                    swapChainSemaphores.push_back(submitInfo.swapChainWaitSemaphore);
                     imageIndices.push_back(*submitInfo.currentFrame);
 
                     uint32_t* currentSwapChainFrame = submitInfo.currentFrame;
                     *currentSwapChainFrame = (*currentSwapChainFrame + 1) % imageCountForSwapChain_;
                 }
 
-                nativeSubmitInfo.commandBufferCount = static_cast<uint32_t>(submitInfo.commandBuffers.size());
-                nativeSubmitInfo.pCommandBuffers = submitInfo.commandBuffers.data();
-
-                submitInfos.push_back(std::move(nativeSubmitInfo));
+                switch (submitInfo.submitType) {
+                    case CommandBufferType::Graphics:
+                        graphicsInfos.push_back(std::move(nativeSubmitInfo));
+                        break;
+                    case CommandBufferType::Compute:
+                        computeInfos.push_back(std::move(nativeSubmitInfo));
+                        break;
+                    case CommandBufferType::Transfer:
+                        transferInfos.push_back(std::move(nativeSubmitInfo));
+                        break;
+                }
             }
 
             VkPresentInfoKHR presentInfo { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
-
             presentInfo.waitSemaphoreCount = static_cast<uint32_t>(swapChainSemaphores.size());
             presentInfo.pWaitSemaphores = swapChainSemaphores.data();
             presentInfo.swapchainCount = static_cast<uint32_t>(swapChains.size());
             presentInfo.pSwapchains = swapChains.data();
             presentInfo.pImageIndices = imageIndices.data();
 
-            // Push waiting for swapchain as far as possible
+            // Lock required here because vkGetFenceStatus can be called during vkQueuePresent with fencesInFlight_
+            tbb::queuing_mutex::scoped_lock cleanupLock { cleanupMutex_ };
+
             if (operationsInFlight_[currentOperation_] != nullptr) {
                 vkWaitForFences(logicalDevice_, 1, &operationsInFlight_[currentOperation_], VK_TRUE, std::numeric_limits<uint64_t>::max());
             }
 
-            operationsInFlight_[currentOperation_] = inFlightFences_[currentOperationInFlight_];
-            vkResetFences(logicalDevice_, 1, &inFlightFences_[currentOperationInFlight_]);
+            operationsInFlight_[currentOperation_] = fencesInFlight_[currentOperationInFlight_];
+            vkResetFences(logicalDevice_, 1, &fencesInFlight_[currentOperationInFlight_]);
 
-            std::scoped_lock<std::mutex> queueLock { graphicsQueueMutex_ };
+            if (!graphicsInfos.empty()) {
+                pendingTask_.graphicsCompletionFence = fencesInFlight_[currentOperationInFlight_];
 
-            VkResult result = vkQueueSubmit(
-                graphicsQueue_,
-                static_cast<uint32_t>(submitInfos.size()),
-                submitInfos.data(),
-                inFlightFences_[currentOperationInFlight_]
-            );
-
-            if (result != VK_SUCCESS) {
-                COFFEE_FATAL("Failed to submit command buffers!");
-
-                throw FatalVulkanException { result };
+                endSubmit(graphicsQueue_, graphicsQueueMutex_, graphicsInfos, fencesInFlight_[currentOperationInFlight_]);
             }
 
-            if (swapChains.size() != 0) {
-                result = vkQueuePresentKHR(presentQueue_, &presentInfo);
+            if (!computeInfos.empty()) {
+                if (computeQueue_ != VK_NULL_HANDLE) {
+                    pendingTask_.computeCompletionFence = acquireFence();
+
+                    endSubmit(computeQueue_, computeQueueMutex_, computeInfos, pendingTask_.computeCompletionFence);
+                }
+                else {
+                    VkFence completionFence = VK_NULL_HANDLE;
+
+                    if (pendingTask_.graphicsCompletionFence == VK_NULL_HANDLE) {
+                        pendingTask_.graphicsCompletionFence = fencesInFlight_[currentOperationInFlight_];
+                        completionFence = pendingTask_.graphicsCompletionFence;
+                    }
+
+                    endSubmit(graphicsQueue_, graphicsQueueMutex_, computeInfos, completionFence);
+                }
+            }
+
+            if (!transferInfos.empty()) {
+                if (transferQueue_ != VK_NULL_HANDLE) {
+                    pendingTask_.transferCompletionFence = acquireFence();
+
+                    endSubmit(transferQueue_, transferQueueMutex_, transferInfos, pendingTask_.transferCompletionFence);
+                }
+                else if (computeQueue_ != VK_NULL_HANDLE) {
+                    VkFence completionFence = VK_NULL_HANDLE;
+
+                    if (pendingTask_.computeCompletionFence == VK_NULL_HANDLE) {
+                        pendingTask_.computeCompletionFence = acquireFence();
+                        completionFence = pendingTask_.computeCompletionFence;
+                    }
+                    
+                    endSubmit(computeQueue_, computeQueueMutex_, transferInfos, completionFence);
+                }
+                else {
+                    VkFence completionFence = VK_NULL_HANDLE;
+
+                    if (pendingTask_.graphicsCompletionFence == VK_NULL_HANDLE) {
+                        pendingTask_.graphicsCompletionFence = fencesInFlight_[currentOperationInFlight_];
+                        completionFence = pendingTask_.graphicsCompletionFence;
+                    }
+
+                    endSubmit(graphicsQueue_, graphicsQueueMutex_, transferInfos, completionFence);
+                }
+            }
+
+            if (!swapChains.empty()) {
+                VkResult result = vkQueuePresentKHR(presentQueue_, &presentInfo);
 
                 if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR && result != VK_ERROR_OUT_OF_DATE_KHR) {
                     COFFEE_FATAL("Failed to present images!");
@@ -309,6 +317,8 @@ namespace coffee {
             currentOperationInFlight_ = (currentOperationInFlight_ + 1) % kMaxOperationsInFlight;
             currentOperation_ = (currentOperation_ + 1) % imageCountForSwapChain_;
 
+            runningTasks_.push_back(std::move(pendingTask_));
+            pendingTask_.clear();
             pendingSubmits_.clear();
 
             vmaSetCurrentFrameIndex(allocator_, currentOperation_);
@@ -316,10 +326,7 @@ namespace coffee {
 
         ScopeExit Device::singleTimeTransfer(CommandBuffer&& transferCommandBuffer)
         {
-            COFFEE_ASSERT(
-                transferCommandBuffer.type == CommandBufferType::Transfer,
-                "Provided command buffer must been allocated for transfer."
-            );
+            COFFEE_ASSERT(transferCommandBuffer.type == CommandBufferType::Transfer, "Provided command buffer must been allocated for transfer.");
 
             if (transferQueue_ != VK_NULL_HANDLE) {
                 return endSingleTimeCommands(transferQueue_, transferQueueMutex_, std::move(transferCommandBuffer));
@@ -337,10 +344,7 @@ namespace coffee {
         ScopeExit Device::singleTimeTransfer(std::vector<CommandBuffer>&& transferCommandBuffers)
         {
             for ([[maybe_unused]] auto& transferCommandBuffer : transferCommandBuffers) {
-                COFFEE_ASSERT(
-                    transferCommandBuffer.type == CommandBufferType::Transfer,
-                    "Provided command buffer must been allocated for transfer."
-                );
+                COFFEE_ASSERT(transferCommandBuffer.type == CommandBufferType::Transfer, "Provided command buffer must been allocated for transfer.");
             }
 
             if (transferQueue_ != VK_NULL_HANDLE) {
@@ -419,7 +423,7 @@ namespace coffee {
 
         GLFWwindow* Device::createTemporaryWindow()
         {
-            // TODO: Potential data race with Window class
+            // ThreadSafety: Potential data race with Window class
 
             glfwDefaultWindowHints();
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -595,8 +599,7 @@ namespace coffee {
 
             // Surface is still alive at this point, so we can use this for our thingies
             imageCountForSwapChain_ = VkUtils::getOptimalAmountOfFramebuffers(physicalDevice_, surface);
-            surfaceFormat_ =
-                VkUtils::chooseSurfaceFormat(physicalDevice_, VkUtils::querySwapChainSupport(physicalDevice_, surface).formats);
+            surfaceFormat_ = VkUtils::chooseSurfaceFormat(physicalDevice_, VkUtils::querySwapChainSupport(physicalDevice_, surface).formats);
 
             optimalDepthFormat_ = VkUtils::findDepthFormat(physicalDevice_);
             optimalDepthStencilFormat_ = VkUtils::findDepthStencilFormat(physicalDevice_);
@@ -696,15 +699,12 @@ namespace coffee {
         {
             operationsInFlight_.resize(imageCountForSwapChain_);
 
-            poolsAndBuffersClearFlags_.resize(imageCountForSwapChain_);
-            poolsAndBuffers_.resize(imageCountForSwapChain_);
-
             VkFenceCreateInfo fenceCreateInfo { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
             fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
             VkResult result = VK_SUCCESS;
 
             for (size_t i = 0; i < kMaxOperationsInFlight; i++) {
-                if ((result = vkCreateFence(logicalDevice_, &fenceCreateInfo, nullptr, &inFlightFences_[i])) != VK_SUCCESS) {
+                if ((result = vkCreateFence(logicalDevice_, &fenceCreateInfo, nullptr, &fencesInFlight_[i])) != VK_SUCCESS) {
                     COFFEE_FATAL("Failed to create queue fence!");
 
                     throw FatalVulkanException { result };
@@ -749,7 +749,7 @@ namespace coffee {
 
         void Device::createAllocator()
         {
-            VmaVulkanFunctions vulkanFunctions = {};
+            VmaVulkanFunctions vulkanFunctions {};
             vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
             vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
             vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
@@ -825,11 +825,82 @@ namespace coffee {
             return indices.isSuitable() && requiredExtensions.empty() && swapChainAdequate && features.samplerAnisotropy;
         }
 
-        VkFence Device::acquireSingleTimeFence()
+        void Device::translateSemaphores(
+            SubmitInfo& submitInfo,
+            const std::vector<SemaphorePtr>& waitSemaphores,
+            const std::vector<VkPipelineStageFlags>& waitDstStageMasks,
+            const std::vector<SemaphorePtr>& signalSemaphores
+        )
+        {
+            COFFEE_ASSERT(waitSemaphores.size() == waitDstStageMasks.size(), "Amount of wait stages must be equal to amount of wait semaphores.");
+
+            if (!waitSemaphores.empty()) {
+                submitInfo.waitSemaphoresCount = static_cast<uint32_t>(waitSemaphores.size());
+                submitInfo.waitSemaphores = std::make_unique<VkSemaphore[]>(waitSemaphores.size());
+
+                for (size_t index = 0; index < waitSemaphores.size(); index++) {
+                    submitInfo.waitSemaphores[index] = waitSemaphores[index]->semaphore();
+                }
+
+                submitInfo.waitDstStageMasks = std::make_unique<VkPipelineStageFlags[]>(waitDstStageMasks.size());
+                std::memcpy(submitInfo.waitDstStageMasks.get(), waitDstStageMasks.data(), waitDstStageMasks.size() * sizeof(VkPipelineStageFlags));
+            }
+
+            if (!signalSemaphores.empty()) {
+                submitInfo.signalSemaphoresCount = static_cast<uint32_t>(signalSemaphores.size());
+                submitInfo.signalSemaphores = std::make_unique<VkSemaphore[]>(signalSemaphores.size());
+
+                for (size_t index = 0; index < signalSemaphores.size(); index++) {
+                    submitInfo.signalSemaphores[index] = signalSemaphores[index]->semaphore();
+                }
+            }
+        }
+
+        void Device::transferSubmitInfo(SubmitInfo&& submitInfo, std::vector<CommandBuffer>&& commandBuffers)
+        {
+            COFFEE_ASSERT(!commandBuffers.empty(), "Application shouldn't send empty command buffer list.");
+
+            VkResult result = VK_SUCCESS;
+            submitInfo.commandBuffersCount = static_cast<uint32_t>(commandBuffers.size());
+            submitInfo.commandBuffers = std::make_unique<VkCommandBuffer[]>(commandBuffers.size());
+
+            tbb::queuing_mutex::scoped_lock lock { submitMutex_ };
+
+            for (size_t index = 0; index < commandBuffers.size(); index++) {
+                auto& commandBuffer = commandBuffers[index];
+
+                COFFEE_ASSERT(
+                    isCommandBufferAllowedForSubmitType(submitInfo.submitType, commandBuffer.type),
+                    "Invalid command buffer submit: Command buffer requires higher level of queue than requested."
+                );
+
+                if ((result = vkEndCommandBuffer(commandBuffer)) != VK_SUCCESS) {
+                    COFFEE_FATAL("Failed to end command buffer!");
+
+                    // Having this issue most likely mean that command buffer construction is broken
+                    // So our only valid case is throw fatal exception, even tho device might be active and everything is working correctly
+                    throw FatalVulkanException { result };
+                }
+
+                RunningCommandBuffer runningCommandBuffer {};
+                runningCommandBuffer.commandBufferType = commandBuffer.type;
+                runningCommandBuffer.pool = std::exchange(commandBuffer.pool_, VK_NULL_HANDLE);
+                runningCommandBuffer.buffer = std::exchange(commandBuffer.buffer_, VK_NULL_HANDLE);
+
+                submitInfo.commandBuffers[index] = runningCommandBuffer.buffer;
+                pendingTask_.commandBuffers.push_back(std::move(runningCommandBuffer));
+            }
+
+            commandBuffers.clear();
+
+            pendingSubmits_.push_back(std::move(submitInfo));
+        }
+
+        VkFence Device::acquireFence()
         {
             VkFence fence = VK_NULL_HANDLE;
 
-            if (singleTimeFences_.try_pop(fence)) {
+            if (fencesPool_.try_pop(fence)) {
                 return fence;
             }
 
@@ -845,9 +916,18 @@ namespace coffee {
             return fence;
         }
 
-        ScopeExit Device::endSingleTimeCommands(VkQueue queue, std::mutex& mutex, CommandBuffer&& commandBuffer)
+        void Device::returnFence(VkFence fence) {
+            if (fence == VK_NULL_HANDLE) {
+                return;
+            }
+
+            vkResetFences(logicalDevice_, 1, &fence);
+            fencesPool_.push(fence);
+        }
+
+        ScopeExit Device::endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, CommandBuffer&& commandBuffer)
         {
-            VkFence fence = acquireSingleTimeFence();
+            VkFence fence = acquireFence();
             VkResult result = vkEndCommandBuffer(commandBuffer);
 
             if (result != VK_SUCCESS) {
@@ -862,7 +942,7 @@ namespace coffee {
             submitInfo.pCommandBuffers = &vkCommandBuffer;
 
             {
-                std::scoped_lock<std::mutex> lock { mutex };
+                tbb::queuing_mutex::scoped_lock lock { mutex };
                 result = vkQueueSubmit(queue, 1, &submitInfo, fence);
 
                 if (result != VK_SUCCESS) {
@@ -874,20 +954,14 @@ namespace coffee {
 
             return ScopeExit([this, fence, cb = std::move(commandBuffer)]() {
                 vkWaitForFences(logicalDevice_, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
-                vkResetFences(logicalDevice_, 1, &fence);
-
-                try {
-                    singleTimeFences_.push(fence);
-                }
-                catch (...) {
-                    vkDestroyFence(logicalDevice_, fence, nullptr);
-                }
+                
+                returnFence(fence);
             });
         }
 
-        ScopeExit Device::endSingleTimeCommands(VkQueue queue, std::mutex& mutex, std::vector<CommandBuffer>&& commandBuffers)
+        ScopeExit Device::endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, std::vector<CommandBuffer>&& commandBuffers)
         {
-            VkFence fence = acquireSingleTimeFence();
+            VkFence fence = acquireFence();
             VkResult result = VK_SUCCESS;
 
             std::vector<VkCommandBuffer> implementationCommandBuffers {};
@@ -910,7 +984,7 @@ namespace coffee {
             submitInfo.pCommandBuffers = implementationCommandBuffers.data();
 
             {
-                std::scoped_lock<std::mutex> lock { mutex };
+                tbb::queuing_mutex::scoped_lock lock { mutex };
                 result = vkQueueSubmit(queue, 1, &submitInfo, fence);
 
                 if (result != VK_SUCCESS) {
@@ -920,17 +994,24 @@ namespace coffee {
                 }
             }
 
-            return ScopeExit([this, fence, cbs = std::move(commandBuffers), implcbs = std::move(implementationCommandBuffers)]() {
+            return ScopeExit([this, fence, cbs = std::move(commandBuffers)]() {
                 vkWaitForFences(logicalDevice_, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
-                vkResetFences(logicalDevice_, 1, &fence);
-
-                try {
-                    singleTimeFences_.push(fence);
-                }
-                catch (...) {
-                    vkDestroyFence(logicalDevice_, fence, nullptr);
-                }
+                
+                returnFence(fence);
             });
+        }
+
+        void Device::endSubmit(VkQueue queue, tbb::queuing_mutex& mutex, const std::vector<VkSubmitInfo>& submits, VkFence fence)
+        {
+            tbb::queuing_mutex::scoped_lock queueLock { mutex };
+
+            VkResult result = vkQueueSubmit(queue, static_cast<uint32_t>(submits.size()), submits.data(), fence);
+
+            if (result != VK_SUCCESS) {
+                COFFEE_FATAL("Failed to submit command buffers through graphics queue!");
+
+                throw FatalVulkanException { result };
+            }
         }
 
         std::pair<VkCommandPool, VkCommandBuffer> Device::acquireGraphicsCommandPoolAndBuffer()
@@ -945,7 +1026,7 @@ namespace coffee {
             VkResult result = VK_SUCCESS;
 
             VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-            poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+            poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
             poolInfo.queueFamilyIndex = indices_.graphicsFamily.value();
             result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &commandPool);
 
@@ -971,10 +1052,10 @@ namespace coffee {
             return poolAndBuffer;
         }
 
-        void Device::returnGraphicsCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer)
+        void Device::returnGraphicsCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer)
         {
-            vkResetCommandBuffer(buffer.second, 0);
-            graphicsPools_.push(buffer);
+            vkResetCommandPool(logicalDevice_, pool, 0);
+            graphicsPools_.push({ pool, buffer });
         }
 
         std::pair<VkCommandPool, VkCommandBuffer> Device::acquireComputeCommandPoolAndBuffer()
@@ -993,7 +1074,7 @@ namespace coffee {
             VkResult result = VK_SUCCESS;
 
             VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-            poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+            poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
             poolInfo.queueFamilyIndex = indices_.computeFamily.value();
             result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &commandPool);
 
@@ -1019,10 +1100,10 @@ namespace coffee {
             return poolAndBuffer;
         }
 
-        void Device::returnComputeCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer)
+        void Device::returnComputeCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer)
         {
-            vkResetCommandBuffer(buffer.second, 0);
-            computePools_.push(buffer);
+            vkResetCommandPool(logicalDevice_, pool, 0);
+            computePools_.push({ pool, buffer });
         }
 
         std::pair<VkCommandPool, VkCommandBuffer> Device::acquireTransferCommandPoolAndBuffer()
@@ -1041,7 +1122,7 @@ namespace coffee {
             VkResult result = VK_SUCCESS;
 
             VkCommandPoolCreateInfo poolInfo { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-            poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+            poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
             poolInfo.queueFamilyIndex = indices_.transferFamily.value();
             result = vkCreateCommandPool(logicalDevice_, &poolInfo, nullptr, &commandPool);
 
@@ -1067,22 +1148,67 @@ namespace coffee {
             return poolAndBuffer;
         }
 
-        void Device::returnTransferCommandPoolAndBuffer(const std::pair<VkCommandPool, VkCommandBuffer>& buffer)
+        void Device::returnTransferCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer)
         {
-            vkResetCommandBuffer(buffer.second, 0);
-            transferPools_.push(buffer);
+            vkResetCommandPool(logicalDevice_, pool, 0);
+            transferPools_.push({ pool, buffer });
         }
 
-        void Device::clearCommandBuffers(size_t index)
+        bool Device::isCommandBufferAllowedForSubmitType(CommandBufferType submitType, CommandBufferType commandBufferType)
         {
-            waitForAcquire();
-
-            for (auto& commandPoolAndBuffer : poolsAndBuffers_[index]) {
-                returnGraphicsCommandPoolAndBuffer(commandPoolAndBuffer);
+            if (submitType == CommandBufferType::Graphics) {
+                return true;
             }
 
-            poolsAndBuffers_[index].clear();
-            poolsAndBuffersClearFlags_[index] = false;
+            if (submitType == CommandBufferType::Compute) {
+                return commandBufferType != CommandBufferType::Graphics;
+            }
+
+            return commandBufferType == CommandBufferType::Transfer;
+        }
+
+        void Device::clearCompletedCommandBuffers()
+        {
+            tbb::queuing_mutex::scoped_lock lock { cleanupMutex_ };
+
+            auto removePosition = std::remove_if(runningTasks_.begin(), runningTasks_.end(), [&](const RunningGPUTask& running) {
+                bool canBeSafelyDeleted = true;
+
+                if (canBeSafelyDeleted && running.graphicsCompletionFence != VK_NULL_HANDLE) {
+                    canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.graphicsCompletionFence) == VK_SUCCESS);
+                }
+
+                if (canBeSafelyDeleted && running.computeCompletionFence != VK_NULL_HANDLE) {
+                    canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.computeCompletionFence) == VK_SUCCESS);
+                }
+
+                if (canBeSafelyDeleted && running.transferCompletionFence != VK_NULL_HANDLE) {
+                    canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.transferCompletionFence) == VK_SUCCESS);
+                }
+
+                if (canBeSafelyDeleted) {
+                    for (auto& runningCommandBuffer : running.commandBuffers) {
+                        switch (runningCommandBuffer.commandBufferType) {
+                            case CommandBufferType::Graphics:
+                                returnGraphicsCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
+                                break;
+                            case CommandBufferType::Compute:
+                                returnComputeCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
+                                break;
+                            case CommandBufferType::Transfer:
+                                returnTransferCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
+                                break;
+                        }
+                    }
+
+                    returnFence(running.computeCompletionFence);
+                    returnFence(running.transferCompletionFence);
+                }
+
+                return canBeSafelyDeleted;
+            });
+            
+            runningTasks_.erase(removePosition, runningTasks_.end());
         }
 
     } // namespace graphics

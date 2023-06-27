@@ -13,11 +13,12 @@ endmacro()
 
 set_option(BUILD_SHARED_LIBS OFF)
 
-set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
     add_compile_options(/GR-)
+    add_compile_options(/EHa)
 endif()
 
 add_compile_definitions(ZSTD_STATIC_LINKING_ONLY)

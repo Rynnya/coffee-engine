@@ -239,8 +239,7 @@ namespace coffee {
     graphics::ImagePtr AssetManager::getImage(const std::string& path, uint32_t amountOfChannels)
     {
         if (amountOfChannels < 1 || amountOfChannels > 4) {
-            throw AssetException { AssetException::Type::InvalidRequest,
-                                   fmt::format("Invalid amountOfChannels requested: {}", amountOfChannels) };
+            throw AssetException { AssetException::Type::InvalidRequest, fmt::format("Invalid amountOfChannels requested: {}", amountOfChannels) };
         }
 
         tbb::queuing_mutex::scoped_lock lock { mutex_ };
@@ -265,8 +264,7 @@ namespace coffee {
     graphics::ImagePtr AssetManager::getImage(const FilesystemPtr& fs, const std::string& path, uint32_t amountOfChannels)
     {
         if (amountOfChannels < 1 || amountOfChannels > 4) {
-            throw AssetException { AssetException::Type::InvalidRequest,
-                                   fmt::format("Invalid amountOfChannels requested: {}", amountOfChannels) };
+            throw AssetException { AssetException::Type::InvalidRequest, fmt::format("Invalid amountOfChannels requested: {}", amountOfChannels) };
         }
 
         tbb::queuing_mutex::scoped_lock lock { mutex_ };
@@ -302,8 +300,7 @@ namespace coffee {
         stagingBufferConfiguration.instanceCount = 16U * 16U;
         stagingBufferConfiguration.usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         stagingBufferConfiguration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        stagingBufferConfiguration.allocationFlags =
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        stagingBufferConfiguration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         stagingBufferConfiguration.allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         auto stagingBuffer = Buffer::create(device_, stagingBufferConfiguration);
 
@@ -537,8 +534,7 @@ namespace coffee {
         stagingBufferConfiguration.instanceCount = instanceCount / instanceSize;
         stagingBufferConfiguration.usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         stagingBufferConfiguration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        stagingBufferConfiguration.allocationFlags =
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        stagingBufferConfiguration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         stagingBufferConfiguration.allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         auto stagingBuffer = Buffer::create(device_, stagingBufferConfiguration);
 
@@ -659,7 +655,7 @@ namespace coffee {
                                        fmt::format("Expected type Image, requested type was {}", detail::fileTypeToString(entry.type)) };
             }
 
-            ResourceGuard<graphics::ImagePtr> guardedImage = nullptr;
+            ResourceGuard<graphics::ImagePtr> guardedImage = graphics::ImagePtr {};
             std::vector<uint8_t> rawBytes = fs->getContent(path);
 
             switch (entry.type) {
@@ -668,6 +664,9 @@ namespace coffee {
                     break;
                 case Filesystem::FileType::BasisImage:
                     guardedImage = loadBasisImage(rawBytes, channels);
+                    break;
+                default:
+                    COFFEE_ASSERT(false, "Should not happen.");
                     break;
             }
 
@@ -711,8 +710,7 @@ namespace coffee {
         stagingBufferConfiguration.instanceCount = width * height;
         stagingBufferConfiguration.usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         stagingBufferConfiguration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        stagingBufferConfiguration.allocationFlags =
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        stagingBufferConfiguration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         stagingBufferConfiguration.allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         auto stagingBuffer = Buffer::create(device_, stagingBufferConfiguration);
 
@@ -778,8 +776,8 @@ namespace coffee {
                     continue;
                 }
 
-                uint32_t mipmapSize = isBlockFormat ? levelInfo.m_num_blocks_x * levelInfo.m_num_blocks_y * bytesPerBlock
-                                                    : levelInfo.m_width * levelInfo.m_height;
+                uint32_t mipmapSize =
+                    isBlockFormat ? levelInfo.m_num_blocks_x * levelInfo.m_num_blocks_y * bytesPerBlock : levelInfo.m_width * levelInfo.m_height;
                 transcoder.transcode_image_level(mipmapLevel, 0, faceIndex, imageBuffer.get() + offset, mipmapSize, format);
 
                 MipmapInformation info {};
@@ -804,8 +802,7 @@ namespace coffee {
         stagingBufferConfiguration.instanceCount = allocationSize / instanceSize;
         stagingBufferConfiguration.usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         stagingBufferConfiguration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        stagingBufferConfiguration.allocationFlags =
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        stagingBufferConfiguration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         stagingBufferConfiguration.allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
         auto stagingBuffer = Buffer::create(device_, stagingBufferConfiguration);
 
@@ -823,10 +820,6 @@ namespace coffee {
         imageConfiguration.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         auto image = Image::create(device_, imageConfiguration);
 
-        static constexpr auto topOfPipeStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        static constexpr auto transferStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        static constexpr auto fragmentStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-
         std::vector<VkBufferImageCopy> copyRegions {};
         VkImageMemoryBarrier barrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 
@@ -843,7 +836,7 @@ namespace coffee {
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
         barrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
-        vkCmdPipelineBarrier(transferCommandBuffer, topOfPipeStage, transferStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &barrier);
 
         for (size_t faceIndex = 0; faceIndex < mipmapInformations.size(); faceIndex++) {
             auto& face = mipmapInformations[faceIndex];
@@ -866,8 +859,7 @@ namespace coffee {
             }
         }
 
-        transferCommandBuffer
-            .copyBufferToImage(stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyRegions.size(), copyRegions.data());
+        transferCommandBuffer.copyBufferToImage(stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyRegions.size(), copyRegions.data());
 
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -879,7 +871,7 @@ namespace coffee {
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
         barrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
-        VkPipelineStageFlagBits useStage = fragmentStage;
+        VkPipelineStageFlagBits useStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
         if (!device_->isUnifiedGraphicsTransferQueue()) {
             barrier.dstAccessMask = 0;
@@ -888,7 +880,7 @@ namespace coffee {
             useStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
         }
 
-        vkCmdPipelineBarrier(transferCommandBuffer, transferStage, useStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
         auto transferScope = device_->singleTimeTransfer(std::move(transferCommandBuffer));
 
         if (!device_->isUnifiedGraphicsTransferQueue()) {
@@ -905,7 +897,7 @@ namespace coffee {
             barrier.subresourceRange.levelCount = static_cast<uint32_t>(mipmapInformations[0].size());
             barrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
 
-            vkCmdPipelineBarrier(ownershipCommandBuffer, transferStage, fragmentStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+            ownershipCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &barrier);
             auto ownershipScope = device_->singleTimeGraphics(std::move(ownershipCommandBuffer));
 
             return { image, ScopeExit::combine(std::move(transferScope), std::move(ownershipScope), [x = std::move(stagingBuffer)]() {}) };

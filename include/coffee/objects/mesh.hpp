@@ -7,15 +7,13 @@
 
 namespace coffee {
 
-    class Mesh {
+    class Mesh : NonCopyable {
     public:
         Mesh(Materials&& mats, AABB&& aabb, uint32_t vertsOffset, uint32_t indsOffset, uint32_t vertsCount, uint32_t indsCount);
         virtual ~Mesh() noexcept = default;
 
-        Mesh(const Mesh&) = default;
-        Mesh& operator=(const Mesh&) = default;
-        Mesh(Mesh&&) = default;
-        Mesh& operator=(Mesh&&) = default;
+        Mesh(Mesh&& other) noexcept = default;
+        Mesh& operator=(Mesh&& other) noexcept = delete;
 
         Materials materials;
         const AABB aabb;
