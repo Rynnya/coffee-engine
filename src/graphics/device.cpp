@@ -80,7 +80,7 @@ namespace coffee {
 
             std::pair<VkCommandPool, VkCommandBuffer> poolAndBuffer { VK_NULL_HANDLE, VK_NULL_HANDLE };
 
-            clearCompletedCommandBuffers();
+            clearCompletedWork();
 
             while (graphicsPools_.try_pop(poolAndBuffer)) {
                 auto& [commandPool, commandBuffer] = poolAndBuffer;
@@ -137,17 +137,139 @@ namespace coffee {
             vkWaitForFences(logicalDevice_, fencesSize, fencesInFlight_.data(), VK_TRUE, std::numeric_limits<uint64_t>::max());
         }
 
+        void Device::waitDeviceIdle()
+        {
+            std::vector<VkFence> fences {};
+
+            {
+                tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+
+                for (auto& runningTask : runningTasks_) {
+                    if (runningTask.globalCompletionFence != VK_NULL_HANDLE) {
+                        fences.push_back(runningTask.globalCompletionFence);
+                    }
+
+                    fences.reserve(fences.size() + runningTask.computeCompletionFences.size() + runningTask.transferCompletionFences.size());
+
+                    for (auto& computeOwnership : runningTask.computeCompletionFences) {
+                        fences.push_back(computeOwnership);
+                    }
+
+                    for (auto& transferOwnership : runningTask.transferCompletionFences) {
+                        fences.push_back(transferOwnership);
+                    }
+                }
+            }
+
+            if (fences.empty()) {
+                return;
+            }
+
+            vkWaitForFences(logicalDevice_, static_cast<uint32_t>(fences.size()), fences.data(), VK_TRUE, std::numeric_limits<uint64_t>::max());
+
+            clearCompletedWork();
+        }
+
+        void Device::waitTransferQueueIdle()
+        {
+            std::vector<VkFence> fences {};
+
+            {
+                tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+
+                for (auto& runningTask : runningTasks_) {
+                    if (runningTask.globalCompletionFence != VK_NULL_HANDLE && runningTask.globalFenceType == CommandBufferType::Transfer) {
+                        fences.push_back(runningTask.globalCompletionFence);
+                    }
+
+                    fences.reserve(fences.size() + runningTask.transferCompletionFences.size());
+
+                    for (auto& transferOwnership : runningTask.transferCompletionFences) {
+                        fences.push_back(transferOwnership);
+                    }
+                }
+            }
+
+            if (fences.empty()) {
+                return;
+            }
+
+            vkWaitForFences(logicalDevice_, static_cast<uint32_t>(fences.size()), fences.data(), VK_TRUE, std::numeric_limits<uint64_t>::max());
+
+            clearCompletedWork();
+        }
+
+        void Device::waitComputeQueueIdle()
+        {
+            std::vector<VkFence> fences {};
+
+            {
+                tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+
+                for (auto& runningTask : runningTasks_) {
+                    if (runningTask.globalCompletionFence != VK_NULL_HANDLE && runningTask.globalFenceType == CommandBufferType::Compute) {
+                        fences.push_back(runningTask.globalCompletionFence);
+                    }
+
+                    fences.reserve(fences.size() + runningTask.computeCompletionFences.size());
+
+                    for (auto& computeOwnership : runningTask.computeCompletionFences) {
+                        fences.push_back(computeOwnership);
+                    }
+                }
+            }
+
+            if (fences.empty()) {
+                return;
+            }
+
+            vkWaitForFences(logicalDevice_, static_cast<uint32_t>(fences.size()), fences.data(), VK_TRUE, std::numeric_limits<uint64_t>::max());
+
+            clearCompletedWork();
+        }
+
+        void Device::waitGraphicsQueueIdle()
+        {
+            std::vector<VkFence> fences {};
+
+            {
+                tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+
+                for (auto& runningTask : runningTasks_) {
+                    if (runningTask.globalCompletionFence != VK_NULL_HANDLE && runningTask.globalFenceType == CommandBufferType::Graphics) {
+                        fences.push_back(runningTask.globalCompletionFence);
+                    }
+                }
+            }
+
+            if (fences.empty()) {
+                return;
+            }
+
+            vkWaitForFences(logicalDevice_, static_cast<uint32_t>(fences.size()), fences.data(), VK_TRUE, std::numeric_limits<uint64_t>::max());
+
+            clearCompletedWork();
+        }
+
         void Device::sendCommandBuffer(
             CommandBuffer&& commandBuffer,
-            const std::vector<SemaphorePtr>& waitSemaphores,
-            const std::vector<VkPipelineStageFlags>& waitDstStageMasks,
-            const std::vector<SemaphorePtr>& signalSemaphores
+            const SubmitSemaphores& submitSemaphores,
+            const FencePtr& computeFence,
+            const FencePtr& transferFence
         )
         {
             SubmitInfo info {};
 
             info.submitType = commandBuffer.type;
-            translateSemaphores(info, waitSemaphores, waitDstStageMasks, signalSemaphores);
+            translateSemaphores(info, submitSemaphores);
+
+            if (computeFence != nullptr) {
+                info.computeUserFence = computeFence->fence();
+            }
+
+            if (transferFence != nullptr) {
+                info.transferUserFence = transferFence->fence();
+            }
 
             std::vector<CommandBuffer> commandBuffers {};
             commandBuffers.push_back(std::move(commandBuffer));
@@ -158,15 +280,23 @@ namespace coffee {
         void Device::sendCommandBuffers(
             CommandBufferType submitType,
             std::vector<CommandBuffer>&& commandBuffers,
-            const std::vector<SemaphorePtr>& waitSemaphores,
-            const std::vector<VkPipelineStageFlags>& waitDstStageMasks,
-            const std::vector<SemaphorePtr>& signalSemaphores
+            const SubmitSemaphores& submitSemaphores,
+            const FencePtr& computeFence,
+            const FencePtr& transferFence
         )
         {
             SubmitInfo info {};
 
             info.submitType = submitType;
-            translateSemaphores(info, waitSemaphores, waitDstStageMasks, signalSemaphores);
+            translateSemaphores(info, submitSemaphores);
+
+            if (computeFence != nullptr) {
+                info.computeUserFence = computeFence->fence();
+            }
+
+            if (transferFence != nullptr) {
+                info.transferUserFence = transferFence->fence();
+            }
 
             transferSubmitInfo(std::move(info), std::move(commandBuffers));
         }
@@ -180,15 +310,22 @@ namespace coffee {
             }
 
             if (currentOperation_ % imageCountForSwapChain_ == 0) {
-                clearCompletedCommandBuffers();
+                clearCompletedWork();
             }
 
             std::vector<VkSubmitInfo> graphicsInfos {};
-            std::vector<VkSubmitInfo> computeInfos {};
-            std::vector<VkSubmitInfo> transferInfos {};
+            std::vector<std::vector<VkSubmitInfo>> computeInfos {};
+            std::vector<VkFence> computeFences {};
+            std::vector<std::vector<VkSubmitInfo>> transferInfos {};
+            std::vector<VkFence> transferFences {};
             std::vector<VkSwapchainKHR> swapChains {};
             std::vector<VkSemaphore> swapChainSemaphores {};
             std::vector<uint32_t> imageIndices {};
+
+            computeInfos.push_back({});
+            computeFences.push_back(VK_NULL_HANDLE);
+            transferInfos.push_back({});
+            transferFences.push_back(VK_NULL_HANDLE);
 
             for (const auto& submitInfo : pendingSubmits_) {
                 VkSubmitInfo nativeSubmitInfo { VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -213,15 +350,36 @@ namespace coffee {
                     *currentSwapChainFrame = (*currentSwapChainFrame + 1) % imageCountForSwapChain_;
                 }
 
+                // User might wanna do multiple submits per frame, every of them might have it own fence
+                // We must ensure that submits are tightly packed so we can reduce some overhead to driver
+
                 switch (submitInfo.submitType) {
                     case CommandBufferType::Graphics:
+                        // Graphics always have only one fence, provided by implementation itself
+                        // So we will just accumulate all submits into one to reduce overhead
                         graphicsInfos.push_back(std::move(nativeSubmitInfo));
                         break;
                     case CommandBufferType::Compute:
-                        computeInfos.push_back(std::move(nativeSubmitInfo));
+                        if (computeFences.back() == VK_NULL_HANDLE) {
+                            computeFences.back() = submitInfo.computeUserFence;
+                        }
+                        else if (submitInfo.computeUserFence != VK_NULL_HANDLE && computeFences.back() != submitInfo.computeUserFence) {
+                            computeFences.push_back(submitInfo.computeUserFence);
+                            computeInfos.emplace_back();
+                        }
+
+                        computeInfos.back().push_back(std::move(nativeSubmitInfo));
                         break;
                     case CommandBufferType::Transfer:
-                        transferInfos.push_back(std::move(nativeSubmitInfo));
+                        if (transferFences.back() == VK_NULL_HANDLE) {
+                            transferFences.back() = submitInfo.transferUserFence;
+                        }
+                        else if (submitInfo.transferUserFence != VK_NULL_HANDLE && transferFences.back() != submitInfo.transferUserFence) {
+                            transferFences.push_back(submitInfo.transferUserFence);
+                            transferInfos.emplace_back();
+                        }
+
+                        transferInfos.back().push_back(std::move(nativeSubmitInfo));
                         break;
                 }
             }
@@ -241,54 +399,42 @@ namespace coffee {
             vkResetFences(logicalDevice_, 1, &fencesInFlight_[currentOperationInFlight_]);
 
             if (!graphicsInfos.empty()) {
-                pendingTask_.graphicsCompletionFence = fencesInFlight_[currentOperationInFlight_];
+                pendingTask_.globalCompletionFence = { fencesInFlight_[currentOperationInFlight_], false };
+                pendingTask_.globalFenceType = CommandBufferType::Graphics;
 
                 endSubmit(graphicsQueue_, graphicsQueueMutex_, graphicsInfos, fencesInFlight_[currentOperationInFlight_]);
             }
 
             if (!computeInfos.empty()) {
-                if (computeQueue_ != VK_NULL_HANDLE) {
-                    pendingTask_.computeCompletionFence = acquireFence();
+                VkQueue submitQueue = computeQueue_ != VK_NULL_HANDLE ? computeQueue_ : graphicsQueue_;
+                tbb::queuing_mutex& submitMutex = computeQueue_ != VK_NULL_HANDLE ? computeQueueMutex_ : graphicsQueueMutex_;
 
-                    endSubmit(computeQueue_, computeQueueMutex_, computeInfos, pendingTask_.computeCompletionFence);
-                }
-                else {
-                    VkFence completionFence = VK_NULL_HANDLE;
+                for (size_t index = 0; index < computeInfos.size(); index++) {
+                    bool fenceRequired = computeFences[index] == VK_NULL_HANDLE;
+                    pendingTask_.computeCompletionFences.push_back({ fenceRequired ? acquireFence() : computeFences[index], fenceRequired });
 
-                    if (pendingTask_.graphicsCompletionFence == VK_NULL_HANDLE) {
-                        pendingTask_.graphicsCompletionFence = fencesInFlight_[currentOperationInFlight_];
-                        completionFence = pendingTask_.graphicsCompletionFence;
-                    }
-
-                    endSubmit(graphicsQueue_, graphicsQueueMutex_, computeInfos, completionFence);
+                    ScopeGuard fenceGuard([&]() { returnFence(pendingTask_.computeCompletionFences.back()); });
+                    endSubmit(submitQueue, submitMutex, computeInfos[index], pendingTask_.computeCompletionFences[index]);
+                    fenceGuard.release();
                 }
             }
 
             if (!transferInfos.empty()) {
-                if (transferQueue_ != VK_NULL_HANDLE) {
-                    pendingTask_.transferCompletionFence = acquireFence();
+                VkQueue submitQueue = transferQueue_ != VK_NULL_HANDLE  ? transferQueue_
+                                      : computeQueue_ != VK_NULL_HANDLE ? computeQueue_
+                                                                        : graphicsQueue_;
+                tbb::queuing_mutex& submitMutex =
+                    transferQueue_ != VK_NULL_HANDLE  ? transferQueueMutex_
+                    : computeQueue_ != VK_NULL_HANDLE ? computeQueueMutex_
+                                                      : graphicsQueueMutex_;
 
-                    endSubmit(transferQueue_, transferQueueMutex_, transferInfos, pendingTask_.transferCompletionFence);
-                }
-                else if (computeQueue_ != VK_NULL_HANDLE) {
-                    VkFence completionFence = VK_NULL_HANDLE;
+                for (size_t index = 0; index < transferInfos.size(); index++) {
+                    bool fenceRequired = transferFences[index] == VK_NULL_HANDLE;
+                    pendingTask_.transferCompletionFences.push_back({ fenceRequired ? acquireFence() : transferFences[index], fenceRequired });
 
-                    if (pendingTask_.computeCompletionFence == VK_NULL_HANDLE) {
-                        pendingTask_.computeCompletionFence = acquireFence();
-                        completionFence = pendingTask_.computeCompletionFence;
-                    }
-                    
-                    endSubmit(computeQueue_, computeQueueMutex_, transferInfos, completionFence);
-                }
-                else {
-                    VkFence completionFence = VK_NULL_HANDLE;
-
-                    if (pendingTask_.graphicsCompletionFence == VK_NULL_HANDLE) {
-                        pendingTask_.graphicsCompletionFence = fencesInFlight_[currentOperationInFlight_];
-                        completionFence = pendingTask_.graphicsCompletionFence;
-                    }
-
-                    endSubmit(graphicsQueue_, graphicsQueueMutex_, transferInfos, completionFence);
+                    ScopeGuard fenceGuard([&]() { returnFence(pendingTask_.transferCompletionFences.back()); });
+                    endSubmit(submitQueue, submitMutex, transferInfos[index], pendingTask_.transferCompletionFences[index]);
+                    fenceGuard.release();
                 }
             }
 
@@ -305,89 +451,122 @@ namespace coffee {
             currentOperationInFlight_ = (currentOperationInFlight_ + 1) % kMaxOperationsInFlight;
             currentOperation_ = (currentOperation_ + 1) % imageCountForSwapChain_;
 
-            runningTasks_.push_back(std::move(pendingTask_));
+            {
+                tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+                runningTasks_.push_back(std::move(pendingTask_));
+            }
+
             pendingTask_.clear();
             pendingSubmits_.clear();
 
             vmaSetCurrentFrameIndex(allocator_, currentOperation_);
         }
 
-        ScopeExit Device::singleTimeTransfer(CommandBuffer&& transferCommandBuffer)
+        void Device::clearCompletedWork()
         {
-            COFFEE_ASSERT(transferCommandBuffer.type == CommandBufferType::Transfer, "Provided command buffer must been allocated for transfer.");
+            tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+
+            auto removePosition = std::remove_if(runningTasks_.begin(), runningTasks_.end(), [&](const RunningGPUTask& running) {
+                bool canBeSafelyDeleted = true;
+
+                if (canBeSafelyDeleted && running.globalCompletionFence != VK_NULL_HANDLE) {
+                    canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.globalCompletionFence) == VK_SUCCESS);
+                }
+
+                for (size_t index = 0; index < running.computeCompletionFences.size() && canBeSafelyDeleted; index++) {
+                    if (running.computeCompletionFences[index] != VK_NULL_HANDLE) {
+                        canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.computeCompletionFences[index]) == VK_SUCCESS);
+                    }
+                }
+
+                for (size_t index = 0; index < running.transferCompletionFences.size() && canBeSafelyDeleted; index++) {
+                    if (running.transferCompletionFences[index] != VK_NULL_HANDLE) {
+                        canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.transferCompletionFences[index]) == VK_SUCCESS);
+                    }
+                }
+
+                if (canBeSafelyDeleted) {
+                    for (auto& runningCommandBuffer : running.commandBuffers) {
+                        switch (runningCommandBuffer.commandBufferType) {
+                            case CommandBufferType::Graphics:
+                                returnGraphicsCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
+                                break;
+                            case CommandBufferType::Compute:
+                                returnComputeCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
+                                break;
+                            case CommandBufferType::Transfer:
+                                returnTransferCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
+                                break;
+                        }
+                    }
+
+                    returnFence(running.globalCompletionFence);
+
+                    for (auto& computeFenceOwnership : running.computeCompletionFences) {
+                        returnFence(computeFenceOwnership);
+                    }
+
+                    for (auto& transferFenceOwnership : running.transferCompletionFences) {
+                        returnFence(transferFenceOwnership);
+                    }
+                }
+
+                return canBeSafelyDeleted;
+            });
+
+            runningTasks_.erase(removePosition, runningTasks_.end());
+        }
+
+        void Device::singleTimeOperation(CommandBuffer&& commandBuffer, const FencePtr& submitFence)
+        {
+            bool fenceRequired = submitFence == nullptr;
+            FenceOwnership fenceOwnership { fenceRequired ? acquireFence() : submitFence->fence(), fenceRequired };
+
+            if (transferQueue_ != VK_NULL_HANDLE && commandBuffer.type == CommandBufferType::Transfer) {
+                return endSingleTimeCommands(transferQueue_, transferQueueMutex_, std::move(commandBuffer), std::move(fenceOwnership));
+            }
+
+            if (computeQueue_ != VK_NULL_HANDLE && commandBuffer.type != CommandBufferType::Graphics) {
+                return endSingleTimeCommands(computeQueue_, computeQueueMutex_, std::move(commandBuffer), std::move(fenceOwnership));
+            }
+
+            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(commandBuffer), std::move(fenceOwnership));
+        }
+
+        void Device::singleTimeTransfer(std::vector<CommandBuffer>&& transferCommandBuffers, const FencePtr& submitFence)
+        {
+            bool fenceRequired = submitFence == nullptr;
+            FenceOwnership fenceOwnership { fenceRequired ? acquireFence() : submitFence->fence(), fenceRequired };
 
             if (transferQueue_ != VK_NULL_HANDLE) {
-                return endSingleTimeCommands(transferQueue_, transferQueueMutex_, std::move(transferCommandBuffer));
-            }
-
-            // Try to submit into compute queue if possible
-            if (computeQueue_ != VK_NULL_HANDLE) {
-                return endSingleTimeCommands(computeQueue_, computeQueueMutex_, std::move(transferCommandBuffer));
-            }
-
-            // Fallback to graphics queue, potentially can cause a stallers because of pipeline barriers
-            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(transferCommandBuffer));
-        }
-
-        ScopeExit Device::singleTimeTransfer(std::vector<CommandBuffer>&& transferCommandBuffers)
-        {
-            for ([[maybe_unused]] auto& transferCommandBuffer : transferCommandBuffers) {
-                COFFEE_ASSERT(transferCommandBuffer.type == CommandBufferType::Transfer, "Provided command buffer must been allocated for transfer.");
-            }
-
-            if (transferQueue_ != VK_NULL_HANDLE) {
-                return endSingleTimeCommands(transferQueue_, transferQueueMutex_, std::move(transferCommandBuffers));
-            }
-
-            // Try to submit into compute queue if possible
-            if (computeQueue_ != VK_NULL_HANDLE) {
-                return endSingleTimeCommands(computeQueue_, computeQueueMutex_, std::move(transferCommandBuffers));
-            }
-
-            // Fallback to graphics queue, potentially can cause a stallers because of pipeline barriers
-            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(transferCommandBuffers));
-        }
-
-        ScopeExit Device::singleTimeCompute(CommandBuffer&& computeCommandBuffer)
-        {
-            COFFEE_ASSERT(
-                computeCommandBuffer.type != CommandBufferType::Graphics,
-                "Provided command buffer must been allocated for transfer or compute."
-            );
-
-            if (computeQueue_ != VK_NULL_HANDLE) {
-                return endSingleTimeCommands(computeQueue_, computeQueueMutex_, std::move(computeCommandBuffer));
-            }
-
-            // Fallback to graphics queue, potentially can cause a stallers because of pipeline barriers
-            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(computeCommandBuffer));
-        }
-
-        ScopeExit Device::singleTimeCompute(std::vector<CommandBuffer>&& computeCommandBuffers)
-        {
-            for ([[maybe_unused]] auto& computeCommandBuffer : computeCommandBuffers) {
-                COFFEE_ASSERT(
-                    computeCommandBuffer.type != CommandBufferType::Graphics,
-                    "Provided command buffer must been allocated for transfer or compute."
-                );
+                return endSingleTimeCommands(transferQueue_, transferQueueMutex_, std::move(transferCommandBuffers), std::move(fenceOwnership));
             }
 
             if (computeQueue_ != VK_NULL_HANDLE) {
-                return endSingleTimeCommands(computeQueue_, computeQueueMutex_, std::move(computeCommandBuffers));
+                return endSingleTimeCommands(computeQueue_, computeQueueMutex_, std::move(transferCommandBuffers), std::move(fenceOwnership));
             }
 
-            // Fallback to graphics queue, potentially can cause a stallers because of pipeline barriers
-            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(computeCommandBuffers));
+            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(transferCommandBuffers), std::move(fenceOwnership));
         }
 
-        ScopeExit Device::singleTimeGraphics(CommandBuffer&& graphicsCommandBuffer)
+        void Device::singleTimeCompute(std::vector<CommandBuffer>&& computeCommandBuffers, const FencePtr& submitFence)
         {
-            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(graphicsCommandBuffer));
+            bool fenceRequired = submitFence == nullptr;
+            FenceOwnership fenceOwnership { fenceRequired ? acquireFence() : submitFence->fence(), fenceRequired };
+
+            if (computeQueue_ != VK_NULL_HANDLE) {
+                return endSingleTimeCommands(computeQueue_, computeQueueMutex_, std::move(computeCommandBuffers), std::move(fenceOwnership));
+            }
+
+            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(computeCommandBuffers), std::move(fenceOwnership));
         }
 
-        ScopeExit Device::singleTimeGraphics(std::vector<CommandBuffer>&& graphicsCommandBuffers)
+        void Device::singleTimeGraphics(std::vector<CommandBuffer>&& graphicsCommandBuffers, const FencePtr& submitFence)
         {
-            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(graphicsCommandBuffers));
+            bool fenceRequired = submitFence == nullptr;
+            FenceOwnership fenceOwnership { fenceRequired ? acquireFence() : submitFence->fence(), fenceRequired };
+
+            return endSingleTimeCommands(graphicsQueue_, graphicsQueueMutex_, std::move(graphicsCommandBuffers), std::move(fenceOwnership));
         }
 
         void Device::initializeGlobalEnvironment()
@@ -813,33 +992,39 @@ namespace coffee {
             return indices.isSuitable() && requiredExtensions.empty() && swapChainAdequate && features.samplerAnisotropy;
         }
 
-        void Device::translateSemaphores(
-            SubmitInfo& submitInfo,
-            const std::vector<SemaphorePtr>& waitSemaphores,
-            const std::vector<VkPipelineStageFlags>& waitDstStageMasks,
-            const std::vector<SemaphorePtr>& signalSemaphores
-        )
+        void Device::translateSemaphores(SubmitInfo& submitInfo, const SubmitSemaphores& semaphores)
         {
-            COFFEE_ASSERT(waitSemaphores.size() == waitDstStageMasks.size(), "Amount of wait stages must be equal to amount of wait semaphores.");
+            COFFEE_ASSERT(
+                semaphores.waitSemaphores.size() == semaphores.waitDstStageMasks.size(),
+                "Amount of wait stages must be equal to amount of wait semaphores."
+            );
 
-            if (!waitSemaphores.empty()) {
-                submitInfo.waitSemaphoresCount = static_cast<uint32_t>(waitSemaphores.size());
-                submitInfo.waitSemaphores = std::make_unique<VkSemaphore[]>(waitSemaphores.size());
+            if (!semaphores.waitSemaphores.empty()) {
+                submitInfo.waitSemaphoresCount = static_cast<uint32_t>(semaphores.waitSemaphores.size());
+                submitInfo.waitSemaphores = std::make_unique<VkSemaphore[]>(semaphores.waitSemaphores.size());
 
-                for (size_t index = 0; index < waitSemaphores.size(); index++) {
-                    submitInfo.waitSemaphores[index] = waitSemaphores[index]->semaphore();
+                for (size_t index = 0; index < semaphores.waitSemaphores.size(); index++) {
+                    COFFEE_ASSERT(semaphores.waitSemaphores[index] != nullptr, "Invalid wait semaphore provided.");
+
+                    submitInfo.waitSemaphores[index] = semaphores.waitSemaphores[index]->semaphore();
                 }
 
-                submitInfo.waitDstStageMasks = std::make_unique<VkPipelineStageFlags[]>(waitDstStageMasks.size());
-                std::memcpy(submitInfo.waitDstStageMasks.get(), waitDstStageMasks.data(), waitDstStageMasks.size() * sizeof(VkPipelineStageFlags));
+                submitInfo.waitDstStageMasks = std::make_unique<VkPipelineStageFlags[]>(semaphores.waitDstStageMasks.size());
+                std::memcpy(
+                    submitInfo.waitDstStageMasks.get(),
+                    semaphores.waitDstStageMasks.data(),
+                    semaphores.waitDstStageMasks.size() * sizeof(VkPipelineStageFlags)
+                );
             }
 
-            if (!signalSemaphores.empty()) {
-                submitInfo.signalSemaphoresCount = static_cast<uint32_t>(signalSemaphores.size());
-                submitInfo.signalSemaphores = std::make_unique<VkSemaphore[]>(signalSemaphores.size());
+            if (!semaphores.signalSemaphores.empty()) {
+                submitInfo.signalSemaphoresCount = static_cast<uint32_t>(semaphores.signalSemaphores.size());
+                submitInfo.signalSemaphores = std::make_unique<VkSemaphore[]>(semaphores.signalSemaphores.size());
 
-                for (size_t index = 0; index < signalSemaphores.size(); index++) {
-                    submitInfo.signalSemaphores[index] = signalSemaphores[index]->semaphore();
+                for (size_t index = 0; index < semaphores.signalSemaphores.size(); index++) {
+                    COFFEE_ASSERT(semaphores.signalSemaphores[index] != nullptr, "Invalid signal semaphore provided.");
+
+                    submitInfo.signalSemaphores[index] = semaphores.signalSemaphores[index]->semaphore();
                 }
             }
         }
@@ -904,19 +1089,46 @@ namespace coffee {
             return fence;
         }
 
-        void Device::returnFence(VkFence fence) {
-            if (fence == VK_NULL_HANDLE) {
+        void Device::returnFence(const FenceOwnership& fenceOwnership)
+        {
+            if (!fenceOwnership.owned || fenceOwnership == VK_NULL_HANDLE) {
                 return;
             }
 
+            VkFence fence = fenceOwnership;
             vkResetFences(logicalDevice_, 1, &fence);
-            fencesPool_.push(fence);
+
+            fencesPool_.push(fenceOwnership);
         }
 
-        ScopeExit Device::endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, CommandBuffer&& commandBuffer)
+        void Device::notifyFenceDestruction(VkFence destroyedFence) noexcept
         {
-            VkFence fence = acquireFence();
-            VkResult result = vkEndCommandBuffer(commandBuffer);
+            tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+
+            for (auto& task : runningTasks_) {
+                if (task.globalCompletionFence == destroyedFence) {
+                    task.globalCompletionFence = VK_NULL_HANDLE;
+                }
+
+                for (auto& computeFence : task.computeCompletionFences) {
+                    if (computeFence == destroyedFence) {
+                        computeFence = VK_NULL_HANDLE;
+                    }
+                }
+
+                for (auto& transferFence : task.transferCompletionFences) {
+                    if (transferFence == destroyedFence) {
+                        transferFence = VK_NULL_HANDLE;
+                    }
+                }
+            }
+        }
+
+        void Device::endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, CommandBuffer&& buffer, FenceOwnership&& fence)
+        {
+            ScopeGuard fenceGuard([&]() { returnFence(fence); });
+
+            VkResult result = vkEndCommandBuffer(buffer);
 
             if (result != VK_SUCCESS) {
                 COFFEE_ERROR("Failed to end single time command buffer!");
@@ -924,7 +1136,7 @@ namespace coffee {
                 throw RegularVulkanException { result };
             }
 
-            VkCommandBuffer vkCommandBuffer = commandBuffer;
+            VkCommandBuffer vkCommandBuffer = buffer;
             VkSubmitInfo submitInfo { VK_STRUCTURE_TYPE_SUBMIT_INFO };
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &vkCommandBuffer;
@@ -940,23 +1152,39 @@ namespace coffee {
                 }
             }
 
-            return ScopeExit([this, fence, cb = std::move(commandBuffer)]() {
-                vkWaitForFences(logicalDevice_, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
-                
-                returnFence(fence);
-            });
+            RunningCommandBuffer operation {};
+            operation.commandBufferType = buffer.type;
+            operation.pool = std::exchange(buffer.pool_, VK_NULL_HANDLE);
+            operation.buffer = std::exchange(buffer.buffer_, VK_NULL_HANDLE);
+
+            RunningGPUTask task {};
+            task.globalCompletionFence = std::move(fence);
+            task.globalFenceType = buffer.type;
+            task.commandBuffers.push_back(std::move(operation));
+
+            tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+            runningTasks_.push_back(std::move(task));
+
+            fenceGuard.release();
         }
 
-        ScopeExit Device::endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, std::vector<CommandBuffer>&& commandBuffers)
+        void Device::endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, std::vector<CommandBuffer>&& buffers, FenceOwnership&& fence)
         {
-            VkFence fence = acquireFence();
+            ScopeGuard fenceGuard([&]() { returnFence(fence); });
+
+            if (buffers.empty()) {
+                return;
+            }
+
             VkResult result = VK_SUCCESS;
 
             std::vector<VkCommandBuffer> implementationCommandBuffers {};
-            implementationCommandBuffers.resize(commandBuffers.size());
+            implementationCommandBuffers.resize(buffers.size());
 
-            for (size_t i = 0; i < commandBuffers.size(); i++) {
-                result = vkEndCommandBuffer(commandBuffers[i]);
+            RunningGPUTask task {};
+
+            for (size_t i = 0; i < buffers.size(); i++) {
+                result = vkEndCommandBuffer(buffers[i]);
 
                 if (result != VK_SUCCESS) {
                     COFFEE_ERROR("Failed to end single time command buffer!");
@@ -964,7 +1192,15 @@ namespace coffee {
                     throw RegularVulkanException { result };
                 }
 
-                implementationCommandBuffers[i] = commandBuffers[i];
+                implementationCommandBuffers[i] = buffers[i];
+
+                RunningCommandBuffer operation {};
+                operation.commandBufferType = buffers[i].type;
+                operation.pool = std::exchange(buffers[i].pool_, VK_NULL_HANDLE);
+                operation.buffer = std::exchange(buffers[i].buffer_, VK_NULL_HANDLE);
+                task.commandBuffers.push_back(std::move(operation));
+
+                task.globalFenceType = buffers[i].type;
             }
 
             VkSubmitInfo submitInfo { VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -982,11 +1218,12 @@ namespace coffee {
                 }
             }
 
-            return ScopeExit([this, fence, cbs = std::move(commandBuffers)]() {
-                vkWaitForFences(logicalDevice_, 1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max());
-                
-                returnFence(fence);
-            });
+            task.globalCompletionFence = std::move(fence);
+
+            tbb::queuing_mutex::scoped_lock lock { tasksMutex_ };
+            runningTasks_.push_back(std::move(task));
+
+            fenceGuard.release();
         }
 
         void Device::endSubmit(VkQueue queue, tbb::queuing_mutex& mutex, const std::vector<VkSubmitInfo>& submits, VkFence fence)
@@ -1153,48 +1390,6 @@ namespace coffee {
             }
 
             return commandBufferType == CommandBufferType::Transfer;
-        }
-
-        void Device::clearCompletedCommandBuffers()
-        {
-            auto removePosition = std::remove_if(runningTasks_.begin(), runningTasks_.end(), [&](const RunningGPUTask& running) {
-                bool canBeSafelyDeleted = true;
-
-                if (canBeSafelyDeleted && running.graphicsCompletionFence != VK_NULL_HANDLE) {
-                    canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.graphicsCompletionFence) == VK_SUCCESS);
-                }
-
-                if (canBeSafelyDeleted && running.computeCompletionFence != VK_NULL_HANDLE) {
-                    canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.computeCompletionFence) == VK_SUCCESS);
-                }
-
-                if (canBeSafelyDeleted && running.transferCompletionFence != VK_NULL_HANDLE) {
-                    canBeSafelyDeleted &= (vkGetFenceStatus(logicalDevice_, running.transferCompletionFence) == VK_SUCCESS);
-                }
-
-                if (canBeSafelyDeleted) {
-                    for (auto& runningCommandBuffer : running.commandBuffers) {
-                        switch (runningCommandBuffer.commandBufferType) {
-                            case CommandBufferType::Graphics:
-                                returnGraphicsCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
-                                break;
-                            case CommandBufferType::Compute:
-                                returnComputeCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
-                                break;
-                            case CommandBufferType::Transfer:
-                                returnTransferCommandPoolAndBuffer(runningCommandBuffer.pool, runningCommandBuffer.buffer);
-                                break;
-                        }
-                    }
-
-                    returnFence(running.computeCompletionFence);
-                    returnFence(running.transferCompletionFence);
-                }
-
-                return canBeSafelyDeleted;
-            });
-            
-            runningTasks_.erase(removePosition, runningTasks_.end());
         }
 
     } // namespace graphics

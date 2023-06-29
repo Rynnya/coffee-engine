@@ -1,8 +1,9 @@
 #ifndef COFFEE_GRAPHICS_DEVICE
 #define COFFEE_GRAPHICS_DEVICE
 
+#include <coffee/graphics/fence.hpp>
 #include <coffee/graphics/semaphore.hpp>
-#include <coffee/interfaces/resource_guard.hpp>
+#include <coffee/interfaces/scope_guard.hpp>
 #include <coffee/utils/non_moveable.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
@@ -22,6 +23,12 @@
 namespace coffee {
 
     namespace graphics {
+
+        struct SubmitSemaphores {
+            std::vector<SemaphorePtr> waitSemaphores = {};
+            std::vector<VkPipelineStageFlags> waitDstStageMasks = {};
+            std::vector<SemaphorePtr> signalSemaphores = {};
+        };
 
         // Core class for GPU handling
         // Provides low-level access for Vulkan and mandatory for most graphics wrapper
@@ -43,20 +50,29 @@ namespace coffee {
             // Waits until all frames in flight is done
             void waitForRelease();
 
+            void waitDeviceIdle();
+            void waitTransferQueueIdle();
+            void waitComputeQueueIdle();
+            void waitGraphicsQueueIdle();
+
             void sendCommandBuffer(
                 CommandBuffer&& commandBuffer,
-                const std::vector<SemaphorePtr>& waitSemaphores = {},
-                const std::vector<VkPipelineStageFlags>& waitDstStageMasks = {},
-                const std::vector<SemaphorePtr>& signalSemaphores = {}
+                const SubmitSemaphores& submitSemaphores = {},
+                const FencePtr& computeFence = nullptr,
+                const FencePtr& transferFence = nullptr
             );
             void sendCommandBuffers(
                 CommandBufferType submitType,
                 std::vector<CommandBuffer>&& commandBuffers,
-                const std::vector<SemaphorePtr>& waitSemaphores = {},
-                const std::vector<VkPipelineStageFlags>& waitDstStageMasks = {},
-                const std::vector<SemaphorePtr>& signalSemaphores = {}
+                const SubmitSemaphores& submitSemaphores = {},
+                const FencePtr& computeFence = nullptr,
+                const FencePtr& transferFence = nullptr
             );
             void submitPendingWork();
+
+            // This function called by implementation once per imageCount when submit is called
+            // You most likely doesn't need to call this function explicitly, unless you want reduce memory footprint
+            void clearCompletedWork();
 
             inline uint32_t graphicsQueueFamilyIndex() const noexcept { return indices_.graphicsFamily.value(); }
 
@@ -91,12 +107,16 @@ namespace coffee {
             // Returns true when compute and transfer queue from one family; otherwise false (additional synchronization required)
             inline bool isUnifiedComputeTransferQueue() const noexcept { return computeQueueFamilyIndex() == transferQueueFamilyIndex(); }
 
-            [[nodiscard]] ScopeExit singleTimeTransfer(CommandBuffer&& transferCommandBuffer);
-            [[nodiscard]] ScopeExit singleTimeTransfer(std::vector<CommandBuffer>&& transferCommandBuffers);
-            [[nodiscard]] ScopeExit singleTimeCompute(CommandBuffer&& computeCommandBuffer);
-            [[nodiscard]] ScopeExit singleTimeCompute(std::vector<CommandBuffer>&& computeCommandBuffers);
-            [[nodiscard]] ScopeExit singleTimeGraphics(CommandBuffer&& graphicsCommandBuffer);
-            [[nodiscard]] ScopeExit singleTimeGraphics(std::vector<CommandBuffer>&& graphicsCommandBuffers);
+            // Performs single operation on GPU, automatically selects required queue for this action
+            // Command buffer cleanup will be handled by implementation in any way, whether you provide fence or not
+            void singleTimeOperation(CommandBuffer&& commandBuffer, const FencePtr& submitFence = nullptr);
+
+            // Performs series of operations on GPU, queue is selected by user, and used by implementation if available
+            // Command buffers cleanup will be handled by implementation in any way, whether you provide fence or not
+            // NOTE: Do not mix command buffers from different queue, it will result in undefined behaviour
+            void singleTimeTransfer(std::vector<CommandBuffer>&& transferCommandBuffers, const FencePtr& submitFence = nullptr);
+            void singleTimeCompute(std::vector<CommandBuffer>&& computeCommandBuffers, const FencePtr& submitFence = nullptr);
+            void singleTimeGraphics(std::vector<CommandBuffer>&& graphicsCommandBuffers, const FencePtr& submitFence = nullptr);
 
             // Generic Vulkan structures
 
@@ -155,45 +175,63 @@ namespace coffee {
                 VkCommandBuffer buffer = VK_NULL_HANDLE;
             };
 
+            struct FenceOwnership {
+                VkFence fence = VK_NULL_HANDLE;
+                bool owned = false;
+
+                inline bool operator==(const VkFence other) const noexcept { return fence == other; }
+
+                inline bool operator!=(const VkFence other) const noexcept { return fence != other; }
+
+                inline operator const VkFence&() const noexcept { return fence; }
+
+                inline VkFence operator=(VkFence other) noexcept { return (fence = other); }
+            };
+
             struct RunningGPUTask {
-                RunningGPUTask() noexcept = default;
+                inline RunningGPUTask() noexcept = default;
 
-                RunningGPUTask(const RunningGPUTask&) noexcept = delete;
-                RunningGPUTask& operator=(const RunningGPUTask&) noexcept = delete;
+                inline RunningGPUTask(const RunningGPUTask&) noexcept = delete;
+                inline RunningGPUTask& operator=(const RunningGPUTask&) noexcept = delete;
 
-                RunningGPUTask(RunningGPUTask&& other) noexcept
-                    : graphicsCompletionFence { std::exchange(other.graphicsCompletionFence, VK_NULL_HANDLE) }
-                    , computeCompletionFence { std::exchange(other.computeCompletionFence, VK_NULL_HANDLE) }
-                    , transferCompletionFence { std::exchange(other.transferCompletionFence, VK_NULL_HANDLE) }
+                inline RunningGPUTask(RunningGPUTask&& other) noexcept
+                    : globalCompletionFence { std::exchange(other.globalCompletionFence, { VK_NULL_HANDLE, false }) }
+                    , globalFenceType { std::exchange(other.globalFenceType, CommandBufferType::Graphics) }
+                    , computeCompletionFences { std::move(other.computeCompletionFences) }
+                    , transferCompletionFences { std::move(other.transferCompletionFences) }
                     , commandBuffers { std::move(other.commandBuffers) }
                 {}
 
-                RunningGPUTask& operator=(RunningGPUTask&& other) noexcept
+                inline RunningGPUTask& operator=(RunningGPUTask&& other) noexcept
                 {
                     if (this == &other) {
                         return *this;
                     }
 
-                    graphicsCompletionFence = std::exchange(other.graphicsCompletionFence, VK_NULL_HANDLE);
-                    computeCompletionFence = std::exchange(other.computeCompletionFence, VK_NULL_HANDLE);
-                    transferCompletionFence = std::exchange(other.transferCompletionFence, VK_NULL_HANDLE);
+                    globalCompletionFence = std::exchange(other.globalCompletionFence, { VK_NULL_HANDLE, false });
+                    globalFenceType = std::exchange(other.globalFenceType, CommandBufferType::Graphics);
+                    computeCompletionFences = std::move(other.computeCompletionFences);
+                    transferCompletionFences = std::move(other.transferCompletionFences);
                     commandBuffers = std::move(other.commandBuffers);
 
                     return *this;
                 }
 
-                void clear() noexcept
+                inline void clear() noexcept
                 {
-                    graphicsCompletionFence = VK_NULL_HANDLE;
-                    computeCompletionFence = VK_NULL_HANDLE;
-                    transferCompletionFence = VK_NULL_HANDLE;
+                    globalCompletionFence = { VK_NULL_HANDLE, false };
+                    globalFenceType = CommandBufferType::Graphics;
 
+                    computeCompletionFences.clear();
+                    transferCompletionFences.clear();
                     commandBuffers.clear();
                 }
 
-                VkFence graphicsCompletionFence = VK_NULL_HANDLE;
-                VkFence computeCompletionFence = VK_NULL_HANDLE;
-                VkFence transferCompletionFence = VK_NULL_HANDLE;
+                // Also can be referred as graphics fence
+                FenceOwnership globalCompletionFence { VK_NULL_HANDLE, false };
+                CommandBufferType globalFenceType = CommandBufferType::Graphics;
+                std::vector<FenceOwnership> computeCompletionFences {};
+                std::vector<FenceOwnership> transferCompletionFences {};
                 std::vector<RunningCommandBuffer> commandBuffers {};
             };
 
@@ -206,6 +244,8 @@ namespace coffee {
                 std::unique_ptr<VkSemaphore[]> waitSemaphores = nullptr;
                 std::unique_ptr<VkPipelineStageFlags[]> waitDstStageMasks = nullptr;
                 std::unique_ptr<VkSemaphore[]> signalSemaphores = nullptr;
+                VkFence computeUserFence = VK_NULL_HANDLE;
+                VkFence transferUserFence = VK_NULL_HANDLE;
                 VkSwapchainKHR swapChain = VK_NULL_HANDLE;
                 VkSemaphore swapChainWaitSemaphore = VK_NULL_HANDLE;
                 uint32_t* currentFrame = nullptr;
@@ -231,19 +271,15 @@ namespace coffee {
 
             bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions = {});
 
-            void translateSemaphores(
-                SubmitInfo& submitInfo,
-                const std::vector<SemaphorePtr>& waitSemaphores,
-                const std::vector<VkPipelineStageFlags>& waitDstStageMasks,
-                const std::vector<SemaphorePtr>& signalSemaphores
-            );
+            void translateSemaphores(SubmitInfo& submitInfo, const SubmitSemaphores& semaphores);
             void transferSubmitInfo(SubmitInfo&& submitInfo, std::vector<CommandBuffer>&& commandBuffers);
 
             VkFence acquireFence();
-            void returnFence(VkFence fence);
+            void returnFence(const FenceOwnership& fenceOwnership);
+            void notifyFenceDestruction(VkFence destroyedFence) noexcept;
 
-            ScopeExit endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, CommandBuffer&& commandBuffer);
-            ScopeExit endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, std::vector<CommandBuffer>&& commandBuffers);
+            void endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, CommandBuffer&& buffer, FenceOwnership&& fence);
+            void endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, std::vector<CommandBuffer>&& buffers, FenceOwnership&& fence);
             void endSubmit(VkQueue queue, tbb::queuing_mutex& mutex, const std::vector<VkSubmitInfo>& submits, VkFence fence);
 
             std::pair<VkCommandPool, VkCommandBuffer> acquireGraphicsCommandPoolAndBuffer();
@@ -254,7 +290,6 @@ namespace coffee {
             void returnTransferCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer);
 
             static bool isCommandBufferAllowedForSubmitType(CommandBufferType submitType, CommandBufferType commandBufferType);
-            void clearCompletedCommandBuffers();
 
             uint32_t imageCountForSwapChain_ = 0;
             uint32_t currentOperation_ = 0;         // Must be in range of [0, imageCountForSwapChain]
@@ -286,6 +321,7 @@ namespace coffee {
             tbb::queuing_mutex submitMutex_ {};
             std::vector<SubmitInfo> pendingSubmits_ {};
 
+            tbb::queuing_mutex tasksMutex_ {};
             RunningGPUTask pendingTask_ {};
             std::vector<RunningGPUTask> runningTasks_ {};
 
@@ -302,6 +338,8 @@ namespace coffee {
 
             friend class CommandBuffer;
             friend class SwapChain;
+
+            friend Fence::~Fence() noexcept;
         };
 
     } // namespace graphics

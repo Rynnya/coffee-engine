@@ -11,7 +11,6 @@
 #include <coffee/graphics/pipeline.hpp>
 #include <coffee/graphics/render_pass.hpp>
 #include <coffee/graphics/sampler.hpp>
-#include <coffee/graphics/single_time.hpp>
 #include <coffee/graphics/window.hpp>
 
 #include <coffee/interfaces/asset_manager.hpp>
