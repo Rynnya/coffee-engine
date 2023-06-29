@@ -21,7 +21,12 @@ namespace coffee {
             ~SwapChain() noexcept;
 
             bool acquireNextImage();
-            void submitCommandBuffers(std::vector<CommandBuffer>&& commandBuffers);
+            void submitCommandBuffers(
+                std::vector<CommandBuffer>&& commandBuffers,
+                const SubmitSemaphores& submitSemaphores = {},
+                const FencePtr& computeFence = nullptr,
+                const FencePtr& transferFence = nullptr
+            );
 
             void recreate(uint32_t width, uint32_t height, VkPresentModeKHR mode);
 

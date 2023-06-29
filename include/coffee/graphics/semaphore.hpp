@@ -2,6 +2,7 @@
 #define COFFEE_GRAPHICS_SEMAPHORE
 
 #include <coffee/types.hpp>
+#include <coffee/utils/non_moveable.hpp>
 
 namespace coffee {
 
@@ -10,13 +11,13 @@ namespace coffee {
         class Semaphore;
         using SemaphorePtr = std::shared_ptr<Semaphore>;
 
-        class Semaphore {
+        class Semaphore : NonMoveable {
         public:
             ~Semaphore() noexcept;
 
             static SemaphorePtr create(const DevicePtr& device);
 
-            inline VkSemaphore semaphore() const noexcept { return semaphore_; }
+            inline const VkSemaphore& semaphore() const noexcept { return semaphore_; }
 
         private:
             Semaphore(const DevicePtr& device);

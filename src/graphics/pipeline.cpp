@@ -161,14 +161,48 @@ namespace coffee {
 
             std::vector<VkPipelineShaderStageCreateInfo> shaderStages {};
 
+            VkSpecializationInfo vertexSpecializationInfo {};
+            VkSpecializationInfo fragmentSpecializationInfo {};
+            VkSpecializationInfo computeSpecializationInfo {};
+            std::unique_ptr<VkSpecializationMapEntry[]> vertexEntries = nullptr;
+            std::unique_ptr<VkSpecializationMapEntry[]> fragmentEntries = nullptr;
+            std::unique_ptr<VkSpecializationMapEntry[]> computeEntries = nullptr;
+            std::unique_ptr<char[]> vertexData = nullptr;
+            std::unique_ptr<char[]> fragmentData = nullptr;
+            std::unique_ptr<char[]> computeData = nullptr;
+
             if (configuration.vertexShader) {
                 VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+
+                if (!configuration.vertexSpecializationConstants.empty()) {
+                    uint32_t totalDataSize = 0;
+                    uint32_t dataOffset = 0;
+
+                    for (const auto& constant : configuration.vertexSpecializationConstants) {
+                        totalDataSize += static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
+                    }
+
+                    vertexEntries = std::make_unique<VkSpecializationMapEntry[]>(configuration.vertexSpecializationConstants.size());
+                    vertexData = std::make_unique<char[]>(totalDataSize);
+
+                    for (size_t index = 0; index < configuration.vertexSpecializationConstants.size(); index++) {
+                        const auto& constant = configuration.vertexSpecializationConstants[index];
+                        uint32_t constantSize = static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
+
+                        vertexEntries[index].constantID = constant.constantID;
+                        vertexEntries[index].offset = dataOffset;
+                        vertexEntries[index].size = constantSize;
+
+                        std::memcpy(vertexData.get() + dataOffset, &constant.rawData, constant.dataSize);
+                        dataOffset += constantSize;
+                    }
+                }
 
                 auto& vertexShader = configuration.vertexShader.value();
                 shaderCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
                 shaderCreateInfo.module = vertexShader->shader();
                 shaderCreateInfo.pName = vertexShader->entrypoint.data();
-                shaderCreateInfo.pSpecializationInfo = nullptr;
+                shaderCreateInfo.pSpecializationInfo = &vertexSpecializationInfo;
 
                 shaderStages.push_back(std::move(shaderCreateInfo));
             }
@@ -176,11 +210,35 @@ namespace coffee {
             if (configuration.fragmentShader) {
                 VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
+                if (!configuration.fragmentSpecializationConstants.empty()) {
+                    uint32_t totalDataSize = 0;
+                    uint32_t dataOffset = 0;
+
+                    for (const auto& constant : configuration.fragmentSpecializationConstants) {
+                        totalDataSize += static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
+                    }
+
+                    fragmentEntries = std::make_unique<VkSpecializationMapEntry[]>(configuration.fragmentSpecializationConstants.size());
+                    fragmentData = std::make_unique<char[]>(totalDataSize);
+
+                    for (size_t index = 0; index < configuration.fragmentSpecializationConstants.size(); index++) {
+                        const auto& constant = configuration.fragmentSpecializationConstants[index];
+                        uint32_t constantSize = static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
+
+                        fragmentEntries[index].constantID = constant.constantID;
+                        fragmentEntries[index].offset = dataOffset;
+                        fragmentEntries[index].size = constantSize;
+
+                        std::memcpy(fragmentData.get() + dataOffset, &constant.rawData, constant.dataSize);
+                        dataOffset += constantSize;
+                    }
+                }
+
                 auto& fragmentShader = configuration.fragmentShader.value();
                 shaderCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
                 shaderCreateInfo.module = fragmentShader->shader();
                 shaderCreateInfo.pName = fragmentShader->entrypoint.data();
-                shaderCreateInfo.pSpecializationInfo = nullptr;
+                shaderCreateInfo.pSpecializationInfo = &fragmentSpecializationInfo;
 
                 shaderStages.push_back(std::move(shaderCreateInfo));
             }
@@ -188,11 +246,35 @@ namespace coffee {
             if (configuration.computeShader) {
                 VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
+                if (!configuration.computeSpecializationConstants.empty()) {
+                    uint32_t totalDataSize = 0;
+                    uint32_t dataOffset = 0;
+
+                    for (const auto& constant : configuration.computeSpecializationConstants) {
+                        totalDataSize += static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
+                    }
+
+                    computeEntries = std::make_unique<VkSpecializationMapEntry[]>(configuration.computeSpecializationConstants.size());
+                    computeData = std::make_unique<char[]>(totalDataSize);
+
+                    for (size_t index = 0; index < configuration.computeSpecializationConstants.size(); index++) {
+                        const auto& constant = configuration.computeSpecializationConstants[index];
+                        uint32_t constantSize = static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
+
+                        computeEntries[index].constantID = constant.constantID;
+                        computeEntries[index].offset = dataOffset;
+                        computeEntries[index].size = constantSize;
+
+                        std::memcpy(computeData.get() + dataOffset, &constant.rawData, constant.dataSize);
+                        dataOffset += constantSize;
+                    }
+                }
+
                 auto& computeShader = configuration.computeShader.value();
                 shaderCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
                 shaderCreateInfo.module = computeShader->shader();
                 shaderCreateInfo.pName = computeShader->entrypoint.data();
-                shaderCreateInfo.pSpecializationInfo = nullptr;
+                shaderCreateInfo.pSpecializationInfo = &computeSpecializationInfo;
 
                 shaderStages.push_back(std::move(shaderCreateInfo));
             }

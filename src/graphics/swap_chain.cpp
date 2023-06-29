@@ -61,30 +61,66 @@ namespace coffee {
             return true;
         }
 
-        void SwapChain::submitCommandBuffers(std::vector<CommandBuffer>&& commandBuffers)
+        void SwapChain::submitCommandBuffers(
+            std::vector<CommandBuffer>&& commandBuffers,
+            const SubmitSemaphores& submitSemaphores,
+            const FencePtr& computeFence,
+            const FencePtr& transferFence
+        )
         {
             COFFEE_ASSERT(!commandBuffers.empty(), "Application shouldn't send empty command buffer list.");
+
+            COFFEE_ASSERT(
+                submitSemaphores.waitSemaphores.size() == submitSemaphores.waitDstStageMasks.size(),
+                "Amount of wait stages must be equal to amount of wait semaphores."
+            );
 
             // Swapchain only must take care of semaphores, command buffers will be translated inside Device
             Device::SubmitInfo info {};
 
             info.submitType = CommandBufferType::Graphics;
-            info.waitSemaphoresCount = 1U;
-            info.signalSemaphoresCount = 1U;
+            info.waitSemaphoresCount = submitSemaphores.waitSemaphores.size() + 1U;
+            info.signalSemaphoresCount = submitSemaphores.signalSemaphores.size() + 1U;
 
-            info.waitSemaphores = std::make_unique<VkSemaphore[]>(1);
-            info.waitSemaphores[0] = imageAvailableSemaphores_[device_->currentOperationInFlight()];
+            info.waitSemaphores = std::make_unique<VkSemaphore[]>(submitSemaphores.waitSemaphores.size() + 1U);
+            info.waitSemaphores[submitSemaphores.waitSemaphores.size()] = imageAvailableSemaphores_[device_->currentOperationInFlight()];
 
-            info.waitDstStageMasks = std::make_unique<VkPipelineStageFlags[]>(1);
-            info.waitDstStageMasks[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            for (size_t index = 0; index < submitSemaphores.waitSemaphores.size(); index++) {
+                COFFEE_ASSERT(submitSemaphores.waitSemaphores[index] != nullptr, "Invalid wait semaphore provided.");
 
-            info.signalSemaphores = std::make_unique<VkSemaphore[]>(1);
-            info.signalSemaphores[0] = renderFinishedSemaphores_[device_->currentOperationInFlight()];
+                info.waitSemaphores[index] = submitSemaphores.waitSemaphores[index]->semaphore();
+            }
+
+            info.waitDstStageMasks = std::make_unique<VkPipelineStageFlags[]>(submitSemaphores.waitSemaphores.size() + 1U);
+            info.waitDstStageMasks[submitSemaphores.waitSemaphores.size()] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+            std::memcpy(
+                info.waitDstStageMasks.get(),
+                submitSemaphores.waitDstStageMasks.data(),
+                submitSemaphores.waitSemaphores.size() * sizeof(VkPipelineStageFlags)
+            );
+
+            info.signalSemaphores = std::make_unique<VkSemaphore[]>(submitSemaphores.signalSemaphores.size() + 1U);
+            info.signalSemaphores[submitSemaphores.signalSemaphores.size()] = renderFinishedSemaphores_[device_->currentOperationInFlight()];
+
+            for (size_t index = 0; index < submitSemaphores.signalSemaphores.size(); index++) {
+                COFFEE_ASSERT(submitSemaphores.signalSemaphores[index] != nullptr, "Invalid wait semaphore provided.");
+
+                info.signalSemaphores[index] = submitSemaphores.signalSemaphores[index]->semaphore();
+            }
+
+            if (computeFence != nullptr) {
+                info.computeUserFence = computeFence->fence();
+            }
+
+            if (transferFence != nullptr) {
+                info.transferUserFence = transferFence->fence();
+            }
 
             info.swapChain = handle_;
             info.swapChainWaitSemaphore = renderFinishedSemaphores_[device_->currentOperationInFlight()];
             info.currentFrame = &currentFrame_;
-            
+
             device_->transferSubmitInfo(std::move(info), std::move(commandBuffers));
         }
 
