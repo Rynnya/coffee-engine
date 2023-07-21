@@ -13,8 +13,6 @@
 #include <oneapi/tbb/task_group.h>
 #include <vma/vk_mem_alloc.h>
 
-// Volk already included through vk_utils.hpp
-
 #include <array>
 
 // Required to remove some annoying warning about redefinition on Windows
@@ -43,32 +41,32 @@ namespace coffee {
 
             static DevicePtr create();
 
-            // Called by swapchain when acquiring next image
-            // Waits until previous frame is done
-            void waitForAcquire();
-            // Called by swapchain when resize occurs
-            // Waits until all frames in flight is done
-            void waitForRelease();
-
             void waitDeviceIdle();
             void waitTransferQueueIdle();
             void waitComputeQueueIdle();
             void waitGraphicsQueueIdle();
 
-            void sendCommandBuffer(
+            // Submits command buffer to same queue where it was initially created
+            // waitAndReset can be set to true ever if you don't provide any fence
+            void submit(
                 CommandBuffer&& commandBuffer,
-                const SubmitSemaphores& submitSemaphores = {},
-                const FencePtr& computeFence = nullptr,
-                const FencePtr& transferFence = nullptr
+                const SubmitSemaphores& semaphores = {},
+                const FencePtr& fence = nullptr,
+                bool waitAndReset = false
             );
-            void sendCommandBuffers(
-                CommandBufferType submitType,
+            // Submits command buffers to same queue where it was initially created
+            // If command buffer list is empty this operation acts as no-op
+            // WARNING: DO NOT MIX command buffers from different queues!
+            // waitAndReset can be set to true ever if you don't provide any fence
+            void submit(
                 std::vector<CommandBuffer>&& commandBuffers,
-                const SubmitSemaphores& submitSemaphores = {},
-                const FencePtr& computeFence = nullptr,
-                const FencePtr& transferFence = nullptr
+                const SubmitSemaphores& semaphores = {},
+                const FencePtr& fence = nullptr,
+                bool waitAndReset = false
             );
-            void submitPendingWork();
+            // Presents all swapchain images for current frame and switches to next frame
+            // If there's no swapchain work to be done this operation acts as no-op
+            void present();
 
             // This function called by implementation once per imageCount when submit is called
             // You most likely doesn't need to call this function explicitly, unless you want reduce memory footprint
@@ -106,17 +104,6 @@ namespace coffee {
 
             // Returns true when compute and transfer queue from one family; otherwise false (additional synchronization required)
             inline bool isUnifiedComputeTransferQueue() const noexcept { return computeQueueFamilyIndex() == transferQueueFamilyIndex(); }
-
-            // Performs single operation on GPU, automatically selects required queue for this action
-            // Command buffer cleanup will be handled by implementation in any way, whether you provide fence or not
-            void singleTimeOperation(CommandBuffer&& commandBuffer, const FencePtr& submitFence = nullptr);
-
-            // Performs series of operations on GPU, queue is selected by user, and used by implementation if available
-            // Command buffers cleanup will be handled by implementation in any way, whether you provide fence or not
-            // NOTE: Do not mix command buffers from different queue, it will result in undefined behaviour
-            void singleTimeTransfer(std::vector<CommandBuffer>&& transferCommandBuffers, const FencePtr& submitFence = nullptr);
-            void singleTimeCompute(std::vector<CommandBuffer>&& computeCommandBuffers, const FencePtr& submitFence = nullptr);
-            void singleTimeGraphics(std::vector<CommandBuffer>&& graphicsCommandBuffers, const FencePtr& submitFence = nullptr);
 
             // Generic Vulkan structures
 
@@ -169,83 +156,32 @@ namespace coffee {
             inline VkFormat optimalDepthStencilFormat() const noexcept { return optimalDepthStencilFormat_; }
 
         private:
-            struct RunningCommandBuffer {
-                CommandBufferType commandBufferType = CommandBufferType::Graphics;
-                VkCommandPool pool = VK_NULL_HANDLE;
-                VkCommandBuffer buffer = VK_NULL_HANDLE;
+            struct Task {
+                CommandBufferType taskType = CommandBufferType::Graphics;
+                VkFence fenceHandle = VK_NULL_HANDLE;
+                bool implementationProvidedFence = false;
+                uint32_t commandBuffersCount = 0U;
+                std::unique_ptr<VkCommandPool[]> commandPools = nullptr;
+                std::unique_ptr<VkCommandBuffer[]> commandBuffers = nullptr;
             };
 
-            struct FenceOwnership {
-                VkFence fence = VK_NULL_HANDLE;
-                bool owned = false;
-
-                inline bool operator==(const VkFence other) const noexcept { return fence == other; }
-
-                inline bool operator!=(const VkFence other) const noexcept { return fence != other; }
-
-                inline operator const VkFence&() const noexcept { return fence; }
-
-                inline VkFence operator=(VkFence other) noexcept { return (fence = other); }
-            };
-
-            struct RunningGPUTask {
-                inline RunningGPUTask() noexcept = default;
-
-                inline RunningGPUTask(const RunningGPUTask&) noexcept = delete;
-                inline RunningGPUTask& operator=(const RunningGPUTask&) noexcept = delete;
-
-                inline RunningGPUTask(RunningGPUTask&& other) noexcept
-                    : globalCompletionFence { std::exchange(other.globalCompletionFence, { VK_NULL_HANDLE, false }) }
-                    , globalFenceType { std::exchange(other.globalFenceType, CommandBufferType::Graphics) }
-                    , computeCompletionFences { std::move(other.computeCompletionFences) }
-                    , transferCompletionFences { std::move(other.transferCompletionFences) }
-                    , commandBuffers { std::move(other.commandBuffers) }
-                {}
-
-                inline RunningGPUTask& operator=(RunningGPUTask&& other) noexcept
-                {
-                    if (this == &other) {
-                        return *this;
-                    }
-
-                    globalCompletionFence = std::exchange(other.globalCompletionFence, { VK_NULL_HANDLE, false });
-                    globalFenceType = std::exchange(other.globalFenceType, CommandBufferType::Graphics);
-                    computeCompletionFences = std::move(other.computeCompletionFences);
-                    transferCompletionFences = std::move(other.transferCompletionFences);
-                    commandBuffers = std::move(other.commandBuffers);
-
-                    return *this;
-                }
-
-                inline void clear() noexcept
-                {
-                    globalCompletionFence = { VK_NULL_HANDLE, false };
-                    globalFenceType = CommandBufferType::Graphics;
-
-                    computeCompletionFences.clear();
-                    transferCompletionFences.clear();
-                    commandBuffers.clear();
-                }
-
-                // Also can be referred as graphics fence
-                FenceOwnership globalCompletionFence { VK_NULL_HANDLE, false };
-                CommandBufferType globalFenceType = CommandBufferType::Graphics;
-                std::vector<FenceOwnership> computeCompletionFences {};
-                std::vector<FenceOwnership> transferCompletionFences {};
-                std::vector<RunningCommandBuffer> commandBuffers {};
+            struct PendingPresent {
+                VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+                VkSemaphore waitSemaphore = VK_NULL_HANDLE;
+                uint32_t* currentFrame = nullptr;
             };
 
             struct SubmitInfo {
                 CommandBufferType submitType = CommandBufferType::Graphics;
                 uint32_t commandBuffersCount = 0U;
-                uint32_t waitSemaphoresCount = 0U;
-                uint32_t signalSemaphoresCount = 0U;
                 std::unique_ptr<VkCommandBuffer[]> commandBuffers = nullptr;
+                std::unique_ptr<VkCommandPool[]> commandPools = nullptr;
+                uint32_t waitSemaphoresCount = 0U;
                 std::unique_ptr<VkSemaphore[]> waitSemaphores = nullptr;
                 std::unique_ptr<VkPipelineStageFlags[]> waitDstStageMasks = nullptr;
+                uint32_t signalSemaphoresCount = 0U;
                 std::unique_ptr<VkSemaphore[]> signalSemaphores = nullptr;
-                VkFence computeUserFence = VK_NULL_HANDLE;
-                VkFence transferUserFence = VK_NULL_HANDLE;
+                VkFence fence = VK_NULL_HANDLE;
                 VkSwapchainKHR swapChain = VK_NULL_HANDLE;
                 VkSemaphore swapChainWaitSemaphore = VK_NULL_HANDLE;
                 uint32_t* currentFrame = nullptr;
@@ -265,22 +201,21 @@ namespace coffee {
             void createDebugMessenger();
             void pickPhysicalDevice(VkSurfaceKHR surface);
             void createLogicalDevice(VkSurfaceKHR surface);
-            void createSyncObjects();
             void createDescriptorPool();
             void createAllocator();
 
             bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions = {});
 
             void translateSemaphores(SubmitInfo& submitInfo, const SubmitSemaphores& semaphores);
-            void transferSubmitInfo(SubmitInfo&& submitInfo, std::vector<CommandBuffer>&& commandBuffers);
 
             VkFence acquireFence();
-            void returnFence(const FenceOwnership& fenceOwnership);
-            void notifyFenceDestruction(VkFence destroyedFence) noexcept;
+            void returnFence(VkFence fence);
+            void notifyFenceCleanup(VkFence cleanedFence) noexcept;
 
-            void endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, CommandBuffer&& buffer, FenceOwnership&& fence);
-            void endSingleTimeCommands(VkQueue queue, tbb::queuing_mutex& mutex, std::vector<CommandBuffer>&& buffers, FenceOwnership&& fence);
-            void endSubmit(VkQueue queue, tbb::queuing_mutex& mutex, const std::vector<VkSubmitInfo>& submits, VkFence fence);
+            void endGraphicsSubmit(SubmitInfo&& submit, const FencePtr& fence, bool waitAndReset);
+            void endComputeSubmit(SubmitInfo&& submit, const FencePtr& fence, bool waitAndReset);
+            void endTransferSubmit(SubmitInfo&& submit, const FencePtr& fence, bool waitAndReset);
+            void endSubmit(VkQueue queue, tbb::queuing_mutex& mutex, SubmitInfo& submit, VkFence fence);
 
             std::pair<VkCommandPool, VkCommandBuffer> acquireGraphicsCommandPoolAndBuffer();
             void returnGraphicsCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer);
@@ -289,7 +224,7 @@ namespace coffee {
             std::pair<VkCommandPool, VkCommandBuffer> acquireTransferCommandPoolAndBuffer();
             void returnTransferCommandPoolAndBuffer(VkCommandPool pool, VkCommandBuffer buffer);
 
-            static bool isCommandBufferAllowedForSubmitType(CommandBufferType submitType, CommandBufferType commandBufferType);
+            void cleanupCompletedTask(const Task& task);
 
             uint32_t imageCountForSwapChain_ = 0;
             uint32_t currentOperation_ = 0;         // Must be in range of [0, imageCountForSwapChain]
@@ -318,15 +253,11 @@ namespace coffee {
             tbb::queuing_mutex computeQueueMutex_ {};
             tbb::queuing_mutex transferQueueMutex_ {};
 
-            tbb::queuing_mutex submitMutex_ {};
-            std::vector<SubmitInfo> pendingSubmits_ {};
+            tbb::queuing_mutex pendingPresentsMutex_ {};
+            std::vector<PendingPresent> pendingPresents_ {};
 
             tbb::queuing_mutex tasksMutex_ {};
-            RunningGPUTask pendingTask_ {};
-            std::vector<RunningGPUTask> runningTasks_ {};
-
-            std::vector<VkFence> operationsInFlight_ {};
-            std::array<VkFence, kMaxOperationsInFlight> fencesInFlight_ {};
+            std::vector<Task> runningTasks_ {};
 
             tbb::concurrent_queue<std::pair<VkCommandPool, VkCommandBuffer>> graphicsPools_ {};
             tbb::concurrent_queue<std::pair<VkCommandPool, VkCommandBuffer>> computePools_ {};
@@ -337,9 +268,8 @@ namespace coffee {
             VmaAllocator allocator_ = VK_NULL_HANDLE;
 
             friend class CommandBuffer;
+            friend class Fence;
             friend class SwapChain;
-
-            friend Fence::~Fence() noexcept;
         };
 
     } // namespace graphics

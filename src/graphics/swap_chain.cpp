@@ -25,7 +25,7 @@ namespace coffee {
         {
             images_.clear();
 
-            device_->waitForRelease();
+            waitForRelease();
             vkDestroySwapchainKHR(device_->logicalDevice(), handle_, nullptr);
 
             for (size_t i = 0; i < Device::kMaxOperationsInFlight; i++) {
@@ -36,8 +36,7 @@ namespace coffee {
 
         bool SwapChain::acquireNextImage()
         {
-            // This waits for imageAvailableSemaphores_ if previous operation in flight isn't done already
-            device_->waitForAcquire();
+            waitForAcquire();
 
             VkResult result = vkAcquireNextImageKHR(
                 device_->logicalDevice(),
@@ -61,67 +60,53 @@ namespace coffee {
             return true;
         }
 
-        void SwapChain::submitCommandBuffers(
-            std::vector<CommandBuffer>&& commandBuffers,
-            const SubmitSemaphores& submitSemaphores,
-            const FencePtr& computeFence,
-            const FencePtr& transferFence
-        )
+        void SwapChain::submit(std::vector<CommandBuffer>&& commandBuffers)
         {
-            COFFEE_ASSERT(!commandBuffers.empty(), "Application shouldn't send empty command buffer list.");
-
-            COFFEE_ASSERT(
-                submitSemaphores.waitSemaphores.size() == submitSemaphores.waitDstStageMasks.size(),
-                "Amount of wait stages must be equal to amount of wait semaphores."
-            );
-
-            // Swapchain only must take care of semaphores, command buffers will be translated inside Device
-            Device::SubmitInfo info {};
-
-            info.submitType = CommandBufferType::Graphics;
-            info.waitSemaphoresCount = submitSemaphores.waitSemaphores.size() + 1U;
-            info.signalSemaphoresCount = submitSemaphores.signalSemaphores.size() + 1U;
-
-            info.waitSemaphores = std::make_unique<VkSemaphore[]>(submitSemaphores.waitSemaphores.size() + 1U);
-            info.waitSemaphores[submitSemaphores.waitSemaphores.size()] = imageAvailableSemaphores_[device_->currentOperationInFlight()];
-
-            for (size_t index = 0; index < submitSemaphores.waitSemaphores.size(); index++) {
-                COFFEE_ASSERT(submitSemaphores.waitSemaphores[index] != nullptr, "Invalid wait semaphore provided.");
-
-                info.waitSemaphores[index] = submitSemaphores.waitSemaphores[index]->semaphore();
+            if (commandBuffers.empty()) {
+                return;
             }
 
-            info.waitDstStageMasks = std::make_unique<VkPipelineStageFlags[]>(submitSemaphores.waitSemaphores.size() + 1U);
-            info.waitDstStageMasks[submitSemaphores.waitSemaphores.size()] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            VkResult result = VK_SUCCESS;
+            Device::SubmitInfo submitInfo {};
 
-            std::memcpy(
-                info.waitDstStageMasks.get(),
-                submitSemaphores.waitDstStageMasks.data(),
-                submitSemaphores.waitSemaphores.size() * sizeof(VkPipelineStageFlags)
-            );
+            submitInfo.submitType = CommandBufferType::Graphics;
+            submitInfo.commandBuffersCount = static_cast<uint32_t>(commandBuffers.size());
+            submitInfo.commandBuffers = std::make_unique<VkCommandBuffer[]>(commandBuffers.size());
+            submitInfo.commandPools = std::make_unique<VkCommandPool[]>(commandBuffers.size());
 
-            info.signalSemaphores = std::make_unique<VkSemaphore[]>(submitSemaphores.signalSemaphores.size() + 1U);
-            info.signalSemaphores[submitSemaphores.signalSemaphores.size()] = renderFinishedSemaphores_[device_->currentOperationInFlight()];
+            for (size_t index = 0; index < commandBuffers.size(); index++) {
+                auto& commandBuffer = commandBuffers[index];
 
-            for (size_t index = 0; index < submitSemaphores.signalSemaphores.size(); index++) {
-                COFFEE_ASSERT(submitSemaphores.signalSemaphores[index] != nullptr, "Invalid wait semaphore provided.");
+                COFFEE_ASSERT(submitInfo.submitType == commandBuffer.type, "All command buffers inside single submit must match by it's type.");
 
-                info.signalSemaphores[index] = submitSemaphores.signalSemaphores[index]->semaphore();
+                if ((result = vkEndCommandBuffer(commandBuffer)) != VK_SUCCESS) {
+                    COFFEE_FATAL("Failed to end command buffer!");
+
+                    // Having this issue most likely mean that command buffer construction is broken
+                    // So our only valid case is throw fatal exception, even tho device might be active and everything is working correctly
+                    throw FatalVulkanException { result };
+                }
+
+                submitInfo.commandBuffers[index] = commandBuffer.buffer_;
+                submitInfo.commandPools[index] = std::exchange(commandBuffer.pool_, VK_NULL_HANDLE);
             }
 
-            if (computeFence != nullptr) {
-                info.computeUserFence = computeFence->fence();
-            }
+            submitInfo.waitSemaphoresCount = 1U;
+            submitInfo.signalSemaphoresCount = 1U;
 
-            if (transferFence != nullptr) {
-                info.transferUserFence = transferFence->fence();
-            }
+            submitInfo.waitSemaphores = std::make_unique<VkSemaphore[]>(1U);
+            submitInfo.waitSemaphores[0] = imageAvailableSemaphores_[device_->currentOperationInFlight()];
+            submitInfo.waitDstStageMasks = std::make_unique<VkPipelineStageFlags[]>(1U);
+            submitInfo.waitDstStageMasks[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-            info.swapChain = handle_;
-            info.swapChainWaitSemaphore = renderFinishedSemaphores_[device_->currentOperationInFlight()];
-            info.currentFrame = &currentFrame_;
+            submitInfo.signalSemaphores = std::make_unique<VkSemaphore[]>(1U);
+            submitInfo.signalSemaphores[0] = renderFinishedSemaphores_[device_->currentOperationInFlight()];
 
-            device_->transferSubmitInfo(std::move(info), std::move(commandBuffers));
+            submitInfo.swapChain = handle_;
+            submitInfo.swapChainWaitSemaphore = renderFinishedSemaphores_[device_->currentOperationInFlight()];
+            submitInfo.currentFrame = &currentFrame_;
+
+            device_->endGraphicsSubmit(std::move(submitInfo), fencesInFlight_[device_->currentOperationInFlight()], false);
         }
 
         void SwapChain::recreate(uint32_t width, uint32_t height, VkPresentModeKHR mode)
@@ -131,7 +116,7 @@ namespace coffee {
             VkSwapchainKHR oldSwapChain = handle_;
             createSwapChain({ width, height }, mode, oldSwapChain);
 
-            device_->waitForRelease();
+            waitForRelease();
             vkDestroySwapchainKHR(device_->logicalDevice(), oldSwapChain, nullptr);
         }
 
@@ -225,6 +210,8 @@ namespace coffee {
             VkResult result = VK_SUCCESS;
 
             for (size_t i = 0; i < Device::kMaxOperationsInFlight; i++) {
+                fencesInFlight_[i] = Fence::create(device_, true);
+
                 if ((result = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores_[i])) != VK_SUCCESS) {
                     COFFEE_ERROR("Failed to create semaphore for notifying available images!");
 
@@ -237,6 +224,25 @@ namespace coffee {
                     throw RegularVulkanException { result };
                 }
             }
+        }
+
+        void SwapChain::waitForAcquire()
+        {
+            auto& fence = fencesInFlight_[device_->currentOperationInFlight()];
+
+            fence->wait();
+            fence->reset();
+        }
+
+        void SwapChain::waitForRelease()
+        {
+            VkFence fences[Device::kMaxOperationsInFlight] {};
+
+            for (size_t index = 0; index < Device::kMaxOperationsInFlight; index++) {
+                fences[index] = fencesInFlight_[index]->fence();
+            }
+
+            vkWaitForFences(device_->logicalDevice(), Device::kMaxOperationsInFlight, fences, VK_TRUE, std::numeric_limits<uint64_t>::max());
         }
 
     } // namespace graphics

@@ -21,12 +21,7 @@ namespace coffee {
             ~SwapChain() noexcept;
 
             bool acquireNextImage();
-            void submitCommandBuffers(
-                std::vector<CommandBuffer>&& commandBuffers,
-                const SubmitSemaphores& submitSemaphores = {},
-                const FencePtr& computeFence = nullptr,
-                const FencePtr& transferFence = nullptr
-            );
+            void submit(std::vector<CommandBuffer>&& commandBuffers);
 
             void recreate(uint32_t width, uint32_t height, VkPresentModeKHR mode);
 
@@ -41,6 +36,9 @@ namespace coffee {
             void createSwapChain(VkExtent2D extent, VkPresentModeKHR preferablePresentMode, VkSwapchainKHR oldSwapchain = nullptr);
             void createSyncObjects();
 
+            void waitForAcquire();
+            void waitForRelease();
+
             DevicePtr device_;
 
             VkSurfaceKHR surface_ = VK_NULL_HANDLE;
@@ -49,6 +47,7 @@ namespace coffee {
             uint32_t currentFrame_ = 0U;
 
             std::vector<ImagePtr> images_ {};
+            std::array<FencePtr, Device::kMaxOperationsInFlight> fencesInFlight_ {};
             std::array<VkSemaphore, Device::kMaxOperationsInFlight> imageAvailableSemaphores_ {};
             std::array<VkSemaphore, Device::kMaxOperationsInFlight> renderFinishedSemaphores_ {};
 

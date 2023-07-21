@@ -168,7 +168,7 @@ namespace coffee {
                 throw RegularVulkanException { result };
             }
 
-            updateDescriptor(writer);
+            update(writer);
         }
 
         DescriptorSet::~DescriptorSet() noexcept { vkFreeDescriptorSets(device_->logicalDevice(), device_->descriptorPool(), 1, &set_); }
@@ -180,7 +180,7 @@ namespace coffee {
             return std::shared_ptr<DescriptorSet>(new DescriptorSet { device, writer });
         }
 
-        void DescriptorSet::updateDescriptor(const DescriptorWriter& writer)
+        void DescriptorSet::update(const DescriptorWriter& writer)
         {
             const auto& bindings = writer.layout_->bindings;
             const auto& writes = writer.writes_;
@@ -217,8 +217,7 @@ namespace coffee {
                         writeImpl.pImageInfo = &imageInfos.back();
                         break;
                     }
-                    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-                    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
+                    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
                         COFFEE_ASSERT(writeInfo.sampler != nullptr, "Sampler was requested, but wasn't provided.");
                         COFFEE_ASSERT(writeInfo.imageView != nullptr, "Image was requested, but wasn't provided.");
 
@@ -231,6 +230,7 @@ namespace coffee {
                         writeImpl.pImageInfo = &imageInfos.back();
                         break;
                     }
+                    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
                     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
                     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
                         COFFEE_ASSERT(writeInfo.imageView != nullptr, "Image was requested, but wasn't provided.");

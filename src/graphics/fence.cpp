@@ -27,7 +27,7 @@ namespace coffee {
 
         Fence::~Fence() noexcept
         {
-            device_->notifyFenceDestruction(fence_);
+            device_->notifyFenceCleanup(fence_);
 
             vkDestroyFence(device_->logicalDevice(), fence_, nullptr);
         }
@@ -43,7 +43,12 @@ namespace coffee {
 
         void Fence::wait(uint64_t timeout) noexcept { vkWaitForFences(device_->logicalDevice(), 1, &fence_, VK_TRUE, timeout); }
 
-        void Fence::reset() noexcept { vkResetFences(device_->logicalDevice(), 1, &fence_); }
+        void Fence::reset() noexcept
+        {
+            device_->notifyFenceCleanup(fence_);
+
+            vkResetFences(device_->logicalDevice(), 1, &fence_);
+        }
 
     } // namespace graphics
 

@@ -19,7 +19,7 @@ namespace coffee {
         };
 
         class Buffer;
-        using BufferPtr = std::unique_ptr<Buffer>;
+        using BufferPtr = std::shared_ptr<Buffer>;
 
         class Buffer : NonMoveable {
         public:
@@ -27,8 +27,14 @@ namespace coffee {
 
             static BufferPtr create(const DevicePtr& device, const BufferConfiguration& configuration);
 
-            template <typename T>
-            T& map()
+            template <typename T, std::enable_if_t<std::is_pointer_v<T> && !std::is_null_pointer_v<T>, bool> = true>
+            inline T map()
+            {
+                return reinterpret_cast<T>(map());
+            }
+
+            template <typename T, std::enable_if_t<!(std::is_pointer_v<T> || std::is_null_pointer_v<T>), bool> = true>
+            inline T& map()
             {
                 return *reinterpret_cast<T*>(map());
             }
@@ -45,9 +51,27 @@ namespace coffee {
 
             inline const VkBuffer& buffer() const noexcept { return buffer_; }
 
+            template <typename T, std::enable_if_t<std::is_pointer_v<T> && !std::is_null_pointer_v<T>, bool> = true>
+            inline T memory() const noexcept
+            {
+                return reinterpret_cast<T>(memory());
+            }
+
+            template <typename T, std::enable_if_t<!(std::is_pointer_v<T> || std::is_null_pointer_v<T>), bool> = true>
+            inline T& memory() const noexcept
+            {
+                return *reinterpret_cast<T*>(memory());
+            }
+
             // WARNING: This pointer point to the beginning of buffer, so you must always apply offset to it
             // Map doesn't have such flaw because it does offset automatically
-            inline void* memory() const noexcept { return mappedMemory_; }
+            inline void* memory() const noexcept
+            {
+                VmaAllocationInfo info {};
+                vmaGetAllocationInfo(device_->allocator(), allocation_, &info);
+
+                return info.pMappedData;
+            }
 
             inline bool isHostVisible() const noexcept { return isHostVisible_; }
 
@@ -60,8 +84,6 @@ namespace coffee {
 
             VmaAllocation allocation_ = VK_NULL_HANDLE;
             VkBuffer buffer_ = VK_NULL_HANDLE;
-            void* mappedMemory_ = nullptr;
-            std::atomic_uint16_t mapCount_ = 0;
 
             bool isHostVisible_ = false;
             bool isHostCoherent_ = false;

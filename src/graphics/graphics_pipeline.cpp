@@ -1,4 +1,4 @@
-#include <coffee/graphics/pipeline.hpp>
+#include <coffee/graphics/graphics_pipeline.hpp>
 
 #include <coffee/graphics/exceptions.hpp>
 #include <coffee/utils/log.hpp>
@@ -11,46 +11,70 @@ namespace coffee {
 
     namespace graphics {
 
-        Pipeline::Pipeline(const DevicePtr& device, const RenderPassPtr& renderPass, const PipelineConfiguration& configuration) : device_ { device }
+        GraphicsPipeline::GraphicsPipeline(const DevicePtr& device, const RenderPassPtr& renderPass, const GraphicsPipelineConfiguration& config)
+            : device_ { device }
         {
             VkResult result = VK_SUCCESS;
             VkPipelineLayoutCreateInfo createInfo { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
 
             std::vector<VkDescriptorSetLayout> setLayouts {};
-            std::vector<VkPushConstantRange> pushConstantsRanges {};
 
-            for (const auto& descriptorLayout : configuration.layouts) {
+            for (const auto& descriptorLayout : config.layouts) {
                 setLayouts.push_back(descriptorLayout->layout());
             }
 
-            for (const auto& range : configuration.constantRanges) {
-                VkPushConstantRange rangeImpl {};
+            uint32_t pushConstantsSize = 0;
+            std::array<VkPushConstantRange, 2> pushConstantsRanges {};
 
-                uint32_t roundedOffset = Math::roundToMultiple(range.offset, 4ULL);
-                uint32_t roundedSize = Math::roundToMultiple(range.size, 4ULL);
+            if (config.vertexPushConstants.size > 0) {
+                size_t alignedSize = Math::roundToMultiple(config.vertexPushConstants.size, 4ULL);
+                size_t alignedOffset = Math::roundToMultiple(config.vertexPushConstants.offset, 4ULL);
 
-                rangeImpl.stageFlags = range.stages;
-                rangeImpl.offset = roundedOffset;
-                rangeImpl.size = roundedSize;
+                verifySize("size", config.vertexPushConstants.size, alignedSize);
+                verifySize("offset", config.vertexPushConstants.offset, alignedOffset);
 
-                auto validateSize = [](const char* name, uint32_t originalSize, uint32_t roundedSize) {
-                    if (originalSize != roundedSize) {
-                        COFFEE_WARNING(
-                        "Provided {} with size {} isn't multiple of 4 and was rounded up to {}. "
-                        "This might cause a strange behaviour in your shaders.",
-                        name, originalSize, roundedSize);
-                    }
-                };
+                if (alignedSize > 128 || alignedSize + alignedOffset > 128) {
+                    COFFEE_WARNING(
+                        "Specification only allow us to use up to 128 bytes of push constants, while you requested {} with offset {}. "
+                        "It's generally not recommended to overpass this limit, as it might cause crash on some devices.", 
+                        config.vertexPushConstants.size, config.vertexPushConstants.offset
+                    );
+                }
 
-                validateSize("size", range.size, roundedSize);
-                validateSize("offset", range.offset, roundedOffset);
+                auto& pushConstants = pushConstantsRanges[pushConstantsSize];
+                pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+                pushConstants.size = static_cast<uint32_t>(alignedSize);
+                pushConstants.offset = static_cast<uint32_t>(alignedOffset);
 
-                pushConstantsRanges.push_back(std::move(rangeImpl));
+                pushConstantsSize++;
+            }
+
+            if (config.fragmentPushConstants.size > 0) {
+                size_t alignedSize = Math::roundToMultiple(config.fragmentPushConstants.size, 4ULL);
+                size_t alignedOffset = Math::roundToMultiple(config.fragmentPushConstants.offset, 4ULL);
+
+                verifySize("size", config.fragmentPushConstants.size, alignedSize);
+                verifySize("offset", config.fragmentPushConstants.offset, alignedOffset);
+
+                if (alignedSize > 128 || alignedSize + alignedOffset > 128) {
+                    COFFEE_WARNING(
+                        "Specification only allow us to use up to 128 bytes of push constants, while you requested {} with offset {}. "
+                        "It's generally not recommended to overpass this limit, as it might cause crash on some devices.", 
+                        config.fragmentPushConstants.size, config.fragmentPushConstants.offset
+                    );
+                }
+
+                auto& pushConstants = pushConstantsRanges[pushConstantsSize];
+                pushConstants.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+                pushConstants.size = static_cast<uint32_t>(alignedSize);
+                pushConstants.offset = static_cast<uint32_t>(alignedOffset);
+
+                pushConstantsSize++;
             }
 
             createInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
             createInfo.pSetLayouts = setLayouts.data();
-            createInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantsRanges.size());
+            createInfo.pushConstantRangeCount = pushConstantsSize;
             createInfo.pPushConstantRanges = pushConstantsRanges.data();
 
             if ((result = vkCreatePipelineLayout(device_->logicalDevice(), &createInfo, nullptr, &layout_)) != VK_SUCCESS) {
@@ -62,7 +86,7 @@ namespace coffee {
             std::vector<VkVertexInputBindingDescription> bindingDescriptions {};
             std::vector<VkVertexInputAttributeDescription> attributeDescriptions {};
 
-            for (const auto& inputBinding : configuration.inputBindings) {
+            for (const auto& inputBinding : config.inputBindings) {
                 VkVertexInputBindingDescription bindingDescription {};
 
                 bindingDescription.binding = inputBinding.binding;
@@ -96,42 +120,42 @@ namespace coffee {
             viewportInfo.pScissors = nullptr;
 
             VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-            inputAssemblyInfo.topology = configuration.inputAssembly.topology;
-            inputAssemblyInfo.primitiveRestartEnable = configuration.inputAssembly.primitiveRestartEnable ? VK_TRUE : VK_FALSE;
+            inputAssemblyInfo.topology = config.inputAssembly.topology;
+            inputAssemblyInfo.primitiveRestartEnable = config.inputAssembly.primitiveRestartEnable ? VK_TRUE : VK_FALSE;
 
             VkPipelineRasterizationStateCreateInfo rasterizationInfo { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
             rasterizationInfo.depthClampEnable = VK_FALSE;
             rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
-            rasterizationInfo.polygonMode = configuration.rasterizationInfo.fillMode;
-            rasterizationInfo.cullMode = configuration.rasterizationInfo.cullMode;
-            rasterizationInfo.frontFace = configuration.rasterizationInfo.frontFace;
-            rasterizationInfo.depthBiasEnable = configuration.rasterizationInfo.depthBiasEnable ? VK_TRUE : VK_FALSE;
-            rasterizationInfo.depthBiasConstantFactor = configuration.rasterizationInfo.depthBiasConstantFactor;
-            rasterizationInfo.depthBiasClamp = configuration.rasterizationInfo.depthBiasClamp;
-            rasterizationInfo.depthBiasSlopeFactor = configuration.rasterizationInfo.depthBiasSlopeFactor;
+            rasterizationInfo.polygonMode = config.rasterizationInfo.fillMode;
+            rasterizationInfo.cullMode = config.rasterizationInfo.cullMode;
+            rasterizationInfo.frontFace = config.rasterizationInfo.frontFace;
+            rasterizationInfo.depthBiasEnable = config.rasterizationInfo.depthBiasEnable ? VK_TRUE : VK_FALSE;
+            rasterizationInfo.depthBiasConstantFactor = config.rasterizationInfo.depthBiasConstantFactor;
+            rasterizationInfo.depthBiasClamp = config.rasterizationInfo.depthBiasClamp;
+            rasterizationInfo.depthBiasSlopeFactor = config.rasterizationInfo.depthBiasSlopeFactor;
             rasterizationInfo.lineWidth = 1.0f;
 
             VkPipelineMultisampleStateCreateInfo multisampleInfo { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-            multisampleInfo.rasterizationSamples = VkUtils::getUsableSampleCount(configuration.multisampleInfo.sampleCount, device_->properties());
-            multisampleInfo.sampleShadingEnable = configuration.multisampleInfo.sampleRateShading ? VK_TRUE : VK_FALSE;
-            multisampleInfo.minSampleShading = configuration.multisampleInfo.minSampleShading;
+            multisampleInfo.rasterizationSamples = VkUtils::getUsableSampleCount(config.multisampleInfo.sampleCount, device_->properties());
+            multisampleInfo.sampleShadingEnable = config.multisampleInfo.sampleRateShading ? VK_TRUE : VK_FALSE;
+            multisampleInfo.minSampleShading = config.multisampleInfo.minSampleShading;
             multisampleInfo.pSampleMask = nullptr;
-            multisampleInfo.alphaToCoverageEnable = configuration.multisampleInfo.alphaToCoverage ? VK_TRUE : VK_FALSE;
+            multisampleInfo.alphaToCoverageEnable = config.multisampleInfo.alphaToCoverage ? VK_TRUE : VK_FALSE;
             multisampleInfo.alphaToOneEnable = VK_FALSE;
 
             VkPipelineColorBlendStateCreateInfo colorBlendInfo { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-            colorBlendInfo.logicOpEnable = configuration.colorBlendAttachment.logicOpEnable ? VK_TRUE : VK_FALSE;
-            colorBlendInfo.logicOp = configuration.colorBlendAttachment.logicOp;
+            colorBlendInfo.logicOpEnable = config.colorBlendAttachment.logicOpEnable ? VK_TRUE : VK_FALSE;
+            colorBlendInfo.logicOp = config.colorBlendAttachment.logicOp;
 
             VkPipelineColorBlendAttachmentState colorBlendAttachment {};
-            colorBlendAttachment.blendEnable = configuration.colorBlendAttachment.blendEnable ? VK_TRUE : VK_FALSE;
-            colorBlendAttachment.srcColorBlendFactor = configuration.colorBlendAttachment.srcColorBlendFactor;
-            colorBlendAttachment.dstColorBlendFactor = configuration.colorBlendAttachment.dstColorBlendFactor;
-            colorBlendAttachment.colorBlendOp = configuration.colorBlendAttachment.colorBlendOp;
-            colorBlendAttachment.srcAlphaBlendFactor = configuration.colorBlendAttachment.srcAlphaBlendFactor;
-            colorBlendAttachment.dstAlphaBlendFactor = configuration.colorBlendAttachment.dstAlphaBlendFactor;
-            colorBlendAttachment.alphaBlendOp = configuration.colorBlendAttachment.alphaBlendOp;
-            colorBlendAttachment.colorWriteMask = configuration.colorBlendAttachment.colorWriteMask;
+            colorBlendAttachment.blendEnable = config.colorBlendAttachment.blendEnable ? VK_TRUE : VK_FALSE;
+            colorBlendAttachment.srcColorBlendFactor = config.colorBlendAttachment.srcColorBlendFactor;
+            colorBlendAttachment.dstColorBlendFactor = config.colorBlendAttachment.dstColorBlendFactor;
+            colorBlendAttachment.colorBlendOp = config.colorBlendAttachment.colorBlendOp;
+            colorBlendAttachment.srcAlphaBlendFactor = config.colorBlendAttachment.srcAlphaBlendFactor;
+            colorBlendAttachment.dstAlphaBlendFactor = config.colorBlendAttachment.dstAlphaBlendFactor;
+            colorBlendAttachment.alphaBlendOp = config.colorBlendAttachment.alphaBlendOp;
+            colorBlendAttachment.colorWriteMask = config.colorBlendAttachment.colorWriteMask;
 
             colorBlendInfo.attachmentCount = 1;
             colorBlendInfo.pAttachments = &colorBlendAttachment;
@@ -141,13 +165,13 @@ namespace coffee {
             colorBlendInfo.blendConstants[3] = 0.0f;
 
             VkPipelineDepthStencilStateCreateInfo depthStencilInfo { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-            depthStencilInfo.depthTestEnable = configuration.depthStencilInfo.depthTestEnable ? VK_TRUE : VK_FALSE;
-            depthStencilInfo.depthWriteEnable = configuration.depthStencilInfo.depthWriteEnable ? VK_TRUE : VK_FALSE;
-            depthStencilInfo.depthCompareOp = configuration.depthStencilInfo.depthCompareOp;
+            depthStencilInfo.depthTestEnable = config.depthStencilInfo.depthTestEnable ? VK_TRUE : VK_FALSE;
+            depthStencilInfo.depthWriteEnable = config.depthStencilInfo.depthWriteEnable ? VK_TRUE : VK_FALSE;
+            depthStencilInfo.depthCompareOp = config.depthStencilInfo.depthCompareOp;
             depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
-            depthStencilInfo.stencilTestEnable = configuration.depthStencilInfo.stencilTestEnable ? VK_TRUE : VK_FALSE;
-            depthStencilInfo.front = configuration.depthStencilInfo.frontFace;
-            depthStencilInfo.back = configuration.depthStencilInfo.backFace;
+            depthStencilInfo.stencilTestEnable = config.depthStencilInfo.stencilTestEnable ? VK_TRUE : VK_FALSE;
+            depthStencilInfo.front = config.depthStencilInfo.frontFace;
+            depthStencilInfo.back = config.depthStencilInfo.backFace;
             depthStencilInfo.minDepthBounds = 0.0f;
             depthStencilInfo.maxDepthBounds = 1.0f;
 
@@ -171,22 +195,22 @@ namespace coffee {
             std::unique_ptr<char[]> fragmentData = nullptr;
             std::unique_ptr<char[]> computeData = nullptr;
 
-            if (configuration.vertexShader) {
+            if (config.vertexShader != nullptr) {
                 VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
-                if (!configuration.vertexSpecializationConstants.empty()) {
+                if (!config.vertexSpecializationConstants.empty()) {
                     uint32_t totalDataSize = 0;
                     uint32_t dataOffset = 0;
 
-                    for (const auto& constant : configuration.vertexSpecializationConstants) {
+                    for (const auto& constant : config.vertexSpecializationConstants) {
                         totalDataSize += static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
                     }
 
-                    vertexEntries = std::make_unique<VkSpecializationMapEntry[]>(configuration.vertexSpecializationConstants.size());
+                    vertexEntries = std::make_unique<VkSpecializationMapEntry[]>(config.vertexSpecializationConstants.size());
                     vertexData = std::make_unique<char[]>(totalDataSize);
 
-                    for (size_t index = 0; index < configuration.vertexSpecializationConstants.size(); index++) {
-                        const auto& constant = configuration.vertexSpecializationConstants[index];
+                    for (size_t index = 0; index < config.vertexSpecializationConstants.size(); index++) {
+                        const auto& constant = config.vertexSpecializationConstants[index];
                         uint32_t constantSize = static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
 
                         vertexEntries[index].constantID = constant.constantID;
@@ -196,33 +220,37 @@ namespace coffee {
                         std::memcpy(vertexData.get() + dataOffset, &constant.rawData, constant.dataSize);
                         dataOffset += constantSize;
                     }
+
+                    vertexSpecializationInfo.mapEntryCount = static_cast<uint32_t>(config.vertexSpecializationConstants.size());
+                    vertexSpecializationInfo.pMapEntries = vertexEntries.get();
+                    vertexSpecializationInfo.dataSize = totalDataSize;
+                    vertexSpecializationInfo.pData = vertexData.get();
                 }
 
-                auto& vertexShader = configuration.vertexShader.value();
                 shaderCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-                shaderCreateInfo.module = vertexShader->shader();
-                shaderCreateInfo.pName = vertexShader->entrypoint.data();
+                shaderCreateInfo.module = config.vertexShader->shader();
+                shaderCreateInfo.pName = config.vertexShader->entrypoint.data();
                 shaderCreateInfo.pSpecializationInfo = &vertexSpecializationInfo;
 
                 shaderStages.push_back(std::move(shaderCreateInfo));
             }
 
-            if (configuration.fragmentShader) {
+            if (config.fragmentShader != nullptr) {
                 VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
 
-                if (!configuration.fragmentSpecializationConstants.empty()) {
+                if (!config.fragmentSpecializationConstants.empty()) {
                     uint32_t totalDataSize = 0;
                     uint32_t dataOffset = 0;
 
-                    for (const auto& constant : configuration.fragmentSpecializationConstants) {
+                    for (const auto& constant : config.fragmentSpecializationConstants) {
                         totalDataSize += static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
                     }
 
-                    fragmentEntries = std::make_unique<VkSpecializationMapEntry[]>(configuration.fragmentSpecializationConstants.size());
+                    fragmentEntries = std::make_unique<VkSpecializationMapEntry[]>(config.fragmentSpecializationConstants.size());
                     fragmentData = std::make_unique<char[]>(totalDataSize);
 
-                    for (size_t index = 0; index < configuration.fragmentSpecializationConstants.size(); index++) {
-                        const auto& constant = configuration.fragmentSpecializationConstants[index];
+                    for (size_t index = 0; index < config.fragmentSpecializationConstants.size(); index++) {
+                        const auto& constant = config.fragmentSpecializationConstants[index];
                         uint32_t constantSize = static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
 
                         fragmentEntries[index].constantID = constant.constantID;
@@ -232,49 +260,17 @@ namespace coffee {
                         std::memcpy(fragmentData.get() + dataOffset, &constant.rawData, constant.dataSize);
                         dataOffset += constantSize;
                     }
+
+                    fragmentSpecializationInfo.mapEntryCount = static_cast<uint32_t>(config.fragmentSpecializationConstants.size());
+                    fragmentSpecializationInfo.pMapEntries = fragmentEntries.get();
+                    fragmentSpecializationInfo.dataSize = totalDataSize;
+                    fragmentSpecializationInfo.pData = fragmentData.get();
                 }
 
-                auto& fragmentShader = configuration.fragmentShader.value();
                 shaderCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-                shaderCreateInfo.module = fragmentShader->shader();
-                shaderCreateInfo.pName = fragmentShader->entrypoint.data();
+                shaderCreateInfo.module = config.fragmentShader->shader();
+                shaderCreateInfo.pName = config.fragmentShader->entrypoint.data();
                 shaderCreateInfo.pSpecializationInfo = &fragmentSpecializationInfo;
-
-                shaderStages.push_back(std::move(shaderCreateInfo));
-            }
-
-            if (configuration.computeShader) {
-                VkPipelineShaderStageCreateInfo shaderCreateInfo { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-
-                if (!configuration.computeSpecializationConstants.empty()) {
-                    uint32_t totalDataSize = 0;
-                    uint32_t dataOffset = 0;
-
-                    for (const auto& constant : configuration.computeSpecializationConstants) {
-                        totalDataSize += static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
-                    }
-
-                    computeEntries = std::make_unique<VkSpecializationMapEntry[]>(configuration.computeSpecializationConstants.size());
-                    computeData = std::make_unique<char[]>(totalDataSize);
-
-                    for (size_t index = 0; index < configuration.computeSpecializationConstants.size(); index++) {
-                        const auto& constant = configuration.computeSpecializationConstants[index];
-                        uint32_t constantSize = static_cast<uint32_t>(constant.dataSize == sizeof(bool) ? sizeof(VkBool32) : constant.dataSize);
-
-                        computeEntries[index].constantID = constant.constantID;
-                        computeEntries[index].offset = dataOffset;
-                        computeEntries[index].size = constantSize;
-
-                        std::memcpy(computeData.get() + dataOffset, &constant.rawData, constant.dataSize);
-                        dataOffset += constantSize;
-                    }
-                }
-
-                auto& computeShader = configuration.computeShader.value();
-                shaderCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-                shaderCreateInfo.module = computeShader->shader();
-                shaderCreateInfo.pName = computeShader->entrypoint.data();
-                shaderCreateInfo.pSpecializationInfo = &computeSpecializationInfo;
 
                 shaderStages.push_back(std::move(shaderCreateInfo));
             }
@@ -296,9 +292,8 @@ namespace coffee {
             pipelineInfo.layout = layout_;
             pipelineInfo.renderPass = renderPass->renderPass();
             pipelineInfo.subpass = 0;
-
-            pipelineInfo.basePipelineIndex = -1;
             pipelineInfo.basePipelineHandle = nullptr;
+            pipelineInfo.basePipelineIndex = -1;
 
             if ((result = vkCreateGraphicsPipelines(device_->logicalDevice(), nullptr, 1, &pipelineInfo, nullptr, &pipeline_)) != VK_SUCCESS) {
                 COFFEE_ERROR("Failed to create graphics pipeline!");
@@ -307,13 +302,28 @@ namespace coffee {
             }
         }
 
-        Pipeline::~Pipeline() noexcept
+        void GraphicsPipeline::verifySize(const char* name, uint32_t originalSize, uint32_t alignedSize)
+        {
+            if (originalSize != alignedSize) {
+                COFFEE_WARNING(
+                    "Provided {} with size {} isn't multiple of 4 and was rounded up to {}. "
+                    "This might cause a strange behaviour in your shaders.",
+                    name, originalSize, alignedSize
+                );
+            }
+        }
+
+        GraphicsPipeline::~GraphicsPipeline() noexcept
         {
             vkDestroyPipeline(device_->logicalDevice(), pipeline_, nullptr);
             vkDestroyPipelineLayout(device_->logicalDevice(), layout_, nullptr);
         }
 
-        PipelinePtr Pipeline::create(const DevicePtr& device, const RenderPassPtr& renderPass, const PipelineConfiguration& configuration)
+        GraphicsPipelinePtr GraphicsPipeline::create(
+            const DevicePtr& device,
+            const RenderPassPtr& renderPass,
+            const GraphicsPipelineConfiguration& configuration
+        )
         {
             COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
 
@@ -330,7 +340,7 @@ namespace coffee {
             COFFEE_ASSERT(renderPass != nullptr, "Invalid renderPass provided.");
             COFFEE_ASSERT(verifyDescriptorLayouts(configuration.layouts), "Invalid std::vector<DescriptorLayoutPtr> provided.");
 
-            return std::shared_ptr<Pipeline>(new Pipeline { device, renderPass, configuration });
+            return std::shared_ptr<GraphicsPipeline>(new GraphicsPipeline { device, renderPass, configuration });
         }
 
     } // namespace graphics

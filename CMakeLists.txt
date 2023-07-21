@@ -25,6 +25,9 @@ add_compile_definitions(ZSTD_STATIC_LINKING_ONLY)
 add_compile_definitions(WIN32_LEAN_AND_MEAN)
 add_compile_definitions(NOMINMAX)
 
+add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
+add_compile_definitions(GLM_FORCE_LEFT_HANDED)
+
 find_package(Vulkan REQUIRED)
 
 set_option(FMT_INSTALL OFF)

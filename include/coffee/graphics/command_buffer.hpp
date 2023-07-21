@@ -2,11 +2,12 @@
 #define COFFEE_GRAPHICS_COMMAND_BUFFER
 
 #include <coffee/graphics/buffer.hpp>
+#include <coffee/graphics/compute_pipeline.hpp>
 #include <coffee/graphics/descriptors.hpp>
 #include <coffee/graphics/device.hpp>
 #include <coffee/graphics/framebuffer.hpp>
+#include <coffee/graphics/graphics_pipeline.hpp>
 #include <coffee/graphics/image.hpp>
-#include <coffee/graphics/pipeline.hpp>
 #include <coffee/graphics/render_pass.hpp>
 #include <coffee/graphics/sampler.hpp>
 
@@ -26,6 +27,7 @@ namespace coffee {
         class CommandBuffer : NonCopyable {
         private:
             static constexpr uint32_t kUIntMax = std::numeric_limits<uint32_t>::max();
+            static constexpr uint16_t kUShortMax = std::numeric_limits<uint16_t>::max();
 
         public:
             ~CommandBuffer() noexcept;
@@ -36,6 +38,31 @@ namespace coffee {
 
             CommandBuffer(CommandBuffer&& other) noexcept;
             CommandBuffer& operator=(CommandBuffer&&) = delete;
+
+            inline void updateBuffer(const BufferPtr& dstBuffer, size_t dataSize, const void* pData, size_t offset = 0ULL) const noexcept
+            {
+                COFFEE_ASSERT(dstBuffer != nullptr, "Invalid dstBuffer provided.");
+                COFFEE_ASSERT(pData != nullptr, "Invalid pData provided.");
+
+                COFFEE_ASSERT(dataSize <= kUShortMax, "dataSize must be less or equal to {}.", kUShortMax);
+                COFFEE_ASSERT(Math::roundToMultiple(offset, 4) == offset, "offset must be aligned to 4 bytes.");
+                COFFEE_ASSERT(Math::roundToMultiple(dataSize, 4) == dataSize, "dataSize must be aligned to 4 bytes.");
+
+                vkCmdUpdateBuffer(buffer_, dstBuffer->buffer(), offset, dataSize, pData);
+            }
+
+            inline void fillBuffer(const BufferPtr& dstBuffer, size_t fillSize, uint32_t data, size_t offset = 0ULL) const noexcept
+            {
+                COFFEE_ASSERT(type != CommandBufferType::Transfer, "Yes, this is stupid. You need VK_KHR_maintenance1 extension to do so.");
+
+                COFFEE_ASSERT(dstBuffer != nullptr, "Invalid dstBuffer provided.");
+
+                COFFEE_ASSERT(offset < dstBuffer->instanceSize * dstBuffer->instanceCount, "offset must be less than buffer size.");
+                COFFEE_ASSERT(Math::roundToMultiple(offset, 4) == offset, "offset must be aligned to 4 bytes.");
+                COFFEE_ASSERT(Math::roundToMultiple(fillSize, 4) == fillSize || fillSize == VK_WHOLE_SIZE, "fillSize must be aligned to 4 bytes.");
+
+                vkCmdFillBuffer(buffer_, dstBuffer->buffer(), offset, fillSize, data);
+            }
 
             inline void copyBuffer(const BufferPtr& srcBuffer, const BufferPtr& dstBuffer, size_t regionCount, const VkBufferCopy* pRegions)
                 const noexcept
@@ -164,58 +191,52 @@ namespace coffee {
                 );
             }
 
-            inline void bindPipeline(VkPipelineBindPoint bindPoint, const PipelinePtr& pipeline) const noexcept
+            inline void bindPipeline(const GraphicsPipelinePtr& pipeline) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot bind pipeline to transfer command buffer.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind graphics pipeline on graphics command buffers.");
 
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
-                vkCmdBindPipeline(buffer_, bindPoint, pipeline->pipeline());
+                vkCmdBindPipeline(buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline());
             }
 
-            inline void bindDescriptorSets(
-                VkPipelineBindPoint bindPoint,
-                const PipelinePtr& pipeline,
-                const DescriptorSetPtr& firstDescriptor,
-                size_t firstSet = 0U
-            ) const noexcept
+            inline void bindDescriptorSets(const GraphicsPipelinePtr& pipeline, const DescriptorSetPtr& descriptor, size_t firstSet = 0U)
+                const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot bind descriptor sets to transfer command buffer.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind descriptors (graphics pipeline) on graphics command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
-                COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
+                COFFEE_ASSERT(descriptor != nullptr, "descriptor must be a valid pointer.");
 
-                vkCmdBindDescriptorSets(buffer_, bindPoint, pipeline->layout(), firstSet, 1, &firstDescriptor->set(), 0, nullptr);
+                vkCmdBindDescriptorSets(buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout(), firstSet, 1, &descriptor->set(), 0, nullptr);
             }
 
             inline void bindDescriptorSets(
-                VkPipelineBindPoint bindPoint,
-                const PipelinePtr& pipeline,
+                const GraphicsPipelinePtr& pipeline,
                 const DescriptorSetPtr& firstDescriptor,
                 const DescriptorSetPtr& secondDescriptor,
                 size_t firstSet = 0U
             ) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot bind descriptor sets to transfer command buffer.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind descriptors (graphics pipeline) on graphics command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
                 COFFEE_ASSERT(secondDescriptor != nullptr, "secondDescriptor must be a valid pointer.");
 
                 VkDescriptorSet sets[2] = { firstDescriptor->set(), secondDescriptor->set() };
-                vkCmdBindDescriptorSets(buffer_, bindPoint, pipeline->layout(), firstSet, 2, sets, 0, nullptr);
+                vkCmdBindDescriptorSets(buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout(), firstSet, 2, sets, 0, nullptr);
             }
 
             inline void bindDescriptorSets(
-                VkPipelineBindPoint bindPoint,
-                const PipelinePtr& pipeline,
+                const GraphicsPipelinePtr& pipeline,
                 const DescriptorSetPtr& firstDescriptor,
                 const DescriptorSetPtr& secondDescriptor,
                 const DescriptorSetPtr& thirdDescriptor,
                 size_t firstSet = 0U
             ) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot bind descriptor sets to transfer command buffer.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind descriptors (graphics pipeline) on graphics command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
@@ -223,19 +244,18 @@ namespace coffee {
                 COFFEE_ASSERT(thirdDescriptor != nullptr, "thirdDescriptor must be a valid pointer.");
 
                 VkDescriptorSet sets[3] = { firstDescriptor->set(), secondDescriptor->set(), thirdDescriptor->set() };
-                vkCmdBindDescriptorSets(buffer_, bindPoint, pipeline->layout(), firstSet, 3, sets, 0, nullptr);
+                vkCmdBindDescriptorSets(buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout(), firstSet, 3, sets, 0, nullptr);
             }
 
             inline void bindDescriptorSets(
-                VkPipelineBindPoint bindPoint,
-                const PipelinePtr& pipeline,
+                const GraphicsPipelinePtr& pipeline,
                 const DescriptorSetPtr& firstDescriptor,
                 const DescriptorSetPtr& secondDescriptor,
                 const DescriptorSetPtr& thirdDescriptor,
                 const DescriptorSetPtr& fourthDescriptor
             ) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot bind descriptor sets to transfer command buffer.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind descriptors (graphics pipeline) on graphics command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
@@ -244,18 +264,18 @@ namespace coffee {
                 COFFEE_ASSERT(fourthDescriptor != nullptr, "fourthDescriptor must be a valid pointer.");
 
                 VkDescriptorSet sets[4] = { firstDescriptor->set(), secondDescriptor->set(), thirdDescriptor->set(), fourthDescriptor->set() };
-                vkCmdBindDescriptorSets(buffer_, bindPoint, pipeline->layout(), 0, 4, sets, 0, nullptr);
+                vkCmdBindDescriptorSets(buffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout(), 0, 4, sets, 0, nullptr);
             }
 
             inline void pushConstants(
-                const PipelinePtr& pipeline,
+                const GraphicsPipelinePtr& pipeline,
                 VkShaderStageFlags stageFlags,
                 size_t size,
                 const void* pValues,
                 size_t offset = 0U
             ) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You cannot push constants to transfer command buffer.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind push constants on graphics command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(size > 0, "size must be greater than 0.");
@@ -266,6 +286,102 @@ namespace coffee {
                 vkCmdPushConstants(buffer_, pipeline->layout(), stageFlags, static_cast<uint32_t>(offset), static_cast<uint32_t>(size), pValues);
             }
 
+            inline void bindPipeline(const ComputePipelinePtr& pipeline) const noexcept
+            {
+                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind compute pipelines on compute/graphics command buffers.");
+
+                COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
+
+                vkCmdBindPipeline(buffer_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline());
+            }
+
+            inline void bindDescriptorSets(const ComputePipelinePtr& pipeline, const DescriptorSetPtr& descriptor, size_t firstSet = 0U)
+                const noexcept
+            {
+                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind descriptors on compute/graphics command buffers.");
+                COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
+
+                COFFEE_ASSERT(descriptor != nullptr, "descriptor must be a valid pointer.");
+
+                vkCmdBindDescriptorSets(buffer_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->layout(), firstSet, 1, &descriptor->set(), 0, nullptr);
+            }
+
+            inline void bindDescriptorSets(
+                const ComputePipelinePtr& pipeline,
+                const DescriptorSetPtr& firstDescriptor,
+                const DescriptorSetPtr& secondDescriptor,
+                size_t firstSet = 0U
+            ) const noexcept
+            {
+                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind descriptors on compute/graphics command buffers.");
+                COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
+
+                COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
+                COFFEE_ASSERT(secondDescriptor != nullptr, "secondDescriptor must be a valid pointer.");
+
+                VkDescriptorSet sets[2] = { firstDescriptor->set(), secondDescriptor->set() };
+                vkCmdBindDescriptorSets(buffer_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->layout(), firstSet, 2, sets, 0, nullptr);
+            }
+
+            inline void bindDescriptorSets(
+                const ComputePipelinePtr& pipeline,
+                const DescriptorSetPtr& firstDescriptor,
+                const DescriptorSetPtr& secondDescriptor,
+                const DescriptorSetPtr& thirdDescriptor,
+                size_t firstSet = 0U
+            ) const noexcept
+            {
+                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind descriptors on compute/graphics command buffers.");
+                COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
+
+                COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
+                COFFEE_ASSERT(secondDescriptor != nullptr, "secondDescriptor must be a valid pointer.");
+                COFFEE_ASSERT(thirdDescriptor != nullptr, "thirdDescriptor must be a valid pointer.");
+
+                VkDescriptorSet sets[3] = { firstDescriptor->set(), secondDescriptor->set(), thirdDescriptor->set() };
+                vkCmdBindDescriptorSets(buffer_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->layout(), firstSet, 3, sets, 0, nullptr);
+            }
+
+            inline void bindDescriptorSets(
+                const ComputePipelinePtr& pipeline,
+                const DescriptorSetPtr& firstDescriptor,
+                const DescriptorSetPtr& secondDescriptor,
+                const DescriptorSetPtr& thirdDescriptor,
+                const DescriptorSetPtr& fourthDescriptor
+            ) const noexcept
+            {
+                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind descriptors on compute/graphics command buffers.");
+                COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
+
+                COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
+                COFFEE_ASSERT(secondDescriptor != nullptr, "secondDescriptor must be a valid pointer.");
+                COFFEE_ASSERT(thirdDescriptor != nullptr, "thirdDescriptor must be a valid pointer.");
+                COFFEE_ASSERT(fourthDescriptor != nullptr, "fourthDescriptor must be a valid pointer.");
+
+                VkDescriptorSet sets[4] = { firstDescriptor->set(), secondDescriptor->set(), thirdDescriptor->set(), fourthDescriptor->set() };
+                vkCmdBindDescriptorSets(buffer_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->layout(), 0, 4, sets, 0, nullptr);
+            }
+
+            inline void pushConstants(const ComputePipelinePtr& pipeline, size_t size, const void* pValues, size_t offset = 0U) const noexcept
+            {
+                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only push constants on compute/graphics command buffers.");
+                COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
+
+                COFFEE_ASSERT(size > 0, "size must be greater than 0.");
+                COFFEE_ASSERT(size <= kUIntMax, "size must be less than {}.", kUIntMax);
+                COFFEE_ASSERT(pValues != nullptr, "pValues must be a valid pointer.");
+                COFFEE_ASSERT(offset <= kUIntMax, "offset must be less than {}.", kUIntMax);
+
+                vkCmdPushConstants(
+                    buffer_,
+                    pipeline->layout(),
+                    VK_SHADER_STAGE_COMPUTE_BIT,
+                    static_cast<uint32_t>(offset),
+                    static_cast<uint32_t>(size),
+                    pValues
+                );
+            }
+
             inline void beginRenderPass(
                 const RenderPassPtr& renderPass,
                 const FramebufferPtr& framebuffer,
@@ -274,7 +390,7 @@ namespace coffee {
                 const VkClearValue* pClearValues
             ) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only begin render pass on graphics command buffers.");
 
                 COFFEE_ASSERT(renderPass != nullptr, "Invalid renderPass provided.");
                 COFFEE_ASSERT(framebuffer != nullptr, "Invalid framebuffer provided.");
@@ -292,14 +408,14 @@ namespace coffee {
 
             inline void endRenderPass() const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only end render pass on graphics command buffers.");
 
                 vkCmdEndRenderPass(buffer_);
             }
 
             inline void setViewport(const VkViewport& viewport) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only set viewport on graphics command buffers.");
 
                 // Without extensions this function only allowed to accept one viewport at the time
                 vkCmdSetViewport(buffer_, 0, 1, &viewport);
@@ -307,7 +423,7 @@ namespace coffee {
 
             inline void setScissor(const VkRect2D& scissor) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only set scissor on graphics command buffers.");
 
                 // Without extensions this function only allowed to accept one scissor at the time
                 vkCmdSetScissor(buffer_, 0, 1, &scissor);
@@ -315,7 +431,7 @@ namespace coffee {
 
             inline void setBlendColors(const float blendConstants[4]) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only set blend colors on graphics command buffers.");
 
                 COFFEE_ASSERT(blendConstants != nullptr, "Invalid blend constants provided.");
 
@@ -324,7 +440,7 @@ namespace coffee {
 
             inline void bindModel(const ModelPtr& model) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind models on graphics command buffers.");
 
                 COFFEE_ASSERT(model != nullptr, "Invalid model provided.");
 
@@ -340,7 +456,7 @@ namespace coffee {
             inline void bindVertexBuffers(size_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, size_t firstBinding = 0U)
                 const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind vertex buffer on graphics command buffers.");
 
                 COFFEE_ASSERT(bindingCount > 0, "bindingCount must be greater than 0.");
                 COFFEE_ASSERT(bindingCount <= kUIntMax, "bindingCount must be less than {}.", kUIntMax);
@@ -353,7 +469,7 @@ namespace coffee {
 
             inline void bindIndexBuffer(const BufferPtr& indexBuffer, VkDeviceSize offset = 0ULL) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind index buffer on graphics command buffers.");
 
                 COFFEE_ASSERT(indexBuffer != nullptr, "Invalid indexBuffer provided.");
 
@@ -362,15 +478,15 @@ namespace coffee {
 
             inline void draw(uint32_t vertexCount, uint32_t instanceCount = 1U, uint32_t firstVertex = 0U, uint32_t firstInstance = 0U) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only draw on graphics command buffers.");
 
                 vkCmdDraw(buffer_, vertexCount, instanceCount, firstVertex, firstInstance);
             }
 
-            // Note that you must call bindModel() before using mesh drawing
+            // NOTE: You must call bindModel() before using mesh drawing
             inline void drawMesh(const Mesh& mesh) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only draw on graphics command buffers.");
 
                 if (mesh.indicesCount == 0) {
                     vkCmdDraw(buffer_, mesh.verticesCount, 1U, mesh.verticesOffset, 0U);
@@ -380,10 +496,10 @@ namespace coffee {
                 vkCmdDrawIndexed(buffer_, mesh.indicesCount, 1U, mesh.indicesOffset, mesh.verticesOffset, 0U);
             }
 
-            // Note that you must call bindModel() before using model drawing
+            // NOTE: You must call bindModel() before using model drawing
             inline void drawModel(const ModelPtr& model) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only draw on graphics command buffers.");
 
                 COFFEE_ASSERT(model != nullptr, "Invalid model provided.");
 
@@ -407,7 +523,7 @@ namespace coffee {
                 uint32_t firstInstance = 0U
             ) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only draw on graphics command buffers.");
 
                 vkCmdDrawIndexed(buffer_, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
             }
@@ -415,7 +531,7 @@ namespace coffee {
             inline void drawIndirect(const BufferPtr& drawBuffer, VkDeviceSize offset = 0U, uint32_t drawCount = 1U, uint32_t stride = 0U)
                 const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only draw on graphics command buffers.");
 
                 COFFEE_ASSERT(drawBuffer != nullptr, "Invalid drawBuffer provided.");
 
@@ -425,7 +541,7 @@ namespace coffee {
             inline void drawIndexedIndirect(const BufferPtr& drawBuffer, VkDeviceSize offset = 0U, uint32_t drawCount = 1U, uint32_t stride = 0U)
                 const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "CommandBufferType must be Graphics.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only draw on graphics command buffers.");
 
                 COFFEE_ASSERT(drawBuffer != nullptr, "Invalid drawBuffer provided.");
 
@@ -434,14 +550,14 @@ namespace coffee {
 
             inline void dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Compute, "CommandBufferType must be Compute.");
+                COFFEE_ASSERT(type == CommandBufferType::Compute, "You can only dispatch on compute command buffers.");
 
                 vkCmdDispatch(buffer_, groupCountX, groupCountY, groupCountZ);
             }
 
             inline void dispatchIndirect(const BufferPtr& dispatchBuffer, VkDeviceSize offset = 0U) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Compute, "CommandBufferType must be Compute.");
+                COFFEE_ASSERT(type == CommandBufferType::Compute, "You can only dispatch on compute command buffers.");
 
                 COFFEE_ASSERT(dispatchBuffer != nullptr, "Invalid dispatchBuffer provided.");
 
@@ -595,6 +711,7 @@ namespace coffee {
             VkCommandBuffer buffer_ = VK_NULL_HANDLE;
 
             friend class Device;
+            friend class SwapChain;
         };
 
     } // namespace graphics

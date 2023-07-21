@@ -82,7 +82,7 @@ namespace coffee {
 
             static DescriptorSetPtr create(const DevicePtr& device, const DescriptorWriter& writer);
 
-            void updateDescriptor(const DescriptorWriter& writer);
+            void update(const DescriptorWriter& writer);
 
             inline const VkDescriptorSet& set() const noexcept { return set_; }
 

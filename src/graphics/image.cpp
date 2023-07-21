@@ -104,6 +104,8 @@ namespace coffee {
 
         ImageViewPtr ImageView::create(const ImagePtr& image, const ImageViewConfiguration& configuration)
         {
+            COFFEE_ASSERT(image != nullptr, "Invalid image handle provided.");
+
             return std::shared_ptr<ImageView>(new ImageView { image, configuration });
         }
 
