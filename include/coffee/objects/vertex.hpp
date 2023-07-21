@@ -1,7 +1,7 @@
 #ifndef COFFEE_OBJECTS_VERTEX
 #define COFFEE_OBJECTS_VERTEX
 
-#include <coffee/graphics/pipeline.hpp>
+#include <coffee/graphics/graphics_pipeline.hpp>
 
 #include <glm/glm.hpp>
 #include <volk/volk.h>

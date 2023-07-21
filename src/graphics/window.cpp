@@ -168,10 +168,11 @@ namespace coffee {
         {
             std::vector<CommandBuffer> commandBuffers {};
             commandBuffers.push_back(std::move(commandBuffer));
-            swapChain->submitCommandBuffers(std::move(commandBuffers));
+
+            swapChain->submit(std::move(commandBuffers));
         }
 
-        void Window::sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers) { swapChain->submitCommandBuffers(std::move(commandBuffers)); }
+        void Window::sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers) { swapChain->submit(std::move(commandBuffers)); }
 
         void Window::changePresentMode(VkPresentModeKHR newMode)
         {

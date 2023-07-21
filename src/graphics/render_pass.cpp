@@ -71,19 +71,17 @@ namespace coffee {
             subpass.pColorAttachments = colorAttachmentRefs.data();
             subpass.pResolveAttachments = resolveAttachmentRefs.data();
 
-            if (configuration.depthStencilAttachment.has_value()) {
-                const AttachmentConfiguration& depthStencilAttachment = configuration.depthStencilAttachment.value();
-
+            if (configuration.depthStencilAttachment.format != VK_FORMAT_UNDEFINED) {
                 VkAttachmentDescription depthAttachmentDescription {};
-                depthAttachmentDescription.flags = depthStencilAttachment.flags;
-                depthAttachmentDescription.format = depthStencilAttachment.format;
-                depthAttachmentDescription.samples = depthStencilAttachment.samples;
-                depthAttachmentDescription.loadOp = depthStencilAttachment.loadOp;
-                depthAttachmentDescription.storeOp = depthStencilAttachment.storeOp;
-                depthAttachmentDescription.stencilLoadOp = depthStencilAttachment.stencilLoadOp;
-                depthAttachmentDescription.stencilStoreOp = depthStencilAttachment.stencilStoreOp;
-                depthAttachmentDescription.initialLayout = depthStencilAttachment.initialLayout;
-                depthAttachmentDescription.finalLayout = depthStencilAttachment.finalLayout;
+                depthAttachmentDescription.flags = configuration.depthStencilAttachment.flags;
+                depthAttachmentDescription.format = configuration.depthStencilAttachment.format;
+                depthAttachmentDescription.samples = configuration.depthStencilAttachment.samples;
+                depthAttachmentDescription.loadOp = configuration.depthStencilAttachment.loadOp;
+                depthAttachmentDescription.storeOp = configuration.depthStencilAttachment.storeOp;
+                depthAttachmentDescription.stencilLoadOp = configuration.depthStencilAttachment.stencilLoadOp;
+                depthAttachmentDescription.stencilStoreOp = configuration.depthStencilAttachment.stencilStoreOp;
+                depthAttachmentDescription.initialLayout = configuration.depthStencilAttachment.initialLayout;
+                depthAttachmentDescription.finalLayout = configuration.depthStencilAttachment.finalLayout;
                 attachments.push_back(depthAttachmentDescription);
 
                 depthAttachmentRef.attachment = attachments.size() - 1;
@@ -114,15 +112,15 @@ namespace coffee {
                 subpassDependencies[1].dstAccessMask |= VK_ACCESS_SHADER_READ_BIT;
             }
 
-            if (configuration.depthStencilAttachment.has_value()) {
+            if (configuration.depthStencilAttachment.format != VK_FORMAT_UNDEFINED) {
                 subpassDependencies[0].srcStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
                 subpassDependencies[0].dstStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
                 subpassDependencies[0].srcAccessMask |= VK_ACCESS_SHADER_READ_BIT;
-                subpassDependencies[0].dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                subpassDependencies[0].dstAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
                 subpassDependencies[1].srcStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
                 subpassDependencies[1].dstStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-                subpassDependencies[1].srcAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                subpassDependencies[1].srcAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
                 subpassDependencies[1].dstAccessMask |= VK_ACCESS_SHADER_READ_BIT;
             }
 

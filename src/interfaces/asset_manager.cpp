@@ -370,7 +370,7 @@ namespace coffee {
         }
 
         transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
-        device_->singleTimeOperation(std::move(transferCommandBuffer));
+        device_->submit(std::move(transferCommandBuffer), {}, nullptr, true);
 
         if (!device_->isUnifiedGraphicsTransferQueue()) {
             CommandBuffer ownershipCommandBuffer = CommandBuffer::createGraphics(device_);
@@ -387,7 +387,7 @@ namespace coffee {
             barrier.subresourceRange.layerCount = 1;
 
             ownershipCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &barrier);
-            device_->singleTimeOperation(std::move(ownershipCommandBuffer));
+            device_->submit(std::move(ownershipCommandBuffer), {}, nullptr, true);
         }
 
         ImageViewConfiguration viewConfiguration {};
@@ -398,8 +398,6 @@ namespace coffee {
         viewConfiguration.components.b = VK_COMPONENT_SWIZZLE_G;
         viewConfiguration.components.a = VK_COMPONENT_SWIZZLE_ONE;
         missingTexture_ = ImageView::create(missingImage_, viewConfiguration);
-
-        device_->waitDeviceIdle();
     }
 
     void AssetManager::selectOneChannel()
@@ -640,7 +638,7 @@ namespace coffee {
         indicesCopyRegion.size = indices.size() * sizeof(uint32_t);
         transferCommandBuffer.copyBuffer(stagingBuffer, indicesBuffer, 1, &indicesCopyRegion);
 
-        device_->singleTimeOperation(std::move(transferCommandBuffer));
+        device_->submit(std::move(transferCommandBuffer), {}, nullptr, true);
 
         auto metadataSortingCondition = [](const ModelLoader::MaterialMetadata& left, const ModelLoader::MaterialMetadata& right) -> bool {
             return left.name < right.name;
@@ -654,21 +652,27 @@ namespace coffee {
 
         // Models most of the time have duplicates in them, so we must upload only single time
         ModelLoader loader { *this, filesystem, uploadMetadata };
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, uploadMetadata.size() - 1), loader, tbb::affinity_partitioner {});
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, uploadMetadata.size()), loader, tbb::affinity_partitioner {});
 
         // Take uploaded textures from cache directly
-        tbb::parallel_for(tbb::blocked_range<size_t>(0, materialsMetadata.size() - 1), [&](const tbb::blocked_range<size_t>& range) {
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, materialsMetadata.size()), [&](const tbb::blocked_range<size_t>& range) {
             for (size_t index = range.begin(); index != range.end(); index++) {
                 auto& metadata = materialsMetadata[index];
                 HashAccessor accessor {};
 
+                if (metadata.name.empty()) {
+                    continue;
+                }
+
                 if (!cache_.find(accessor, XXH3_64bits(metadata.name.data(), metadata.name.size()))) {
+                    COFFEE_ERROR("Failed to find texture {}", metadata.name);
                     continue;
                 }
 
                 auto& asset = accessor->second;
 
                 if (asset.type != Filesystem::FileType::RawImage && asset.type != Filesystem::FileType::BasisImage) {
+                    COFFEE_ERROR("Asset {} wasn't a texture, it was {}", metadata.name, detail::fileTypeToString(asset.type));
                     continue;
                 }
 
@@ -739,7 +743,7 @@ namespace coffee {
                 ownershipTransfers.size(),
                 ownershipTransfers.data()
             );
-            device_->singleTimeOperation(std::move(ownershipCommandBuffer));
+            device_->submit(std::move(ownershipCommandBuffer));
         }
 
         for (uint32_t i = 0; i < meshesSize; i++) {
@@ -847,7 +851,7 @@ namespace coffee {
         }
 
         transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
-        device_->singleTimeOperation(std::move(transferCommandBuffer));
+        device_->submit(std::move(transferCommandBuffer));
 
         if (!device_->isUnifiedGraphicsTransferQueue()) {
             CommandBuffer ownershipCommandBuffer = CommandBuffer::createGraphics(device_);
@@ -864,7 +868,7 @@ namespace coffee {
             barrier.subresourceRange.layerCount = 1;
 
             ownershipCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &barrier);
-            device_->singleTimeOperation(std::move(ownershipCommandBuffer));
+            device_->submit(std::move(ownershipCommandBuffer));
         }
 
         return image;
@@ -1024,7 +1028,7 @@ namespace coffee {
         }
 
         transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
-        device_->singleTimeOperation(std::move(transferCommandBuffer));
+        device_->submit(std::move(transferCommandBuffer));
 
         if (!device_->isUnifiedGraphicsTransferQueue()) {
             CommandBuffer ownershipCommandBuffer = CommandBuffer::createGraphics(device_);
@@ -1041,7 +1045,7 @@ namespace coffee {
             barrier.subresourceRange.layerCount = static_cast<uint32_t>(mipmapInformations.size());
 
             ownershipCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &barrier);
-            device_->singleTimeOperation(std::move(ownershipCommandBuffer));
+            device_->submit(std::move(ownershipCommandBuffer));
         }
 
         return image;
@@ -1103,73 +1107,58 @@ namespace coffee {
                 continue;
             }
 
-            graphics::ImagePtr image = nullptr;
             HashAccessor accessor {};
             XXH64_hash_t hash = XXH3_64bits(metadata.name.data(), metadata.name.size());
 
+            // Already in cache, no need to load anything
             if (manager.cache_.find(accessor, hash)) {
-                auto& asset = accessor->second;
-
-                if (asset.type != Filesystem::FileType::RawImage && asset.type != Filesystem::FileType::BasisImage) {
-                    COFFEE_ERROR(
-                        "Failed to load texture {}: Expected type Image, requested type was {}", 
-                        metadata.name, detail::fileTypeToString(asset.type)
-                    );
-
-                    continue;
-                }
-
-                image = std::static_pointer_cast<graphics::Image>(asset.actualObject);
+                continue;
             }
-            else {
-                // Filesystem::create always returns valid pointer, so it must be user attempt to provide invalid pointer
-                COFFEE_ASSERT(filesystem != nullptr, "Filesystem wasn't provided.");
 
-                Filesystem::Entry entry {};
+            // Filesystem::create always returns valid pointer, so it must be user attempt to provide invalid pointer
+            COFFEE_ASSERT(filesystem != nullptr, "Filesystem wasn't provided.");
 
-                try {
-                    entry = filesystem->getMetadata(metadata.name);
-                }
-                catch (const FilesystemException& filesystemException) {
-                    COFFEE_ERROR("Failed to load texture {} from filesystem: {}", metadata.name, filesystemException.what());
-                }
+            Filesystem::Entry entry {};
 
-                if (entry.type != Filesystem::FileType::RawImage && entry.type != Filesystem::FileType::BasisImage) {
-                    COFFEE_ERROR(
-                        "Failed to load texture {}: Expected type Image, requested type was {}", 
-                        metadata.name, detail::fileTypeToString(entry.type)
-                    );
-
-                    continue;
-                }
-
-                std::vector<uint8_t> rawBytes = filesystem->getContent(metadata.name);
-
-                switch (entry.type) {
-                    case Filesystem::FileType::RawImage:
-                        image = loadRawImage(stagingBuffer, transferFence, rawBytes);
-                        break;
-                    case Filesystem::FileType::BasisImage:
-                        image = loadBasisImage(stagingBuffer, transferFence, rawBytes, metadata.amountOfChannels);
-                        break;
-                    default:
-                        COFFEE_ASSERT(false, "Should not happen.");
-                        break;
-                }
-
-                if (image == nullptr) {
-                    // Currently only Basis reports such error
-                    COFFEE_ERROR("Failed to load texture {}: Failed to begin transcoding!", metadata.name);
-                    continue;
-                }
-
-                manager.cache_.insert(std::make_pair(hash, Asset::create(image)));
-
-                transferFence->wait();
-                transferFence->reset();
-
-                manager.device_->clearCompletedWork();
+            try {
+                entry = filesystem->getMetadata(metadata.name);
             }
+            catch (const FilesystemException& filesystemException) {
+                COFFEE_ERROR("Failed to load texture {} from filesystem: {}", metadata.name, filesystemException.what());
+                continue;
+            }
+
+            if (entry.type != Filesystem::FileType::RawImage && entry.type != Filesystem::FileType::BasisImage) {
+                COFFEE_ERROR(
+                    "Failed to load texture {}: Expected type Image, requested type was {}", 
+                    metadata.name, detail::fileTypeToString(entry.type)
+                );
+
+                continue;
+            }
+
+            graphics::ImagePtr image = nullptr;
+            std::vector<uint8_t> rawBytes = filesystem->getContent(metadata.name);
+
+            switch (entry.type) {
+                case Filesystem::FileType::RawImage:
+                    image = loadRawImage(stagingBuffer, transferFence, rawBytes);
+                    break;
+                case Filesystem::FileType::BasisImage:
+                    image = loadBasisImage(stagingBuffer, transferFence, rawBytes, metadata.amountOfChannels);
+                    break;
+                default:
+                    COFFEE_ASSERT(false, "Should not happen.");
+                    break;
+            }
+
+            if (image == nullptr) {
+                // Currently only Basis reports such error
+                COFFEE_ERROR("Failed to load texture {}: Failed to begin transcoding!", metadata.name);
+                continue;
+            }
+
+            manager.cache_.insert(std::make_pair(hash, Asset::create(image)));
         }
     }
 
@@ -1258,7 +1247,7 @@ namespace coffee {
         }
 
         transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
-        manager.device_->singleTimeOperation(std::move(transferCommandBuffer), transferFence);
+        manager.device_->submit(std::move(transferCommandBuffer), {}, transferFence, true);
 
         return image;
     }
@@ -1427,7 +1416,7 @@ namespace coffee {
         }
 
         transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
-        manager.device_->singleTimeOperation(std::move(transferCommandBuffer), transferFence);
+        manager.device_->submit(std::move(transferCommandBuffer), {}, transferFence, true);
 
         return image;
     }

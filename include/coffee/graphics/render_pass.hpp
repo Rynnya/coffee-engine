@@ -4,8 +4,6 @@
 #include <coffee/graphics/device.hpp>
 #include <coffee/graphics/image.hpp>
 
-#include <optional>
-
 namespace coffee {
 
     namespace graphics {
@@ -25,7 +23,8 @@ namespace coffee {
 
         struct RenderPassConfiguration {
             std::vector<AttachmentConfiguration> colorAttachments {};
-            std::optional<AttachmentConfiguration> depthStencilAttachment = std::nullopt;
+            // VK_FORMAT_UNDEFINED means there's no depthStencilAttachment
+            AttachmentConfiguration depthStencilAttachment {};
         };
 
         class RenderPass;
