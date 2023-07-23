@@ -545,7 +545,7 @@ namespace coffee {
                 return VK_FALSE;
             };
 
-            // Volk will extract this pointer when vkLoadInstance is called
+            // Volk will extract this pointer when volkLoadInstanceOnly is called
             if (vkCreateDebugUtilsMessengerEXT == nullptr) {
                 COFFEE_WARNING("Failed to load vkCreateDebugUtilsMessengerEXT! Validation logging will be unavailable!");
                 return;
