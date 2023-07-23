@@ -26,7 +26,7 @@ namespace coffee {
 
         Callback(const Callback<Args...>& other) : bound_ { other.bound_ }, hash_ { other.hash_ } {}
 
-        Callback(Callback<Args...>&& other) : bound_ { std::move(other.bound_) }, hash_ { other.hash_ } {}
+        Callback(Callback<Args...>&& other) noexcept : bound_ { std::move(other.bound_) }, hash_ { other.hash_ } {}
 
         Callback& operator=(const Callback<Args...>& other)
         {
@@ -40,7 +40,7 @@ namespace coffee {
             return *this;
         }
 
-        Callback& operator=(Callback<Args...>&& other)
+        Callback& operator=(Callback<Args...>&& other) noexcept
         {
             if (this == &other) {
                 return *this;

@@ -135,12 +135,12 @@ namespace coffee {
                 return budgets;
             }
 
-            inline const VkPhysicalDeviceMemoryProperties* memoryProperties() const noexcept
+            inline const VkPhysicalDeviceMemoryProperties& memoryProperties() const noexcept
             {
                 const VkPhysicalDeviceMemoryProperties* properties = nullptr;
                 vmaGetMemoryProperties(allocator_, &properties);
 
-                return properties;
+                return *properties;
             }
 
             inline const VkPhysicalDeviceProperties& properties() const noexcept { return properties_; }
