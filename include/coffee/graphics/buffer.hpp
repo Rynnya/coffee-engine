@@ -42,7 +42,7 @@ namespace coffee {
             void* map();
             void unmap() noexcept;
             void flush(size_t size = VK_WHOLE_SIZE, size_t offset = 0U);
-            void invalidate(size_t size, size_t offset = 0U);
+            void invalidate(size_t size = VK_WHOLE_SIZE, size_t offset = 0U);
 
             const VkDeviceSize instanceSize = 1U;
             const VkDeviceSize instanceCount = 1U;

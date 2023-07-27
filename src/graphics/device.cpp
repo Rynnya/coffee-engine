@@ -44,7 +44,7 @@ namespace coffee {
 
     namespace graphics {
 
-        Device::Device()
+        Device::Device(const DeviceFeatures& features)
         {
             {
                 tbb::queuing_mutex::scoped_lock lock { initializationMutex };
@@ -63,8 +63,8 @@ namespace coffee {
             GLFWwindow* window = createTemporaryWindow();
             VkSurfaceKHR surface = createTemporarySurface(window);
 
-            pickPhysicalDevice(surface);
-            createLogicalDevice(surface);
+            pickPhysicalDevice(surface, features);
+            createLogicalDevice(surface, features);
 
             createDescriptorPool();
             createAllocator();
@@ -119,7 +119,7 @@ namespace coffee {
             }
         }
 
-        DevicePtr Device::create() { return std::shared_ptr<Device>(new Device {}); }
+        DevicePtr Device::create(const DeviceFeatures& features) { return std::shared_ptr<Device>(new Device { features }); }
 
         void Device::waitDeviceIdle()
         {
@@ -411,8 +411,6 @@ namespace coffee {
 
         GLFWwindow* Device::createTemporaryWindow()
         {
-            // ThreadSafety: Potential data race with Window class
-
             glfwDefaultWindowHints();
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
             glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
@@ -463,24 +461,22 @@ namespace coffee {
                 throw FatalVulkanException { VK_ERROR_INCOMPATIBLE_DRIVER };
             }
 
+            std::vector<const char*> extensions {};
+            extensions.insert(extensions.end(), glfwExtensions, glfwExtensions + glfwExtensionCount);
+            extensions.insert(extensions.end(), instanceDebugExtensions.begin(), instanceDebugExtensions.end());
+
             auto availableExtensions = VkUtils::getInstanceExtensions();
-            std::vector<const char*> extensions { glfwExtensions, glfwExtensions + glfwExtensionCount };
 
             // VMA extensions if present
             if (VkUtils::isExtensionsAvailable(availableExtensions, memoryPriorityAndBudgetInstanceExts)) {
                 extensions.insert(extensions.end(), memoryPriorityAndBudgetInstanceExts.begin(), memoryPriorityAndBudgetInstanceExts.end());
-                memoryPriorityAndBudgetExtensionsEnabled = true; // This will be set to false later if device isn't support extensions
+                memoryPriorityAndBudgetExtensionsEnabled = true; // This will be set to false later if device do not support extensions
             }
-
-            // Debug extensions if debug build
-            extensions.insert(extensions.end(), instanceDebugExtensions.begin(), instanceDebugExtensions.end());
 
             createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
             createInfo.ppEnabledExtensionNames = extensions.data();
 
             std::vector<const char*> instanceLayers {};
-
-            // Debug layers if debug build
             instanceLayers.insert(instanceLayers.end(), instanceDebugLayers.begin(), instanceDebugLayers.end());
 
             createInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
@@ -555,7 +551,7 @@ namespace coffee {
 #endif
         }
 
-        void Device::pickPhysicalDevice(VkSurfaceKHR surface)
+        void Device::pickPhysicalDevice(VkSurfaceKHR surface, const DeviceFeatures& features)
         {
             uint32_t deviceCount = 0;
             vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
@@ -566,11 +562,12 @@ namespace coffee {
                 throw FatalVulkanException { VK_ERROR_INCOMPATIBLE_DRIVER };
             }
 
-            std::vector<VkPhysicalDevice> devices { deviceCount };
+            std::vector<VkPhysicalDevice> devices {};
+            devices.resize(deviceCount);
             vkEnumeratePhysicalDevices(instance_, &deviceCount, devices.data());
 
             for (const VkPhysicalDevice& device : devices) {
-                if (isDeviceSuitable(device, surface)) {
+                if (isDeviceSuitable(device, surface, features)) {
                     physicalDevice_ = device;
                     break;
                 }
@@ -593,7 +590,7 @@ namespace coffee {
             optimalDepthStencilFormat_ = VkUtils::findDepthStencilFormat(physicalDevice_);
         }
 
-        void Device::createLogicalDevice(VkSurfaceKHR surface)
+        void Device::createLogicalDevice(VkSurfaceKHR surface, const DeviceFeatures& features)
         {
             float queuePriority = 1.0f;
 
@@ -620,6 +617,7 @@ namespace coffee {
 
             VkPhysicalDeviceFeatures deviceFeatures {};
             deviceFeatures.samplerAnisotropy = VK_TRUE;
+            deviceFeatures.fragmentStoresAndAtomics = features.fragmentStoresAndAtomics ? VK_TRUE : VK_FALSE;
 
             VkDeviceCreateInfo createInfo { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
             createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
@@ -772,12 +770,11 @@ namespace coffee {
             vmaSetCurrentFrameIndex(allocator_, currentOperation_);
         }
 
-        bool Device::isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions)
+        bool Device::isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const DeviceFeatures& features)
         {
             VkUtils::QueueFamilyIndices indices = VkUtils::findQueueFamilies(device, surface);
 
             std::set<std::string> requiredExtensions {};
-            requiredExtensions.insert(additionalExtensions.begin(), additionalExtensions.end());
             auto availableExtensions = VkUtils::getDeviceExtensions(device);
 
             for (const VkExtensionProperties& extension : availableExtensions) {
@@ -790,10 +787,16 @@ namespace coffee {
                 swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
             }
 
-            VkPhysicalDeviceFeatures features {};
-            vkGetPhysicalDeviceFeatures(device, &features);
+            VkPhysicalDeviceFeatures deviceFeatures {};
+            vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 
-            return indices.isSuitable() && requiredExtensions.empty() && swapChainAdequate && features.samplerAnisotropy;
+            bool allRequiredFeaturesSupported = (deviceFeatures.samplerAnisotropy == VK_TRUE);
+
+            if (features.fragmentStoresAndAtomics) {
+                allRequiredFeaturesSupported &= (deviceFeatures.fragmentStoresAndAtomics == VK_TRUE);
+            }
+
+            return indices.isSuitable() && requiredExtensions.empty() && swapChainAdequate && allRequiredFeaturesSupported;
         }
 
         void Device::translateSemaphores(SubmitInfo& submitInfo, const SubmitSemaphores& semaphores)

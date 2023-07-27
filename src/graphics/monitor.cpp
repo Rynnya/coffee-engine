@@ -122,6 +122,7 @@ namespace coffee {
 
                     int32_t monitorCount = 0;
                     bool isFirst = glfwGetMonitors(&monitorCount)[0] == monitor;
+
                     if (isFirst && monitorCount > 1) {
                         // Rotate last monitor and put it into first position
                         std::rotate(monitors_.rbegin(), monitors_.rbegin() + 1, monitors_.rend());
