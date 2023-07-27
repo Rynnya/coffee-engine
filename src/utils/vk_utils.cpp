@@ -224,13 +224,14 @@ namespace coffee {
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = static_cast<uint32_t>(i);
             }
+#ifndef COFFEE_FORCE_SINGLE_QUEUE
             else if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
                 indices.computeFamily = static_cast<uint32_t>(i);
             }
             else if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
                 indices.transferFamily = static_cast<uint32_t>(i);
             }
-
+#endif
             if (!indices.presentFamily.has_value()) {
                 VkBool32 presentSupport = VK_FALSE;
                 vkGetPhysicalDeviceSurfaceSupportKHR(device, static_cast<uint32_t>(i), surface, &presentSupport);
@@ -240,9 +241,15 @@ namespace coffee {
                 }
             }
 
+#ifndef COFFEE_FORCE_SINGLE_QUEUE
             if (indices.isComplete()) {
                 break;
             }
+#else
+            if (indices.isSuitable()) {
+                break;
+            }
+#endif
         }
 
         return indices;

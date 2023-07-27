@@ -22,6 +22,15 @@ namespace coffee {
 
     namespace graphics {
 
+        struct DeviceFeatures {
+            // Windows: 99.86%
+            // Linux: 99.89%
+            // Android: 97.64%
+            // Mac OS: 100%
+            // iOS: 0%
+            bool fragmentStoresAndAtomics = false;
+        };
+
         struct SubmitSemaphores {
             std::vector<SemaphorePtr> waitSemaphores = {};
             std::vector<VkPipelineStageFlags> waitDstStageMasks = {};
@@ -39,7 +48,7 @@ namespace coffee {
 
             ~Device() noexcept;
 
-            static DevicePtr create();
+            static DevicePtr create(const DeviceFeatures& features = {});
 
             void waitDeviceIdle();
             void waitTransferQueueIdle();
@@ -187,7 +196,7 @@ namespace coffee {
                 uint32_t* currentFrame = nullptr;
             };
 
-            Device();
+            Device(const DeviceFeatures& features);
 
             void initializeGlobalEnvironment();
             void deinitializeGlobalEnvironment() noexcept;
@@ -199,12 +208,12 @@ namespace coffee {
 
             void createInstance();
             void createDebugMessenger();
-            void pickPhysicalDevice(VkSurfaceKHR surface);
-            void createLogicalDevice(VkSurfaceKHR surface);
+            void pickPhysicalDevice(VkSurfaceKHR surface, const DeviceFeatures& features);
+            void createLogicalDevice(VkSurfaceKHR surface, const DeviceFeatures& features);
             void createDescriptorPool();
             void createAllocator();
 
-            bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const std::vector<const char*>& additionalExtensions = {});
+            bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, const DeviceFeatures& features);
 
             void translateSemaphores(SubmitInfo& submitInfo, const SubmitSemaphores& semaphores);
 

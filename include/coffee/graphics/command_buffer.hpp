@@ -288,7 +288,7 @@ namespace coffee {
 
             inline void bindPipeline(const ComputePipelinePtr& pipeline) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind compute pipelines on compute/graphics command buffers.");
+                COFFEE_ASSERT(type == CommandBufferType::Compute, "You can only bind compute pipelines on compute command buffers.");
 
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
@@ -298,7 +298,7 @@ namespace coffee {
             inline void bindDescriptorSets(const ComputePipelinePtr& pipeline, const DescriptorSetPtr& descriptor, size_t firstSet = 0U)
                 const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind descriptors on compute/graphics command buffers.");
+                COFFEE_ASSERT(type == CommandBufferType::Compute, "You can only bind descriptors on compute command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(descriptor != nullptr, "descriptor must be a valid pointer.");
@@ -313,7 +313,7 @@ namespace coffee {
                 size_t firstSet = 0U
             ) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind descriptors on compute/graphics command buffers.");
+                COFFEE_ASSERT(type == CommandBufferType::Compute, "You can only bind descriptors on compute command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
@@ -331,7 +331,7 @@ namespace coffee {
                 size_t firstSet = 0U
             ) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind descriptors on compute/graphics command buffers.");
+                COFFEE_ASSERT(type == CommandBufferType::Compute, "You can only bind descriptors on compute command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
@@ -350,7 +350,7 @@ namespace coffee {
                 const DescriptorSetPtr& fourthDescriptor
             ) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only bind descriptors on compute/graphics command buffers.");
+                COFFEE_ASSERT(type == CommandBufferType::Compute, "You can only bind descriptors on compute command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(firstDescriptor != nullptr, "firstDescriptor must be a valid pointer.");
@@ -364,7 +364,7 @@ namespace coffee {
 
             inline void pushConstants(const ComputePipelinePtr& pipeline, size_t size, const void* pValues, size_t offset = 0U) const noexcept
             {
-                COFFEE_ASSERT(type != CommandBufferType::Transfer, "You can only push constants on compute/graphics command buffers.");
+                COFFEE_ASSERT(type == CommandBufferType::Compute, "You can only push constants on compute command buffers.");
                 COFFEE_ASSERT(pipeline != nullptr, "Invalid pipeline provided.");
 
                 COFFEE_ASSERT(size > 0, "size must be greater than 0.");
