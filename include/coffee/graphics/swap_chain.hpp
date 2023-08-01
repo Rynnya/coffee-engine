@@ -23,13 +23,13 @@ namespace coffee {
             bool acquireNextImage();
             void submit(std::vector<CommandBuffer>&& commandBuffers);
 
-            void recreate(uint32_t width, uint32_t height, VkPresentModeKHR mode);
+            void recreate(const VkExtent2D& extent, VkPresentModeKHR mode);
 
-            inline uint32_t currentFrame() const noexcept { return currentFrame_; }
+            inline uint32_t getPresentIndex() const noexcept { return presentIndex_; }
 
-            inline const std::vector<ImagePtr>& presentImages() const noexcept { return images_; }
+            inline const std::vector<ImagePtr>& getPresentImages() const noexcept { return images_; }
 
-            inline VkPresentModeKHR presentMode() const noexcept { return currentPresentMode_; }
+            inline VkPresentModeKHR getPresentMode() const noexcept { return currentPresentMode_; }
 
         private:
             void checkSupportedPresentModes() noexcept;
@@ -44,7 +44,7 @@ namespace coffee {
             VkSurfaceKHR surface_ = VK_NULL_HANDLE;
             VkSwapchainKHR handle_ = VK_NULL_HANDLE;
 
-            uint32_t currentFrame_ = 0U;
+            uint32_t presentIndex_ = 0U;
 
             std::vector<ImagePtr> images_ {};
             std::array<FencePtr, Device::kMaxOperationsInFlight> fencesInFlight_ {};

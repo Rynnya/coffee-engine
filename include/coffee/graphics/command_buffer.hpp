@@ -8,10 +8,10 @@
 #include <coffee/graphics/framebuffer.hpp>
 #include <coffee/graphics/graphics_pipeline.hpp>
 #include <coffee/graphics/image.hpp>
+#include <coffee/graphics/model.hpp>
 #include <coffee/graphics/render_pass.hpp>
 #include <coffee/graphics/sampler.hpp>
 
-#include <coffee/objects/model.hpp>
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/non_copyable.hpp>
 

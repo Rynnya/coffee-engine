@@ -90,15 +90,10 @@ namespace coffee {
 
             int width {}, height {};
             glfwGetWindowSize(windowHandle_, &width, &height);
-            windowWidth_ = static_cast<uint32_t>(width);
-            windowHeight_ = static_cast<uint32_t>(height);
+            windowSize_ = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
             glfwGetFramebufferSize(windowHandle_, &width, &height);
-            framebufferWidth_ = static_cast<uint32_t>(width);
-            framebufferHeight_ = static_cast<uint32_t>(height);
-
-            windowFocused_ = static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_FOCUSED));
-            windowIconified_ = static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_ICONIFIED));
+            framebufferSize_ = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
             // Hack: This required to forbid usage of possible extent of (0, 0)
             glfwSetWindowSizeLimits(windowHandle_, 1, 1, GLFW_DONT_CARE, GLFW_DONT_CARE);
@@ -110,16 +105,15 @@ namespace coffee {
 
             if (glfwRawMouseMotionSupported() && settings.rawInput) {
                 glfwSetInputMode(windowHandle_, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-                rawInputEnabled_ = true;
             }
 
             // Window related callbacks
             glfwSetFramebufferSizeCallback(windowHandle_, framebufferResizeCallback);
-            glfwSetWindowSizeCallback(windowHandle_, resizeCallback);
+            glfwSetWindowSizeCallback(windowHandle_, windowResizeCallback);
             glfwSetCursorEnterCallback(windowHandle_, windowEnterCallback);
             glfwSetWindowPosCallback(windowHandle_, windowPositionCallback);
             glfwSetWindowCloseCallback(windowHandle_, windowCloseCallback);
-            glfwSetWindowFocusCallback(windowHandle_, focusCallback);
+            glfwSetWindowFocusCallback(windowHandle_, windowFocusCallback);
 
             // Mouse related callbacks
             glfwSetMouseButtonCallback(windowHandle_, mouseClickCallback);
@@ -139,13 +133,12 @@ namespace coffee {
                 throw RegularVulkanException { result };
             }
 
-            const VkExtent2D extent = { static_cast<uint32_t>(framebufferWidth_), static_cast<uint32_t>(framebufferHeight_) };
-            swapChain = std::make_unique<SwapChain>(device_, surfaceHandle_, extent, settings.presentMode);
+            swapChain_ = std::make_unique<SwapChain>(device_, surfaceHandle_, framebufferSize_, settings.presentMode);
         }
 
         Window::~Window() noexcept
         {
-            swapChain = nullptr;
+            swapChain_ = nullptr;
             vkDestroySurfaceKHR(device_->instance(), surfaceHandle_, nullptr);
 
             glfwDestroyWindow(windowHandle_);
@@ -158,31 +151,29 @@ namespace coffee {
             return std::unique_ptr<Window>(new Window { device, settings, windowName });
         }
 
-        const std::vector<ImagePtr>& Window::presentImages() const noexcept { return swapChain->presentImages(); }
-
-        uint32_t Window::currentImageIndex() const noexcept { return swapChain->currentFrame(); }
-
-        bool Window::acquireNextImage() { return swapChain->acquireNextImage(); }
+        bool Window::acquireNextImage() { return swapChain_->acquireNextImage(); }
 
         void Window::sendCommandBuffer(CommandBuffer&& commandBuffer)
         {
             std::vector<CommandBuffer> commandBuffers {};
             commandBuffers.push_back(std::move(commandBuffer));
 
-            swapChain->submit(std::move(commandBuffers));
+            swapChain_->submit(std::move(commandBuffers));
         }
 
-        void Window::sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers) { swapChain->submit(std::move(commandBuffers)); }
+        void Window::sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers) { swapChain_->submit(std::move(commandBuffers)); }
 
-        void Window::changePresentMode(VkPresentModeKHR newMode)
+        void Window::setPresentMode(VkPresentModeKHR newMode)
         {
-            while (framebufferWidth_ == 0 || framebufferHeight_ == 0) {
+            if (swapChain_->getPresentMode() == newMode) {
+                return;
+            }
+
+            while (framebufferSize_.width == 0 || framebufferSize_.height == 0) {
                 glfwWaitEvents();
             }
 
-            swapChain->recreate(framebufferWidth_, framebufferHeight_, newMode);
-
-            presentModeEvent(*this, std::forward<VkPresentModeKHR>(newMode));
+            swapChain_->recreate(framebufferSize_, newMode);
         }
 
         const std::string& Window::getWindowTitle() const noexcept { return titleName_; }
@@ -197,29 +188,48 @@ namespace coffee {
             titleName_ = newTitle;
         }
 
-        bool Window::isFocused() const noexcept { return windowFocused_; }
+        bool Window::isFocused() const noexcept { return glfwGetWindowAttrib(windowHandle_, GLFW_FOCUSED) == GLFW_TRUE; }
 
         void Window::focusWindow() const noexcept { glfwFocusWindow(windowHandle_); }
 
-        bool Window::isIconified() const noexcept { return windowIconified_; }
+        WindowState Window::getWindowState() const noexcept
+        {
+            if (glfwGetWindowAttrib(windowHandle_, GLFW_ICONIFIED) == GLFW_TRUE) {
+                return WindowState::Iconified;
+            }
+
+            if (glfwGetWindowAttrib(windowHandle_, GLFW_MAXIMIZED) == GLFW_TRUE) {
+                return WindowState::Maximized;
+            }
+
+            return WindowState::Normal;
+        }
+
+        void Window::restoreWindow() const noexcept { glfwRestoreWindow(windowHandle_); }
+
+        void Window::iconifyWindow() const noexcept { glfwIconifyWindow(windowHandle_); }
+
+        void Window::maximizeWindow() const noexcept { glfwMaximizeWindow(windowHandle_); }
+
+        bool Window::isHidden() const noexcept { return glfwGetWindowAttrib(windowHandle_, GLFW_VISIBLE) == GLFW_FALSE; }
 
         void Window::hideWindow() const noexcept { glfwHideWindow(windowHandle_); }
 
         void Window::showWindow() const noexcept { glfwShowWindow(windowHandle_); }
 
-        bool Window::isBorderless() const noexcept { return !static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_DECORATED)); }
+        bool Window::isBorderless() const noexcept { return glfwGetWindowAttrib(windowHandle_, GLFW_DECORATED) == GLFW_FALSE; }
 
         void Window::makeBorderless() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_DECORATED, GLFW_FALSE); }
 
         void Window::revertBorderless() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_DECORATED, GLFW_TRUE); }
 
-        bool Window::isPassthrough() const noexcept { return static_cast<bool>(glfwGetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH)); }
+        bool Window::isPassthrough() const noexcept { return glfwGetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH) == GLFW_TRUE; }
 
         void Window::enablePassthrough() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH, GLFW_TRUE); }
 
         void Window::disablePassthrough() const noexcept { glfwSetWindowAttrib(windowHandle_, GLFW_MOUSE_PASSTHROUGH, GLFW_FALSE); }
 
-        CursorState Window::cursorState() const noexcept
+        CursorState Window::getCursorState() const noexcept
         {
             switch (glfwGetInputMode(windowHandle_, GLFW_CURSOR)) {
                 default:
@@ -240,20 +250,9 @@ namespace coffee {
 
         void Window::setCursor(const CursorPtr& cursor) const noexcept
         {
-            if (cursor != nullptr) {
-                glfwSetCursor(windowHandle_, cursor->cursor_);
-            }
+            glfwSetCursor(windowHandle_, cursor != nullptr ? cursor->cursor_ : nullptr);
+            cursor_ = cursor;
         }
-
-        void Window::resetCursor() const noexcept { glfwSetCursor(windowHandle_, nullptr); }
-
-        Float2D Window::mousePosition() const noexcept { return { static_cast<float>(xMousePosition_), static_cast<float>(yMousePosition_) }; }
-
-        VkOffset2D Window::windowPosition() const noexcept { return { xWindowPosition_, yWindowPosition_ }; }
-
-        VkExtent2D Window::windowSize() const noexcept { return { windowWidth_, windowHeight_ }; }
-
-        VkExtent2D Window::framebufferSize() const noexcept { return { framebufferWidth_, framebufferHeight_ }; }
 
         void Window::setMousePosition(const Float2D& position) const noexcept
         {
@@ -265,11 +264,10 @@ namespace coffee {
         void Window::setWindowSize(const VkExtent2D& size) const noexcept
         {
             glfwSetWindowSize(windowHandle_, size.width, size.height);
-            windowWidth_ = framebufferWidth_ = size.width;
-            windowWidth_ = framebufferHeight_ = size.height;
+            windowSize_ = framebufferSize_ = size;
         }
 
-        std::string Window::clipboard() { return glfwGetClipboardString(nullptr); }
+        std::string Window::getClipboard() { return glfwGetClipboardString(nullptr); }
 
         void Window::setClipboard(const std::string& clipboard) { glfwSetClipboardString(nullptr, clipboard.data()); }
 
@@ -277,7 +275,9 @@ namespace coffee {
 
         bool Window::isButtonPressed(MouseButton mouseButton) const noexcept { return glfwGetMouseButton(windowHandle_, *mouseButton) == GLFW_PRESS; }
 
-        bool Window::shouldClose() const noexcept { return static_cast<bool>(glfwWindowShouldClose(windowHandle_)); }
+        void Window::requestAttention() const noexcept { glfwRequestWindowAttention(windowHandle_); }
+
+        bool Window::shouldClose() const noexcept { return glfwWindowShouldClose(windowHandle_) == GLFW_TRUE; }
 
         void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height)
         {
@@ -285,30 +285,27 @@ namespace coffee {
 
             // Discard all callbacks when window is minimized
             if (width == 0 || height == 0) {
-                windowPtr->windowIconified_ = true;
                 return;
             }
 
             // !!! Always recreate swap chain, even if previous size is same as new one, otherwise it
             // will freeze image
-            windowPtr->framebufferWidth_ = static_cast<uint32_t>(width);
-            windowPtr->framebufferHeight_ = static_cast<uint32_t>(height);
-            windowPtr->windowIconified_ = false;
+            windowPtr->framebufferSize_ = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
-            auto& swapChain = windowPtr->swapChain;
-            swapChain->recreate(windowPtr->framebufferWidth_, windowPtr->framebufferHeight_, swapChain->presentMode());
+            auto& swapChain = windowPtr->swapChain_;
+            swapChain->recreate(windowPtr->framebufferSize_, swapChain->getPresentMode());
 
-            const ResizeEvent resizeEvent { windowPtr->framebufferWidth_, windowPtr->framebufferHeight_ };
+            const ResizeEvent resizeEvent { windowPtr->framebufferSize_.width, windowPtr->framebufferSize_.height };
             windowPtr->windowResizeEvent(*windowPtr, resizeEvent);
         }
 
-        void Window::resizeCallback(GLFWwindow* window, int width, int height)
+        void Window::windowResizeCallback(GLFWwindow* window, int width, int height)
         {
             // This callback most likely will be called with framebufferResizeCallback, so we don't do
             // any callbacks or actions here
             Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
-            windowPtr->windowWidth_ = static_cast<uint32_t>(width);
-            windowPtr->windowHeight_ = static_cast<uint32_t>(height);
+
+            windowPtr->windowSize_ = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
         }
 
         void Window::windowEnterCallback(GLFWwindow* window, int entered)
@@ -323,8 +320,7 @@ namespace coffee {
         {
             Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
-            windowPtr->xWindowPosition_ = xpos;
-            windowPtr->yWindowPosition_ = ypos;
+            windowPtr->windowPosition_ = { xpos, ypos };
 
             const WindowPositionEvent positionEvent { xpos, ypos };
             windowPtr->windowPositionEvent(*windowPtr, positionEvent);
@@ -337,10 +333,9 @@ namespace coffee {
             windowPtr->windowCloseEvent(*windowPtr);
         }
 
-        void Window::focusCallback(GLFWwindow* window, int focused)
+        void Window::windowFocusCallback(GLFWwindow* window, int focused)
         {
             Window* windowPtr = static_cast<Window*>(glfwGetWindowUserPointer(window));
-            windowPtr->windowFocused_ = static_cast<bool>(focused);
 
             const WindowFocusEvent focusEvent { static_cast<bool>(focused) };
             windowPtr->windowFocusEvent(*windowPtr, focusEvent);
@@ -361,8 +356,7 @@ namespace coffee {
             const MouseMoveEvent moveEvent { static_cast<float>(xpos), static_cast<float>(ypos) };
             windowPtr->mouseMoveEvent(*windowPtr, moveEvent);
 
-            windowPtr->xMousePosition_ = xpos;
-            windowPtr->yMousePosition_ = ypos;
+            windowPtr->mousePosition_ = { static_cast<float>(xpos), static_cast<float>(ypos) };
         }
 
         void Window::mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset)
