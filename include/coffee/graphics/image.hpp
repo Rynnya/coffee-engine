@@ -23,12 +23,6 @@ namespace coffee {
             float priority = 0.5f;
         };
 
-        struct FSImageConfiguration {
-            VkImageCreateFlags flags = 0;
-            uint32_t mipLevels = 1U;
-            float priority = 0.5f;
-        };
-
         struct ImageViewConfiguration {
             VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
             VkFormat format = VK_FORMAT_UNDEFINED;

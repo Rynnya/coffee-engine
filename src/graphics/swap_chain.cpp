@@ -44,7 +44,7 @@ namespace coffee {
                 std::numeric_limits<uint64_t>::max(),
                 imageAvailableSemaphores_[device_->currentOperationInFlight()],
                 VK_NULL_HANDLE,
-                &currentFrame_
+                &presentIndex_
             );
 
             if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -104,17 +104,17 @@ namespace coffee {
 
             submitInfo.swapChain = handle_;
             submitInfo.swapChainWaitSemaphore = renderFinishedSemaphores_[device_->currentOperationInFlight()];
-            submitInfo.currentFrame = &currentFrame_;
+            submitInfo.currentFrame = &presentIndex_;
 
             device_->endGraphicsSubmit(std::move(submitInfo), fencesInFlight_[device_->currentOperationInFlight()], false);
         }
 
-        void SwapChain::recreate(uint32_t width, uint32_t height, VkPresentModeKHR mode)
+        void SwapChain::recreate(const VkExtent2D& extent, VkPresentModeKHR mode)
         {
             images_.clear();
 
             VkSwapchainKHR oldSwapChain = handle_;
-            createSwapChain({ width, height }, mode, oldSwapChain);
+            createSwapChain(extent, mode, oldSwapChain);
 
             waitForRelease();
             vkDestroySwapchainKHR(device_->logicalDevice(), oldSwapChain, nullptr);

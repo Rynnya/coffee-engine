@@ -23,13 +23,12 @@ namespace coffee {
     template <typename T, typename ControlClass>
     class PropertyImpl {
     private: // Members must be placed here so decltype can capture them in expressions
-        static_assert(std::is_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>, "'get' must return const ref.");
-        static_assert(detail::IsGetterConst<ControlClass>::value, "'get' must be declared as const method.");
+        static_assert(std::is_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>, "'get' must return proper type.");
+        static_assert(detail::IsGetterConst<ControlClass>::value, "'get' must be declared as const method and return const reference.");
 
         ControlClass controller_;
 
     public:
-        template <std::enable_if_t<std::is_default_constructible_v<ControlClass>, bool> = true>
         inline explicit PropertyImpl() noexcept(std::is_nothrow_default_constructible_v<ControlClass>) {};
 
         // For some reason clang goes crazy here, so I will just format it manually
@@ -83,6 +82,11 @@ namespace coffee {
         inline operator const T&() const noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
         {
             return controller_.get();
+        }
+
+        inline const T* operator->() const noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return &controller_.get();
         }
 
         template <typename O>
@@ -141,6 +145,76 @@ namespace coffee {
             noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
         {
             return controller_.get() <= object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator+(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() + object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator-(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() - object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator*(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() * object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator/(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() / object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator%(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() % object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator^(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() ^ object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator&(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() & object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator|(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() | object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator>>(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() >> object;
+        }
+
+        template <typename O>
+        inline decltype(auto) operator<<(const O& object)
+            noexcept(std::is_nothrow_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>)
+        {
+            return controller_.get() << object;
         }
 
         template <typename O>
@@ -251,6 +325,7 @@ namespace coffee {
     };
 
     template <typename T>
+    // Look at PropertyImpl for implementation details
     using Property = PropertyImpl<T, BasicControl<T>>;
 
 } // namespace coffee

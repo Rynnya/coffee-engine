@@ -3,7 +3,7 @@
 
 #include <coffee/graphics/image.hpp>
 #include <coffee/graphics/shader.hpp>
-#include <coffee/objects/model.hpp>
+#include <coffee/graphics/model.hpp>
 
 #include <coffee/interfaces/filesystem.hpp>
 #include <coffee/interfaces/scope_guard.hpp>
@@ -22,29 +22,67 @@ namespace coffee {
     class AssetManager;
     using AssetManagerPtr = std::shared_ptr<AssetManager>;
 
+    // Q: Why not just use inheritance to simply all this info structs?
+    // A: Designated initializers doesn't work well with inheritance, thus all fields repeatedly provided
+
+    struct BytesLoadingInfo {
+        // Filesystem as fallback loading method, if cache doesn't contain requested asset
+        FilesystemPtr filesystem = nullptr;
+        // Path to requested asset
+        std::string path = {};
+    };
+
+    struct ShaderLoadingInfo {
+        // Filesystem as fallback loading method, if cache doesn't contain requested asset
+        FilesystemPtr filesystem = nullptr;
+        // Path to requested asset
+        std::string path = {};
+        // Shader entrypoint, almost always it's just "main"
+        std::string entrypoint = "main";
+    };
+
+    struct ImageLoadingInfo {
+        // Filesystem as fallback loading method, if cache doesn't contain requested asset
+        FilesystemPtr filesystem = nullptr;
+        // Path to requested asset
+        std::string path = {};
+    };
+
+    struct ModelLoadingInfo {
+        // Filesystem as fallback loading method, if cache doesn't contain requested asset
+        FilesystemPtr filesystem = nullptr;
+        // Path to requested asset
+        std::string path = {};
+    };
+
+    struct SoundLoadingInfo {
+        // Filesystem as fallback loading method, if cache doesn't contain requested asset
+        FilesystemPtr filesystem = nullptr;
+        // Path to requested asset
+        std::string path = {};
+    };
+
+    struct AudioStreamLoadingInfo {
+        // Filesystem as fallback loading method, if cache doesn't contain requested asset
+        FilesystemPtr filesystem = nullptr;
+        // Path to requested asset
+        std::string path = {};
+    };
+
     // Asynchronous loader for coffee::Filesystem
     // Calling any of functions below is thread-safe unless otherwise specified
-    // Function DO NOT wait for operations to complete, you must explicitly call waitDeviceIdle or waitQueue*Idle
     class AssetManager {
     public:
         ~AssetManager() noexcept = default;
 
         static AssetManagerPtr create(const graphics::DevicePtr& device);
 
-        std::vector<uint8_t> getBytes(const std::string& path);
-        std::vector<uint8_t> getBytes(const FilesystemPtr& fs, const std::string& path);
-        graphics::ShaderPtr getShader(const std::string& path, const std::string& entrypoint = "main");
-        graphics::ShaderPtr getShader(const FilesystemPtr& fs, const std::string& path, const std::string& entrypoint = "main");
-        ModelPtr getModel(const std::string& path);
-        ModelPtr getModel(const FilesystemPtr& fs, const std::string& path);
-        // BEWARE: amountOfChannels ignored when image already loaded, you can extract actual amount of channels through VkFormat
-        graphics::ImagePtr getImage(const std::string& path, uint32_t amountOfChannels);
-        // BEWARE: amountOfChannels ignored for raw image types, you can extract actual amount of channels through VkFormat
-        graphics::ImagePtr getImage(const FilesystemPtr& fs, const std::string& path, uint32_t amountOfChannels);
-        void getSound(const std::string& path);
-        void getSound(const FilesystemPtr& fs, const std::string& path);
-        void getAudioStream(const std::string& path);
-        void getAudioStream(const FilesystemPtr& fs, const std::string& path);
+        std::vector<uint8_t> loadBytes(const BytesLoadingInfo& loadingInfo);
+        graphics::ShaderPtr loadShader(const ShaderLoadingInfo& loadingInfo);
+        graphics::ImagePtr loadImage(const ImageLoadingInfo& loadingInfo);
+        graphics::ModelPtr loadModel(const ModelLoadingInfo& loadingInfo);
+        void loadSound(const SoundLoadingInfo& loadingInfo);
+        void loadAudioStream(const AudioStreamLoadingInfo& loadingInfo);
 
         // Thread-safe remove function, may cause blocking
         void removeFromCache(const std::string& path);
@@ -57,11 +95,12 @@ namespace coffee {
         void selectThreeChannels();
         void selectFourChannels();
 
-        ModelPtr loadModel(const FilesystemPtr& filesystem, const std::string& path);
+        graphics::ModelPtr loadModel(const FilesystemPtr& filesystem, const std::string& path);
         std::string readMaterialName(utils::ReaderStream& stream);
 
         graphics::ImagePtr loadRawImage(std::vector<uint8_t>& rawBytes);
-        graphics::ImagePtr loadBasisImage(std::vector<uint8_t>& rawBytes, uint32_t amountOfChannels);
+        graphics::ImagePtr loadBasisImage(std::vector<uint8_t>& rawBytes);
+
         VkFormat channelsToVkFormat(uint32_t amountOfChannels, bool compressed);
         basist::transcoder_texture_format channelsToBasisuFormat(uint32_t amountOfChannels);
 
@@ -70,7 +109,7 @@ namespace coffee {
 
             static Asset create(graphics::ShaderPtr shader) { return { Filesystem::FileType::Shader, std::move(shader) }; }
 
-            static Asset create(ModelPtr model) { return { Filesystem::FileType::Model, std::move(model) }; }
+            static Asset create(graphics::ModelPtr model) { return { Filesystem::FileType::Model, std::move(model) }; }
 
             static Asset create(graphics::ImagePtr image) { return { Filesystem::FileType::RawImage, std::move(image) }; }
 
@@ -91,48 +130,23 @@ namespace coffee {
         };
 
         struct MeshMetadata {
-            AABB aabb;
+            graphics::AABB aabb;
             uint32_t verticesOffset;
             uint32_t verticesSize;
             uint32_t indicesOffset;
             uint32_t indicesSize;
         };
 
-        class ModelLoader {
-        public:
-            struct MaterialMetadata {
-                Materials* materials;
-                std::string name;
-                uint32_t amountOfChannels;
-                TextureType type;
-            };
+        struct MaterialMetadata {
+            graphics::Materials* materials;
+            std::string name;
+            TextureType type;
+        };
 
-            struct MipmapInformation {
-                size_t bufferOffset = 0;
-                uint32_t width = 0;
-                uint32_t height = 0;
-            };
-
-            ModelLoader(AssetManager& manager, const FilesystemPtr& filesystem, std::vector<MaterialMetadata>& materialsMetadata);
-
-            void operator()(const tbb::blocked_range<size_t>& range) const;
-
-            graphics::ImagePtr loadRawImage(
-                graphics::BufferPtr& stagingBuffer,
-                const graphics::FencePtr& transferFence,
-                std::vector<uint8_t>& rawBytes
-            ) const;
-            graphics::ImagePtr loadBasisImage(
-                graphics::BufferPtr& stagingBuffer,
-                const graphics::FencePtr& transferFence,
-                std::vector<uint8_t>& rawBytes,
-                uint32_t amountOfChannels
-            ) const;
-
-        private:
-            AssetManager& manager;
-            const FilesystemPtr& filesystem;
-            std::vector<MaterialMetadata>& materialsMetadata;
+        struct MipmapInformation {
+            size_t bufferOffset = 0;
+            uint32_t width = 0;
+            uint32_t height = 0;
         };
 
         graphics::DevicePtr device_;
@@ -142,8 +156,6 @@ namespace coffee {
 
         using HashAccessor = tbb::concurrent_hash_map<XXH64_hash_t, Asset>::const_accessor;
         tbb::concurrent_hash_map<XXH64_hash_t, Asset> cache_ {};
-
-        friend class ModelLoader;
     };
 
 } // namespace coffee

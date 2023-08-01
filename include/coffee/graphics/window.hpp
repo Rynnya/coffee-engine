@@ -50,6 +50,15 @@ namespace coffee {
             Disabled = 2
         };
 
+        enum class WindowState : uint32_t {
+            // Normal window state
+            Normal = 0,
+            // Window is minimized, icon is shown in taskbar
+            Iconified = 1,
+            // Window is maximized, like, windowed fullscreen
+            Maximized = 2
+        };
+
         class Window;
         using WindowPtr = std::unique_ptr<Window>;
 
@@ -59,14 +68,17 @@ namespace coffee {
 
             static WindowPtr create(const DevicePtr& device, WindowSettings settings, const std::string& windowName = "Coffee");
 
-            const std::vector<ImagePtr>& presentImages() const noexcept;
-            uint32_t currentImageIndex() const noexcept;
+            inline const std::vector<ImagePtr>& getPresentImages() const noexcept { return swapChain_->getPresentImages(); }
+
+            inline uint32_t getPresentIndex() const noexcept { return swapChain_->getPresentIndex(); }
 
             bool acquireNextImage();
             void sendCommandBuffer(CommandBuffer&& commandBuffer);
             void sendCommandBuffers(std::vector<CommandBuffer>&& commandBuffers);
 
-            void changePresentMode(VkPresentModeKHR newMode);
+            inline VkPresentModeKHR getPresentMode() const noexcept { return swapChain_->getPresentMode(); }
+
+            void setPresentMode(VkPresentModeKHR newMode);
 
             const std::string& getWindowTitle() const noexcept;
             void setWindowTitle(const std::string& newTitle) const noexcept;
@@ -74,7 +86,12 @@ namespace coffee {
             bool isFocused() const noexcept;
             void focusWindow() const noexcept;
 
-            bool isIconified() const noexcept;
+            WindowState getWindowState() const noexcept;
+            void restoreWindow() const noexcept;
+            void iconifyWindow() const noexcept;
+            void maximizeWindow() const noexcept;
+
+            bool isHidden() const noexcept;
             void hideWindow() const noexcept;
             void showWindow() const noexcept;
 
@@ -86,28 +103,36 @@ namespace coffee {
             void enablePassthrough() const noexcept;
             void disablePassthrough() const noexcept;
 
-            CursorState cursorState() const noexcept;
+            CursorState getCursorState() const noexcept;
             void showCursor() const noexcept;
             void hideCursor() const noexcept;
             void disableCursor() const noexcept;
 
-            void setCursor(const CursorPtr& cursor) const noexcept;
-            void resetCursor() const noexcept;
+            inline const CursorPtr& getCursor() const noexcept { return cursor_; }
 
-            Float2D mousePosition() const noexcept;
-            VkOffset2D windowPosition() const noexcept;
-            VkExtent2D windowSize() const noexcept;
-            VkExtent2D framebufferSize() const noexcept;
+            void setCursor(const CursorPtr& cursor) const noexcept;
+
+            inline const Float2D& getMousePosition() const noexcept { return mousePosition_; }
+
             void setMousePosition(const Float2D& position) const noexcept;
+
+            inline const VkOffset2D& getWindowPosition() const noexcept { return windowPosition_; }
+
             void setWindowPosition(const VkOffset2D& position) const noexcept;
+
+            inline const VkExtent2D& getWindowSize() const noexcept { return windowSize_; }
+
             void setWindowSize(const VkExtent2D& size) const noexcept;
 
-            static std::string clipboard();
+            inline const VkExtent2D& getFramebufferSize() const noexcept { return framebufferSize_; }
+
+            static std::string getClipboard();
             static void setClipboard(const std::string& clipboard);
 
             bool isButtonPressed(Keys key) const noexcept;
             bool isButtonPressed(MouseButton mouseButton) const noexcept;
 
+            void requestAttention() const noexcept;
             bool shouldClose() const noexcept;
 
             // clang-format off
@@ -122,7 +147,6 @@ namespace coffee {
             mutable Invokable<const Window&, const MouseWheelEvent&>        mouseWheelEvent {};
             mutable Invokable<const Window&, const KeyEvent&>               keyEvent {};
             mutable Invokable<const Window&, char32_t>                      charEvent {};
-            mutable Invokable<const Window&, VkPresentModeKHR>              presentModeEvent {};
 
             // clang-format on
 
@@ -132,11 +156,11 @@ namespace coffee {
             Window(const DevicePtr& device, WindowSettings settings, const std::string& windowName);
 
             static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
-            static void resizeCallback(GLFWwindow* window, int width, int height);
+            static void windowResizeCallback(GLFWwindow* window, int width, int height);
             static void windowEnterCallback(GLFWwindow* window, int entered);
             static void windowPositionCallback(GLFWwindow* window, int xpos, int ypos);
             static void windowCloseCallback(GLFWwindow* window);
-            static void focusCallback(GLFWwindow* window, int focused);
+            static void windowFocusCallback(GLFWwindow* window, int focused);
 
             static void mouseClickCallback(GLFWwindow* window, int button, int action, int mods);
             static void mousePositionCallback(GLFWwindow* window, double xpos, double ypos);
@@ -152,22 +176,14 @@ namespace coffee {
             VkSurfaceKHR surfaceHandle_ = VK_NULL_HANDLE;
 
             mutable std::string titleName_ {};
+            mutable CursorPtr cursor_ = nullptr;
 
-            mutable uint32_t windowWidth_ = 0U;
-            mutable uint32_t windowHeight_ = 0U;
-            mutable uint32_t framebufferWidth_ = 0U;
-            mutable uint32_t framebufferHeight_ = 0U;
+            mutable Float2D mousePosition_ {};
+            mutable VkOffset2D windowPosition_ {};
+            mutable VkExtent2D windowSize_ {};
+            mutable VkExtent2D framebufferSize_ {};
 
-            mutable double xMousePosition_ = 0.0;
-            mutable double yMousePosition_ = 0.0;
-            mutable int32_t xWindowPosition_ = 0;
-            mutable int32_t yWindowPosition_ = 0;
-
-            mutable bool windowFocused_ = false;
-            mutable bool windowIconified_ = false;
-            mutable bool rawInputEnabled_ = false;
-
-            std::unique_ptr<SwapChain> swapChain = nullptr;
+            std::unique_ptr<SwapChain> swapChain_ = nullptr;
         };
 
     } // namespace graphics
