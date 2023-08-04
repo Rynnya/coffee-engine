@@ -7,40 +7,40 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        struct FramebufferConfiguration {
-            VkExtent2D extent {};
-            uint32_t layers = 1U;
-            std::vector<ImageViewPtr> colorViews {};
-            ImageViewPtr depthStencilView = nullptr;
-            ImageViewPtr resolveView = nullptr;
-        };
+    struct FramebufferConfiguration {
+        VkExtent2D extent {};
+        uint32_t layers = 1U;
+        std::vector<ImageViewPtr> colorViews {};
+        ImageViewPtr depthStencilView = nullptr;
+        ImageViewPtr resolveView = nullptr;
+    };
 
-        class Framebuffer;
-        using FramebufferPtr = std::unique_ptr<Framebuffer>;
+    class Framebuffer;
+    using FramebufferPtr = std::unique_ptr<Framebuffer>;
 
-        class Framebuffer {
-        public:
-            ~Framebuffer() noexcept;
+    class Framebuffer {
+    public:
+        ~Framebuffer() noexcept;
 
-            static FramebufferPtr create(const DevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration);
+        static FramebufferPtr create(const DevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration);
 
-            const uint32_t width;
-            const uint32_t height;
-            const uint32_t layers;
+        const uint32_t width;
+        const uint32_t height;
+        const uint32_t layers;
 
-            inline const VkFramebuffer& framebuffer() const noexcept { return framebuffer_; }
+        inline const VkFramebuffer& framebuffer() const noexcept { return framebuffer_; }
 
-        private:
-            Framebuffer(const DevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration);
+    private:
+        Framebuffer(const DevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration);
 
-            DevicePtr device_;
+        DevicePtr device_;
 
-            VkFramebuffer framebuffer_ = VK_NULL_HANDLE;
-        };
+        VkFramebuffer framebuffer_ = VK_NULL_HANDLE;
+    };
 
-    } // namespace graphics
+} // namespace graphics
 
 } // namespace coffee
 

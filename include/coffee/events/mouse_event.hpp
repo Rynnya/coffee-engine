@@ -6,39 +6,39 @@
 
 namespace coffee {
 
-    class MouseMoveEvent {
-    public:
-        MouseMoveEvent(float x, float y) noexcept;
-        ~MouseMoveEvent() noexcept = default;
+class MouseMoveEvent {
+public:
+    MouseMoveEvent(float x, float y) noexcept;
+    ~MouseMoveEvent() noexcept = default;
 
-        const float x;
-        const float y;
-    };
+    const float x;
+    const float y;
+};
 
-    class MouseWheelEvent {
-    public:
-        MouseWheelEvent(float x, float y) noexcept;
-        ~MouseWheelEvent() noexcept = default;
+class MouseWheelEvent {
+public:
+    MouseWheelEvent(float x, float y) noexcept;
+    ~MouseWheelEvent() noexcept = default;
 
-        const float x;
-        const float y;
-    };
+    const float x;
+    const float y;
+};
 
-    class MouseClickEvent {
-    public:
-        MouseClickEvent(State state, MouseButton button, uint32_t mods) noexcept;
-        ~MouseClickEvent() noexcept = default;
+class MouseClickEvent {
+public:
+    MouseClickEvent(State state, MouseButton button, uint32_t mods) noexcept;
+    ~MouseClickEvent() noexcept = default;
 
-        const State state;
-        const MouseButton button;
+    const State state;
+    const MouseButton button;
 
-        const bool control;
-        const bool shift;
-        const bool alt;
-        const bool super;
-        const bool capsLock;
-        const bool numLock;
-    };
+    const bool control;
+    const bool shift;
+    const bool alt;
+    const bool super;
+    const bool capsLock;
+    const bool numLock;
+};
 
 } // namespace coffee
 

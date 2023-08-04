@@ -5,34 +5,34 @@
 
 namespace coffee {
 
-    namespace detail {
+namespace detail {
 
-        template <typename T, typename = void>
-        struct IsGetterConst : std::false_type {};
+    template <typename T, typename = void>
+    struct IsGetterConst : std::false_type {};
 
-        template <typename T>
-        struct IsGetterConst<T, std::void_t<decltype(std::declval<const T&>().get())>> : std::true_type {};
+    template <typename T>
+    struct IsGetterConst<T, std::void_t<decltype(std::declval<const T&>().get())>> : std::true_type {};
 
-    } // namespace detail
+} // namespace detail
 
-    // Property class that allow for using like in C#
-    // ControlClass must be provided with 'get' (and, optionally, 'set') method in order for this class to be working
-    // This limitation applied for better runtime performance
-    // Using std::function or lightweight function would create too much runtime overhead
-    // BEWARE: Compile time is gonna be really really huge
-    template <typename T, typename ControlClass>
-    class PropertyImpl {
-    private: // Members must be placed here so decltype can capture them in expressions
-        static_assert(std::is_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>, "'get' must return proper type.");
-        static_assert(detail::IsGetterConst<ControlClass>::value, "'get' must be declared as const method and return const reference.");
+// Property class that allow for using like in C#
+// ControlClass must be provided with 'get' (and, optionally, 'set') method in order for this class to be working
+// This limitation applied for better runtime performance
+// Using std::function or lightweight function would create too much runtime overhead
+// BEWARE: Compile time is gonna be really really huge
+template <typename T, typename ControlClass>
+class PropertyImpl {
+private: // Members must be placed here so decltype can capture them in expressions
+    static_assert(std::is_invocable_r_v<const T&, decltype(&ControlClass::get), ControlClass*>, "'get' must return proper type.");
+    static_assert(detail::IsGetterConst<ControlClass>::value, "'get' must be declared as const method and return const reference.");
 
-        ControlClass controller_;
+    ControlClass controller_;
 
-    public:
-        inline explicit PropertyImpl() noexcept(std::is_nothrow_default_constructible_v<ControlClass>) {};
+public:
+    inline explicit PropertyImpl() noexcept(std::is_nothrow_default_constructible_v<ControlClass>) {};
 
-        // For some reason clang goes crazy here, so I will just format it manually
-        // clang-format off
+    // For some reason clang goes crazy here, so I will just format it manually
+    // clang-format off
 
         template <typename ...Args, std::enable_if_t<std::is_constructible_v<ControlClass, Args...>, bool> = true>
         inline explicit PropertyImpl(Args&&... args) noexcept(std::is_nothrow_constructible_v<ControlClass, Args...>)
@@ -307,26 +307,26 @@ namespace coffee {
             return controller_.set(controller_.get() >> object);
         }
 
-        // clang-format on
-    };
+    // clang-format on
+};
 
-    // Simple class example for Property
-    template <typename T>
-    class BasicControl {
-    private:
-        T object_ {};
+// Simple class example for Property
+template <typename T>
+class BasicControl {
+private:
+    T object_ {};
 
-    public:
-        BasicControl() noexcept = default;
+public:
+    BasicControl() noexcept = default;
 
-        const T& get() noexcept { return object_; }
+    const T& get() noexcept { return object_; }
 
-        const T& set(const T& object) noexcept(std::is_nothrow_copy_assignable_v<T>) { return (object_ = object); }
-    };
+    const T& set(const T& object) noexcept(std::is_nothrow_copy_assignable_v<T>) { return (object_ = object); }
+};
 
-    template <typename T>
-    // Look at PropertyImpl for implementation details
-    using Property = PropertyImpl<T, BasicControl<T>>;
+template <typename T>
+// Look at PropertyImpl for implementation details
+using Property = PropertyImpl<T, BasicControl<T>>;
 
 } // namespace coffee
 

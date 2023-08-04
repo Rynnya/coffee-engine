@@ -6,41 +6,41 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        struct ComputePipelineConfiguration {
-            ShaderPtr shader = nullptr;
-            PushConstants pushConstants {};
-            std::vector<SpecializationConstant> specializationConstants {};
-            std::vector<DescriptorLayoutPtr> layouts {};
-        };
+    struct ComputePipelineConfiguration {
+        ShaderPtr shader = nullptr;
+        PushConstants pushConstants {};
+        std::vector<SpecializationConstant> specializationConstants {};
+        std::vector<DescriptorLayoutPtr> layouts {};
+    };
 
-        class ComputePipeline;
-        using ComputePipelinePtr = std::shared_ptr<ComputePipeline>;
+    class ComputePipeline;
+    using ComputePipelinePtr = std::shared_ptr<ComputePipeline>;
 
-        class ComputePipeline {
-        public:
-            ~ComputePipeline() noexcept;
+    class ComputePipeline {
+    public:
+        ~ComputePipeline() noexcept;
 
-            static ComputePipelinePtr create(const DevicePtr& device, const ComputePipelineConfiguration& configuration);
+        static ComputePipelinePtr create(const DevicePtr& device, const ComputePipelineConfiguration& configuration);
 
-            inline const VkPipelineLayout& layout() const noexcept { return layout_; }
+        inline const VkPipelineLayout& layout() const noexcept { return layout_; }
 
-            inline const VkPipeline& pipeline() const noexcept { return pipeline_; }
+        inline const VkPipeline& pipeline() const noexcept { return pipeline_; }
 
-        private:
-            ComputePipeline(const DevicePtr& device, const ComputePipelineConfiguration& configuration);
+    private:
+        ComputePipeline(const DevicePtr& device, const ComputePipelineConfiguration& configuration);
 
-            void verifySize(const char* name, uint32_t originalSize, uint32_t alignedSize);
+        void verifySize(const char* name, uint32_t originalSize, uint32_t alignedSize);
 
-            DevicePtr device_;
+        DevicePtr device_;
 
-            VkPipelineLayout layout_ = VK_NULL_HANDLE;
-            VkPipeline pipeline_ = VK_NULL_HANDLE;
-        };
+        VkPipelineLayout layout_ = VK_NULL_HANDLE;
+        VkPipeline pipeline_ = VK_NULL_HANDLE;
+    };
 
-    }
+} // namespace graphics
 
-}
+} // namespace coffee
 
 #endif

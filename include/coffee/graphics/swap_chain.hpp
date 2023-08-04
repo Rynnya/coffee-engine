@@ -13,51 +13,51 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        class SwapChain {
-        public:
-            SwapChain(const DevicePtr& device, VkSurfaceKHR surface, VkExtent2D extent, VkPresentModeKHR preferablePresentMode);
-            ~SwapChain() noexcept;
+    class SwapChain {
+    public:
+        SwapChain(const DevicePtr& device, VkSurfaceKHR surface, VkExtent2D extent, VkPresentModeKHR preferablePresentMode);
+        ~SwapChain() noexcept;
 
-            bool acquireNextImage();
-            void submit(std::vector<CommandBuffer>&& commandBuffers);
+        bool acquireNextImage();
+        void submit(std::vector<CommandBuffer>&& commandBuffers);
 
-            void recreate(const VkExtent2D& extent, VkPresentModeKHR mode);
+        void recreate(const VkExtent2D& extent, VkPresentModeKHR mode);
 
-            inline uint32_t getPresentIndex() const noexcept { return presentIndex_; }
+        inline uint32_t getPresentIndex() const noexcept { return presentIndex_; }
 
-            inline const std::vector<ImagePtr>& getPresentImages() const noexcept { return images_; }
+        inline const std::vector<ImagePtr>& getPresentImages() const noexcept { return images_; }
 
-            inline VkPresentModeKHR getPresentMode() const noexcept { return currentPresentMode_; }
+        inline VkPresentModeKHR getPresentMode() const noexcept { return currentPresentMode_; }
 
-        private:
-            void checkSupportedPresentModes() noexcept;
-            void createSwapChain(VkExtent2D extent, VkPresentModeKHR preferablePresentMode, VkSwapchainKHR oldSwapchain = nullptr);
-            void createSyncObjects();
+    private:
+        void checkSupportedPresentModes() noexcept;
+        void createSwapChain(VkExtent2D extent, VkPresentModeKHR preferablePresentMode, VkSwapchainKHR oldSwapchain = nullptr);
+        void createSyncObjects();
 
-            void waitForAcquire();
-            void waitForRelease();
+        void waitForAcquire();
+        void waitForRelease();
 
-            DevicePtr device_;
+        DevicePtr device_;
 
-            VkSurfaceKHR surface_ = VK_NULL_HANDLE;
-            VkSwapchainKHR handle_ = VK_NULL_HANDLE;
+        VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+        VkSwapchainKHR handle_ = VK_NULL_HANDLE;
 
-            uint32_t presentIndex_ = 0U;
+        uint32_t presentIndex_ = 0U;
 
-            std::vector<ImagePtr> images_ {};
-            std::array<FencePtr, Device::kMaxOperationsInFlight> fencesInFlight_ {};
-            std::array<VkSemaphore, Device::kMaxOperationsInFlight> imageAvailableSemaphores_ {};
-            std::array<VkSemaphore, Device::kMaxOperationsInFlight> renderFinishedSemaphores_ {};
+        std::vector<ImagePtr> images_ {};
+        std::array<FencePtr, Device::kMaxOperationsInFlight> fencesInFlight_ {};
+        std::array<VkSemaphore, Device::kMaxOperationsInFlight> imageAvailableSemaphores_ {};
+        std::array<VkSemaphore, Device::kMaxOperationsInFlight> renderFinishedSemaphores_ {};
 
-            VkPresentModeKHR currentPresentMode_ = VK_PRESENT_MODE_FIFO_KHR;
-            bool relaxedFIFOSupported_ = false;
-            bool mailboxSupported_ = false;
-            bool immediateSupported_ = false;
-        };
+        VkPresentModeKHR currentPresentMode_ = VK_PRESENT_MODE_FIFO_KHR;
+        bool relaxedFIFOSupported_ = false;
+        bool mailboxSupported_ = false;
+        bool immediateSupported_ = false;
+    };
 
-    } // namespace graphics
+} // namespace graphics
 
 } // namespace coffee
 

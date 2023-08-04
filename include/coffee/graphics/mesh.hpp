@@ -5,21 +5,21 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        class Mesh : NonMoveable {
-        public:
-            Mesh(std::vector<SubMesh>&& subMeshes, BufferPtr&& verticesBuffer, BufferPtr&& indicesBuffer);
-            ~Mesh() noexcept = default;
+    class Mesh : NonMoveable {
+    public:
+        Mesh(std::vector<SubMesh>&& subMeshes, BufferPtr&& verticesBuffer, BufferPtr&& indicesBuffer);
+        ~Mesh() noexcept = default;
 
-            const std::vector<SubMesh> subMeshes;
-            const BufferPtr verticesBuffer;
-            const BufferPtr indicesBuffer;
-        };
+        const std::vector<SubMesh> subMeshes;
+        const BufferPtr verticesBuffer;
+        const BufferPtr indicesBuffer;
+    };
 
-        using MeshPtr = std::shared_ptr<Mesh>;
+    using MeshPtr = std::shared_ptr<Mesh>;
 
-    } // namespace graphics
+} // namespace graphics
 
 } // namespace coffee
 

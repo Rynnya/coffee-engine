@@ -6,28 +6,28 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        class Semaphore;
-        using SemaphorePtr = std::shared_ptr<Semaphore>;
+    class Semaphore;
+    using SemaphorePtr = std::shared_ptr<Semaphore>;
 
-        class Semaphore : NonMoveable {
-        public:
-            ~Semaphore() noexcept;
+    class Semaphore : NonMoveable {
+    public:
+        ~Semaphore() noexcept;
 
-            static SemaphorePtr create(const DevicePtr& device);
+        static SemaphorePtr create(const DevicePtr& device);
 
-            inline const VkSemaphore& semaphore() const noexcept { return semaphore_; }
+        inline const VkSemaphore& semaphore() const noexcept { return semaphore_; }
 
-        private:
-            Semaphore(const DevicePtr& device);
+    private:
+        Semaphore(const DevicePtr& device);
 
-            DevicePtr device_;
+        DevicePtr device_;
 
-            VkSemaphore semaphore_ = VK_NULL_HANDLE;
-        };
+        VkSemaphore semaphore_ = VK_NULL_HANDLE;
+    };
 
-    } // namespace graphics
+} // namespace graphics
 
 } // namespace coffee
 
