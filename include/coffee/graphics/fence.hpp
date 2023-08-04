@@ -6,32 +6,32 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        class Fence;
-        using FencePtr = std::unique_ptr<Fence>;
+    class Fence;
+    using FencePtr = std::unique_ptr<Fence>;
 
-        class Fence : NonMoveable {
-        public:
-            ~Fence() noexcept;
+    class Fence : NonMoveable {
+    public:
+        ~Fence() noexcept;
 
-            static FencePtr create(const DevicePtr& device, bool signaled = false);
+        static FencePtr create(const DevicePtr& device, bool signaled = false);
 
-            VkResult status() noexcept;
-            void wait(uint64_t timeout = std::numeric_limits<uint64_t>::max()) noexcept;
-            void reset() noexcept;
+        VkResult status() noexcept;
+        void wait(uint64_t timeout = std::numeric_limits<uint64_t>::max()) noexcept;
+        void reset() noexcept;
 
-            inline const VkFence& fence() const noexcept { return fence_; }
+        inline const VkFence& fence() const noexcept { return fence_; }
 
-        private:
-            Fence(const DevicePtr& device, bool signaled);
+    private:
+        Fence(const DevicePtr& device, bool signaled);
 
-            DevicePtr device_;
+        DevicePtr device_;
 
-            VkFence fence_ = VK_NULL_HANDLE;
-        };
+        VkFence fence_ = VK_NULL_HANDLE;
+    };
 
-    } // namespace graphics
+} // namespace graphics
 
 } // namespace coffee
 

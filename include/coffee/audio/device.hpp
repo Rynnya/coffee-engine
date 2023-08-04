@@ -11,44 +11,44 @@
 
 namespace coffee {
 
-    namespace audio {
+namespace audio {
 
-        class Device;
-        using DevicePtr = std::shared_ptr<const Device>;
+    class Device;
+    using DevicePtr = std::shared_ptr<const Device>;
 
-        class Device : NonMoveable {
-        public:
-            ~Device() noexcept;
+    class Device : NonMoveable {
+    public:
+        ~Device() noexcept;
 
-            // Calling this function for the first time will initialize OpenAL library
-            static DevicePtr create();
+        // Calling this function for the first time will initialize OpenAL library
+        static DevicePtr create();
 
-            // This function will return all devices available ONLY if ALC_ENUMERATION_EXT is supported
-            // create() must be called at least once for this function to return valid array
-            // Otherwise array will be empty
-            inline static const std::vector<DevicePtr>& devices() noexcept { return devices_; }
+        // This function will return all devices available ONLY if ALC_ENUMERATION_EXT is supported
+        // create() must be called at least once for this function to return valid array
+        // Otherwise array will be empty
+        inline static const std::vector<DevicePtr>& devices() noexcept { return devices_; }
 
-            // Must be called before using any other types of commands on this class
-            // Otherwise ContextException will be thrown
-            void applyContext() const noexcept;
+        // Must be called before using any other types of commands on this class
+        // Otherwise ContextException will be thrown
+        void applyContext() const noexcept;
 
-            inline const std::string& name() const noexcept { return deviceName_; }
+        inline const std::string& name() const noexcept { return deviceName_; }
 
-        private:
-            Device(ALCdevice* device, const char* deviceName);
+    private:
+        Device(ALCdevice* device, const char* deviceName);
 
-            static void initialize();
+        static void initialize();
 
-            ALCdevice* device_;
-            ALCcontext* context_;
+        ALCdevice* device_;
+        ALCcontext* context_;
 
-            std::string deviceName_;
+        std::string deviceName_;
 
-            inline static DevicePtr primaryDevice_ = nullptr;
-            inline static std::vector<DevicePtr> devices_ {};
-        };
+        inline static DevicePtr primaryDevice_ = nullptr;
+        inline static std::vector<DevicePtr> devices_ {};
+    };
 
-    } // namespace audio
+} // namespace audio
 
 } // namespace coffee
 

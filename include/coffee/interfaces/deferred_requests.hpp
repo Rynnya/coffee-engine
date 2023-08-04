@@ -10,25 +10,25 @@
 
 namespace coffee {
 
-    // Interface that allows derived classes to use deferred requests system
-    // Requests will wait until apply is called
-    class DeferredRequests : NonMoveable {
-    protected:
-        DeferredRequests() noexcept = default;
-        ~DeferredRequests() noexcept = default;
+// Interface that allows derived classes to use deferred requests system
+// Requests will wait until apply is called
+class DeferredRequests : NonMoveable {
+protected:
+    DeferredRequests() noexcept = default;
+    ~DeferredRequests() noexcept = default;
 
-        void addRequest(const std::function<void()>& func);
-        void addRequest(std::function<void()>&& func);
+    void addRequest(const std::function<void()>& func);
+    void addRequest(std::function<void()>&& func);
 
-        void applyRequests();
-        void clearRequests();
+    void applyRequests();
+    void clearRequests();
 
-        size_t amountOfRequests() const noexcept;
+    size_t amountOfRequests() const noexcept;
 
-    private:
-        std::vector<std::function<void()>> requests_ {};
-        mutable tbb::queuing_mutex mtx_ {};
-    };
+private:
+    std::vector<std::function<void()>> requests_ {};
+    mutable tbb::queuing_mutex mtx_ {};
+};
 
 } // namespace coffee
 

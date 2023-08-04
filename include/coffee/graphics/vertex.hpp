@@ -10,41 +10,41 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        class Vertex {
-        public:
-            glm::vec3 position {};
-            glm::u16vec3 normal {};
-            glm::uint32 texCoords {};
-            glm::u16vec3 tangent {};
+    class Vertex {
+    public:
+        glm::vec3 position {};
+        glm::u16vec3 normal {};
+        glm::uint32 texCoords {};
+        glm::u16vec3 tangent {};
 
-            static inline std::vector<graphics::InputElement> getElementDescriptions()
-            {
-                std::vector<graphics::InputElement> elements {};
+        static inline std::vector<graphics::InputElement> getElementDescriptions()
+        {
+            std::vector<graphics::InputElement> elements {};
 
-                elements.push_back({ 0U, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) });
-                elements.push_back({ 1U, VK_FORMAT_R16G16B16_SNORM, offsetof(Vertex, normal) });
-                elements.push_back({ 2U, VK_FORMAT_R16G16_SFLOAT, offsetof(Vertex, texCoords) });
-                elements.push_back({ 3U, VK_FORMAT_R16G16B16_SNORM, offsetof(Vertex, tangent) });
+            elements.push_back({ 0U, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position) });
+            elements.push_back({ 1U, VK_FORMAT_R16G16B16_SNORM, offsetof(Vertex, normal) });
+            elements.push_back({ 2U, VK_FORMAT_R16G16_SFLOAT, offsetof(Vertex, texCoords) });
+            elements.push_back({ 3U, VK_FORMAT_R16G16B16_SNORM, offsetof(Vertex, tangent) });
 
-                return elements;
-            }
+            return elements;
+        }
 
-            bool operator==(const Vertex& other);
-            bool operator!=(const Vertex& other);
-        };
+        bool operator==(const Vertex& other);
+        bool operator!=(const Vertex& other);
+    };
 
-    } // namespace graphics
+} // namespace graphics
 
 } // namespace coffee
 
 namespace std {
 
-    template <>
-    struct hash<coffee::graphics::Vertex> {
-        size_t operator()(const coffee::graphics::Vertex& vertex) const;
-    };
+template <>
+struct hash<coffee::graphics::Vertex> {
+    size_t operator()(const coffee::graphics::Vertex& vertex) const;
+};
 
 } // namespace std
 

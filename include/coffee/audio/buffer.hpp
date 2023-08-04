@@ -9,21 +9,21 @@
 
 namespace coffee {
 
-    namespace audio {
+namespace audio {
 
-        class Buffer : NonCopyable {
-        public:
-            ~Buffer() noexcept;
+    class Buffer : NonCopyable {
+    public:
+        ~Buffer() noexcept;
 
-            static Buffer create();
-            static std::vector<Buffer> create(uint32_t size);
+        static Buffer create();
+        static std::vector<Buffer> create(uint32_t size);
 
-            void upload();
+        void upload();
 
-        private:
-        };
+    private:
+    };
 
-    } // namespace audio
+} // namespace audio
 
 } // namespace coffee
 

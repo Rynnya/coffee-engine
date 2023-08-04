@@ -9,49 +9,49 @@
 
 namespace coffee {
 
-    namespace audio {
+namespace audio {
 
-        class Source : NonCopyable {
-        public:
-            ~Source() noexcept;
+    class Source : NonCopyable {
+    public:
+        ~Source() noexcept;
 
-            Source(Source&& other) noexcept;
-            Source& operator=(Source&& other) noexcept;
+        Source(Source&& other) noexcept;
+        Source& operator=(Source&& other) noexcept;
 
-            static Source create();
+        static Source create();
 
-            void play();
-            void pause();
-            void stop();
-            void rewind();
+        void play();
+        void pause();
+        void stop();
+        void rewind();
 
-            PitchProperty pitch;
-            GainProperty gain;
-            MinGainProperty minGain;
-            MaxGainProperty maxGain;
-            MaxDistanceProperty maxDistance;
-            RollOffFactorProperty rollOffFactor;
-            ConeOuterGainProperty coneOuterGain;
-            ConeInnerAngleProperty coneInnerAngle;
-            ConeOuterAngleProperty coneOuterAngle;
-            ReferenceDistanceProperty referenceDistance;
-            PositionProperty position;
-            VelocityProperty velocity;
-            DirectionProperty direction;
-            SourceStateProperty sourceState;
-            SourceRelativeProperty sourceRelative;
-            LoopingProperty looping;
+        PitchProperty pitch;
+        GainProperty gain;
+        MinGainProperty minGain;
+        MaxGainProperty maxGain;
+        MaxDistanceProperty maxDistance;
+        RollOffFactorProperty rollOffFactor;
+        ConeOuterGainProperty coneOuterGain;
+        ConeInnerAngleProperty coneInnerAngle;
+        ConeOuterAngleProperty coneOuterAngle;
+        ReferenceDistanceProperty referenceDistance;
+        PositionProperty position;
+        VelocityProperty velocity;
+        DirectionProperty direction;
+        SourceStateProperty sourceState;
+        SourceRelativeProperty sourceRelative;
+        LoopingProperty looping;
 
-        private:
-            Source();
+    private:
+        Source();
 
-            void initialize();
-            void validate() const;
+        void initialize();
+        void validate() const;
 
-            ALuint sourceHandle_ = AL_INVALID;
-        };
+        ALuint sourceHandle_ = AL_INVALID;
+    };
 
-    } // namespace audio
+} // namespace audio
 
 } // namespace coffee
 

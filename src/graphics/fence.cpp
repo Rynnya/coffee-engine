@@ -6,50 +6,50 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        Fence::Fence(const DevicePtr& device, bool signaled) : device_ { device }
-        {
-            VkFenceCreateInfo createInfo { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+    Fence::Fence(const DevicePtr& device, bool signaled) : device_ { device }
+    {
+        VkFenceCreateInfo createInfo { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 
-            if (signaled) {
-                createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-            }
-
-            VkResult result = vkCreateFence(device_->logicalDevice(), &createInfo, nullptr, &fence_);
-
-            if (result != VK_SUCCESS) {
-                COFFEE_ERROR("Failed to create fence to single time command buffer!");
-
-                throw RegularVulkanException { result };
-            }
+        if (signaled) {
+            createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         }
 
-        Fence::~Fence() noexcept
-        {
-            device_->notifyFenceCleanup(fence_);
+        VkResult result = vkCreateFence(device_->logicalDevice(), &createInfo, nullptr, &fence_);
 
-            vkDestroyFence(device_->logicalDevice(), fence_, nullptr);
+        if (result != VK_SUCCESS) {
+            COFFEE_ERROR("Failed to create fence to single time command buffer!");
+
+            throw RegularVulkanException { result };
         }
+    }
 
-        FencePtr Fence::create(const DevicePtr& device, bool signaled)
-        {
-            COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
+    Fence::~Fence() noexcept
+    {
+        device_->notifyFenceCleanup(fence_);
 
-            return std::unique_ptr<Fence>(new Fence { device, signaled });
-        }
+        vkDestroyFence(device_->logicalDevice(), fence_, nullptr);
+    }
 
-        VkResult Fence::status() noexcept { return vkGetFenceStatus(device_->logicalDevice(), fence_); }
+    FencePtr Fence::create(const DevicePtr& device, bool signaled)
+    {
+        COFFEE_ASSERT(device != nullptr, "Invalid device provided.");
 
-        void Fence::wait(uint64_t timeout) noexcept { vkWaitForFences(device_->logicalDevice(), 1, &fence_, VK_TRUE, timeout); }
+        return std::unique_ptr<Fence>(new Fence { device, signaled });
+    }
 
-        void Fence::reset() noexcept
-        {
-            device_->notifyFenceCleanup(fence_);
+    VkResult Fence::status() noexcept { return vkGetFenceStatus(device_->logicalDevice(), fence_); }
 
-            vkResetFences(device_->logicalDevice(), 1, &fence_);
-        }
+    void Fence::wait(uint64_t timeout) noexcept { vkWaitForFences(device_->logicalDevice(), 1, &fence_, VK_TRUE, timeout); }
 
-    } // namespace graphics
+    void Fence::reset() noexcept
+    {
+        device_->notifyFenceCleanup(fence_);
+
+        vkResetFences(device_->logicalDevice(), 1, &fence_);
+    }
+
+} // namespace graphics
 
 } // namespace coffee

@@ -14,42 +14,42 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        enum class CursorType {
-            Arrow = 0,
-            TextInput = 1,
-            CrossHair = 2,
-            Hand = 3,
-            ResizeEW = 4,
-            ResizeNS = 5,
-            ResizeNWSE = 6,
-            ResizeNESW = 7,
-            ResizeAll = 8,
-            NotAllowed = 9
-        };
+    enum class CursorType {
+        Arrow = 0,
+        TextInput = 1,
+        CrossHair = 2,
+        Hand = 3,
+        ResizeEW = 4,
+        ResizeNS = 5,
+        ResizeNWSE = 6,
+        ResizeNESW = 7,
+        ResizeAll = 8,
+        NotAllowed = 9
+    };
 
-        class Cursor;
-        using CursorPtr = std::shared_ptr<Cursor>;
+    class Cursor;
+    using CursorPtr = std::shared_ptr<Cursor>;
 
-        class Cursor {
-        public:
-            ~Cursor() noexcept;
+    class Cursor {
+    public:
+        ~Cursor() noexcept;
 
-            static CursorPtr create(CursorType type);
-            static CursorPtr create(const std::vector<uint8_t>& rawImage, uint32_t width, uint32_t height, CursorType type);
+        static CursorPtr create(CursorType type);
+        static CursorPtr create(const std::vector<uint8_t>& rawImage, uint32_t width, uint32_t height, CursorType type);
 
-            const CursorType type = CursorType::Arrow;
+        const CursorType type = CursorType::Arrow;
 
-        private:
-            Cursor(GLFWcursor* cursorHandle, CursorType type);
+    private:
+        Cursor(GLFWcursor* cursorHandle, CursorType type);
 
-            GLFWcursor* cursor_ = nullptr;
+        GLFWcursor* cursor_ = nullptr;
 
-            friend class Window;
-        };
+        friend class Window;
+    };
 
-    } // namespace graphics
+} // namespace graphics
 
 } // namespace coffee
 

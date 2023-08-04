@@ -9,119 +9,119 @@
 
 namespace coffee {
 
-    template <typename... Args>
-    class Callback {
-    public:
-        template <typename T, typename Fx, std::enable_if_t<std::is_invocable_v<Fx, T, Args...>, bool> = true>
-        Callback(T* obj, Fx&& func)
-            : bound_ { [obj, function = std::move(func)](Args&&... args) { std::invoke(function, obj, std::forward<Args>(args)...); } }
-            , hash_ { std::hash<T*> {}(obj) ^ bound_.target_type().hash_code() }
-        {}
+template <typename... Args>
+class Callback {
+public:
+    template <typename T, typename Fx, std::enable_if_t<std::is_invocable_v<Fx, T, Args...>, bool> = true>
+    Callback(T* obj, Fx&& func)
+        : bound_ { [obj, function = std::move(func)](Args&&... args) { std::invoke(function, obj, std::forward<Args>(args)...); } }
+        , hash_ { std::hash<T*> {}(obj) ^ bound_.target_type().hash_code() }
+    {}
 
-        template <typename Fx, std::enable_if_t<std::is_invocable_v<Fx, Args...>, bool> = true>
-        Callback(Fx&& func)
-            : bound_ { [function = std::move(func)](Args&&... args) { std::invoke(function, std::forward<Args>(args)...); } }
-            , hash_ { bound_.target_type().hash_code() }
-        {}
+    template <typename Fx, std::enable_if_t<std::is_invocable_v<Fx, Args...>, bool> = true>
+    Callback(Fx&& func)
+        : bound_ { [function = std::move(func)](Args&&... args) { std::invoke(function, std::forward<Args>(args)...); } }
+        , hash_ { bound_.target_type().hash_code() }
+    {}
 
-        Callback(const Callback<Args...>& other) : bound_ { other.bound_ }, hash_ { other.hash_ } {}
+    Callback(const Callback<Args...>& other) : bound_ { other.bound_ }, hash_ { other.hash_ } {}
 
-        Callback(Callback<Args...>&& other) noexcept : bound_ { std::move(other.bound_) }, hash_ { other.hash_ } {}
+    Callback(Callback<Args...>&& other) noexcept : bound_ { std::move(other.bound_) }, hash_ { other.hash_ } {}
 
-        Callback& operator=(const Callback<Args...>& other)
-        {
-            if (this == &other) {
-                return *this;
-            }
-
-            bound_ = other.bound_;
-            hash_ = other.hash_;
-
+    Callback& operator=(const Callback<Args...>& other)
+    {
+        if (this == &other) {
             return *this;
         }
 
-        Callback& operator=(Callback<Args...>&& other) noexcept
-        {
-            if (this == &other) {
-                return *this;
-            }
+        bound_ = other.bound_;
+        hash_ = other.hash_;
 
-            bound_ = std::move(other.bound_);
-            hash_ = std::move(other.hash_);
+        return *this;
+    }
 
+    Callback& operator=(Callback<Args...>&& other) noexcept
+    {
+        if (this == &other) {
             return *this;
         }
 
-        bool operator==(const Callback<Args...>& cb) const noexcept { return hash_ == cb.hash_; }
+        bound_ = std::move(other.bound_);
+        hash_ = std::move(other.hash_);
 
-        bool operator!=(const Callback<Args...>& cb) const noexcept { return hash_ != cb.hash_; }
+        return *this;
+    }
 
-        constexpr size_t hash_code() const noexcept { return hash_; }
+    bool operator==(const Callback<Args...>& cb) const noexcept { return hash_ == cb.hash_; }
 
-        void invoke(Args&&... args) const { bound_(std::forward<Args>(args)...); }
+    bool operator!=(const Callback<Args...>& cb) const noexcept { return hash_ != cb.hash_; }
 
-    private:
-        std::function<void(Args...)> bound_;
-        size_t hash_;
-    };
+    constexpr size_t hash_code() const noexcept { return hash_; }
 
-    template <typename... Args>
-    class Invokable {
-    public:
-        void operator+=(const Callback<Args...>& cb)
-        {
-            tbb::queuing_mutex::scoped_lock lock { mtx_ };
+    void invoke(Args&&... args) const { bound_(std::forward<Args>(args)...); }
 
-            if (std::find(callbacks_.begin(), callbacks_.end(), cb) == callbacks_.end()) {
-                callbacks_.push_back(cb);
-            }
+private:
+    std::function<void(Args...)> bound_;
+    size_t hash_;
+};
+
+template <typename... Args>
+class Invokable {
+public:
+    void operator+=(const Callback<Args...>& cb)
+    {
+        tbb::queuing_mutex::scoped_lock lock { mtx_ };
+
+        if (std::find(callbacks_.begin(), callbacks_.end(), cb) == callbacks_.end()) {
+            callbacks_.push_back(cb);
         }
+    }
 
-        void operator+=(Callback<Args...>&& cb)
-        {
-            tbb::queuing_mutex::scoped_lock lock { mtx_ };
+    void operator+=(Callback<Args...>&& cb)
+    {
+        tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
-            if (std::find(callbacks_.begin(), callbacks_.end(), cb) == callbacks_.end()) {
-                callbacks_.push_back(std::move(cb));
-            }
+        if (std::find(callbacks_.begin(), callbacks_.end(), cb) == callbacks_.end()) {
+            callbacks_.push_back(std::move(cb));
         }
+    }
 
-        void operator-=(const Callback<Args...>& cb)
-        {
-            tbb::queuing_mutex::scoped_lock lock { mtx_ };
+    void operator-=(const Callback<Args...>& cb)
+    {
+        tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
-            auto it = std::remove_if(callbacks_.begin(), callbacks_.end(), [&cb](auto& callback) { return callback.hash_code() == cb.hash_code(); });
-            callbacks_.erase(it, callbacks_.end());
+        auto it = std::remove_if(callbacks_.begin(), callbacks_.end(), [&cb](auto& callback) { return callback.hash_code() == cb.hash_code(); });
+        callbacks_.erase(it, callbacks_.end());
+    }
+
+    void operator-=(Callback<Args...>&& cb)
+    {
+        tbb::queuing_mutex::scoped_lock lock { mtx_ };
+
+        auto it = std::remove_if(callbacks_.begin(), callbacks_.end(), [&cb](auto& callback) { return callback.hash_code() == cb.hash_code(); });
+        callbacks_.erase(it, callbacks_.end());
+    }
+
+    void operator()(Args&&... args) const
+    {
+        tbb::queuing_mutex::scoped_lock lock { mtx_ };
+
+        for (const Callback<Args...>& cb : callbacks_) {
+            cb.invoke(std::forward<Args>(args)...);
         }
+    }
 
-        void operator-=(Callback<Args...>&& cb)
-        {
-            tbb::queuing_mutex::scoped_lock lock { mtx_ };
+    void clear()
+    {
+        tbb::queuing_mutex::scoped_lock lock { mtx_ };
 
-            auto it = std::remove_if(callbacks_.begin(), callbacks_.end(), [&cb](auto& callback) { return callback.hash_code() == cb.hash_code(); });
-            callbacks_.erase(it, callbacks_.end());
-        }
+        callbacks_.clear();
+    }
 
-        void operator()(Args&&... args) const
-        {
-            tbb::queuing_mutex::scoped_lock lock { mtx_ };
-
-            for (const Callback<Args...>& cb : callbacks_) {
-                cb.invoke(std::forward<Args>(args)...);
-            }
-        }
-
-        void clear()
-        {
-            tbb::queuing_mutex::scoped_lock lock { mtx_ };
-
-            callbacks_.clear();
-        }
-
-    private:
-        mutable tbb::queuing_mutex mtx_;
-        std::vector<Callback<Args...>> callbacks_;
-    };
+private:
+    mutable tbb::queuing_mutex mtx_;
+    std::vector<Callback<Args...>> callbacks_;
+};
 
 } // namespace coffee
 

@@ -3,13 +3,13 @@
 
 namespace coffee {
 
-    namespace audio {
+namespace audio {
 
-        class Stream {
-        public:
-        };
+    class Stream {
+    public:
+    };
 
-    } // namespace audio
+} // namespace audio
 
 } // namespace coffee
 

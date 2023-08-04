@@ -4,16 +4,16 @@
 
 namespace coffee {
 
-    namespace graphics {
+namespace graphics {
 
-        Mesh::Mesh(std::vector<SubMesh>&& subMeshes, BufferPtr&& verticesBuffer, BufferPtr&& indicesBuffer)
-            : subMeshes { std::move(subMeshes) }
-            , verticesBuffer { std::move(verticesBuffer) }
-            , indicesBuffer { std::move(indicesBuffer) }
-        {
-            COFFEE_ASSERT(this->verticesBuffer != nullptr, "Invalid vertices buffer provided.");
-        }
+    Mesh::Mesh(std::vector<SubMesh>&& subMeshes, BufferPtr&& verticesBuffer, BufferPtr&& indicesBuffer)
+        : subMeshes { std::move(subMeshes) }
+        , verticesBuffer { std::move(verticesBuffer) }
+        , indicesBuffer { std::move(indicesBuffer) }
+    {
+        COFFEE_ASSERT(this->verticesBuffer != nullptr, "Invalid vertices buffer provided.");
+    }
 
-    } // namespace graphics
+} // namespace graphics
 
 } // namespace coffee
