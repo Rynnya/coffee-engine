@@ -3,7 +3,7 @@
 
 #include <coffee/graphics/image.hpp>
 #include <coffee/graphics/shader.hpp>
-#include <coffee/graphics/model.hpp>
+#include <coffee/graphics/mesh.hpp>
 
 #include <coffee/interfaces/filesystem.hpp>
 #include <coffee/interfaces/scope_guard.hpp>
@@ -48,7 +48,7 @@ namespace coffee {
         std::string path = {};
     };
 
-    struct ModelLoadingInfo {
+    struct MeshLoadingInfo {
         // Filesystem as fallback loading method, if cache doesn't contain requested asset
         FilesystemPtr filesystem = nullptr;
         // Path to requested asset
@@ -80,7 +80,7 @@ namespace coffee {
         std::vector<uint8_t> loadBytes(const BytesLoadingInfo& loadingInfo);
         graphics::ShaderPtr loadShader(const ShaderLoadingInfo& loadingInfo);
         graphics::ImagePtr loadImage(const ImageLoadingInfo& loadingInfo);
-        graphics::ModelPtr loadModel(const ModelLoadingInfo& loadingInfo);
+        graphics::MeshPtr loadMesh(const MeshLoadingInfo& loadingInfo);
         void loadSound(const SoundLoadingInfo& loadingInfo);
         void loadAudioStream(const AudioStreamLoadingInfo& loadingInfo);
 
@@ -95,7 +95,7 @@ namespace coffee {
         void selectThreeChannels();
         void selectFourChannels();
 
-        graphics::ModelPtr loadModel(const FilesystemPtr& filesystem, const std::string& path);
+        graphics::MeshPtr loadMesh(const FilesystemPtr& filesystem, const std::string& path);
         std::string readMaterialName(utils::ReaderStream& stream);
 
         graphics::ImagePtr loadRawImage(std::vector<uint8_t>& rawBytes);
@@ -109,7 +109,7 @@ namespace coffee {
 
             static Asset create(graphics::ShaderPtr shader) { return { Filesystem::FileType::Shader, std::move(shader) }; }
 
-            static Asset create(graphics::ModelPtr model) { return { Filesystem::FileType::Model, std::move(model) }; }
+            static Asset create(graphics::MeshPtr mesh) { return { Filesystem::FileType::Mesh, std::move(mesh) }; }
 
             static Asset create(graphics::ImagePtr image) { return { Filesystem::FileType::RawImage, std::move(image) }; }
 

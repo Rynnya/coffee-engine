@@ -8,7 +8,7 @@
 #include <coffee/graphics/framebuffer.hpp>
 #include <coffee/graphics/graphics_pipeline.hpp>
 #include <coffee/graphics/image.hpp>
-#include <coffee/graphics/model.hpp>
+#include <coffee/graphics/mesh.hpp>
 #include <coffee/graphics/render_pass.hpp>
 #include <coffee/graphics/sampler.hpp>
 
@@ -438,18 +438,18 @@ namespace coffee {
                 vkCmdSetBlendConstants(buffer_, blendConstants);
             }
 
-            inline void bindModel(const ModelPtr& model) const noexcept
+            inline void bindMesh(const MeshPtr& mesh) const noexcept
             {
-                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind models on graphics command buffers.");
+                COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only bind meshes on graphics command buffers.");
 
-                COFFEE_ASSERT(model != nullptr, "Invalid model provided.");
+                COFFEE_ASSERT(mesh != nullptr, "Invalid mesh provided.");
 
-                VkBuffer buffers[] = { model->verticesBuffer->buffer() };
+                VkBuffer buffers[] = { mesh->verticesBuffer->buffer() };
                 VkDeviceSize offsets[] = { 0ULL };
                 vkCmdBindVertexBuffers(buffer_, 0U, 1U, buffers, offsets);
 
-                if (model->indicesBuffer != nullptr) {
-                    vkCmdBindIndexBuffer(buffer_, model->indicesBuffer->buffer(), 0U, VK_INDEX_TYPE_UINT32);
+                if (mesh->indicesBuffer != nullptr) {
+                    vkCmdBindIndexBuffer(buffer_, mesh->indicesBuffer->buffer(), 0U, VK_INDEX_TYPE_UINT32);
                 }
             }
 
@@ -483,33 +483,33 @@ namespace coffee {
                 vkCmdDraw(buffer_, vertexCount, instanceCount, firstVertex, firstInstance);
             }
 
-            // NOTE: You must call bindModel() before using mesh drawing
-            inline void drawMesh(const Mesh& mesh) const noexcept
+            // NOTE: You must call bindMesh() before using submesh drawing
+            inline void drawSubMesh(const SubMesh& submesh) const noexcept
             {
                 COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only draw on graphics command buffers.");
 
-                if (mesh.indicesCount == 0) {
-                    vkCmdDraw(buffer_, mesh.verticesCount, 1U, mesh.verticesOffset, 0U);
+                if (submesh.indicesCount == 0) {
+                    vkCmdDraw(buffer_, submesh.verticesCount, 1U, submesh.verticesOffset, 0U);
                     return;
                 }
 
-                vkCmdDrawIndexed(buffer_, mesh.indicesCount, 1U, mesh.indicesOffset, mesh.verticesOffset, 0U);
+                vkCmdDrawIndexed(buffer_, submesh.indicesCount, 1U, submesh.indicesOffset, submesh.verticesOffset, 0U);
             }
 
-            // NOTE: You must call bindModel() before using model drawing
-            inline void drawModel(const ModelPtr& model) const noexcept
+            // NOTE: You must call bindMesh() before using mesh drawing
+            inline void drawMesh(const MeshPtr& mesh) const noexcept
             {
                 COFFEE_ASSERT(type == CommandBufferType::Graphics, "You can only draw on graphics command buffers.");
 
-                COFFEE_ASSERT(model != nullptr, "Invalid model provided.");
+                COFFEE_ASSERT(mesh != nullptr, "Invalid mesh provided.");
 
-                if (model->indicesBuffer == nullptr) {
-                    for (const auto& mesh : model->meshes) {
+                if (mesh->indicesBuffer == nullptr) {
+                    for (const auto& mesh : mesh->subMeshes) {
                         vkCmdDraw(buffer_, mesh.verticesCount, 1U, mesh.verticesOffset, 0U);
                     }
                 }
                 else {
-                    for (const auto& mesh : model->meshes) {
+                    for (const auto& mesh : mesh->subMeshes) {
                         vkCmdDrawIndexed(buffer_, mesh.indicesCount, 1U, mesh.indicesOffset, mesh.verticesOffset, 0U);
                     }
                 }

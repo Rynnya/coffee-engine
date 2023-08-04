@@ -32,7 +32,7 @@ namespace coffee {
             // .spv
             Shader = 1,
             // .cfa
-            Model = 2,
+            Mesh = 2,
             // .img
             RawImage = 3,
             // .basis, .ktx2

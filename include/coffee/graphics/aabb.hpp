@@ -29,7 +29,7 @@ namespace coffee {
             AABB(AABB&&) noexcept = default;
             AABB& operator=(AABB&&) noexcept = default;
 
-            AABBPoints transform(const glm::mat4& modelMatrix) const noexcept;
+            AABBPoints transform(const glm::mat4& meshMatrix) const noexcept;
 
             glm::vec4 min {};
             glm::vec4 max {};
