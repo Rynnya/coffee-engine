@@ -43,7 +43,7 @@ namespace coffee {
                 case utils::fnv1a::digest(".spv"):
                     return Filesystem::FileType::Shader;
                 case utils::fnv1a::digest(".cfa"):
-                    return Filesystem::FileType::Model;
+                    return Filesystem::FileType::Mesh;
                 case utils::fnv1a::digest(".img"):
                     return Filesystem::FileType::RawImage;
                 case utils::fnv1a::digest(".basis"):
@@ -54,9 +54,9 @@ namespace coffee {
                     return Filesystem::FileType::WAV;
                 case utils::fnv1a::digest(".ogg"):
                     return Filesystem::FileType::OGG;
+                default:
+                    return Filesystem::FileType::RawBytes;
             }
-
-            return Filesystem::FileType::RawBytes;
         }
 
     } // namespace detail

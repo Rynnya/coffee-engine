@@ -4,7 +4,7 @@ namespace coffee {
 
     namespace graphics {
 
-        AABBPoints AABB::transform(const glm::mat4& modelMatrix) const noexcept
+        AABBPoints AABB::transform(const glm::mat4& meshMatrix) const noexcept
         {
             AABBPoints aabbPoints {};
 
@@ -18,7 +18,7 @@ namespace coffee {
             aabbPoints[7] = glm::vec4 { max.x, max.y, max.z, 1.0f };
 
             for (size_t i = 0; i < AABBPoints::kAmountOfPoints; i++) {
-                aabbPoints[i] = modelMatrix * aabbPoints[i];
+                aabbPoints[i] = meshMatrix * aabbPoints[i];
             }
 
             return aabbPoints;

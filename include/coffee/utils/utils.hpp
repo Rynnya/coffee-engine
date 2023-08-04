@@ -52,7 +52,7 @@ namespace coffee {
         template <size_t BufferSize>
         class ReadOnlyStream {
         public:
-            inline ReadOnlyStream(std::vector<uint8_t>& stream) : ptr_ { stream.data() }, size_ { stream.size() }, isOwner_ { false } {}
+            inline ReadOnlyStream(const std::vector<uint8_t>& stream) : ptr_ { stream.data() }, size_ { stream.size() }, isOwner_ { false } {}
 
             inline ReadOnlyStream(uint8_t* stream, size_t size, bool isOwner) : ptr_ { stream }, size_ { size }, isOwner_ { isOwner } {}
 

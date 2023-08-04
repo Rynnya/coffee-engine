@@ -39,8 +39,8 @@ namespace coffee {
             switch (type) {
                 case Filesystem::FileType::Shader:
                     return "Shader";
-                case Filesystem::FileType::Model:
-                    return "Model";
+                case Filesystem::FileType::Mesh:
+                    return "Mesh";
                 case Filesystem::FileType::RawImage:
                 case Filesystem::FileType::BasisImage:
                     return "Image";
@@ -188,7 +188,7 @@ namespace coffee {
         return std::static_pointer_cast<graphics::Image>(asset.actualObject);
     }
 
-    graphics::ModelPtr AssetManager::loadModel(const ModelLoadingInfo& loadingInfo)
+    graphics::MeshPtr AssetManager::loadMesh(const MeshLoadingInfo& loadingInfo)
     {
         HashAccessor accessor {};
         XXH64_hash_t hash = XXH3_64bits(loadingInfo.path.data(), loadingInfo.path.size());
@@ -201,25 +201,25 @@ namespace coffee {
 
             Filesystem::Entry entry = loadingInfo.filesystem->getMetadata(loadingInfo.path);
 
-            if (entry.type != Filesystem::FileType::Model) {
+            if (entry.type != Filesystem::FileType::Mesh) {
                 throw AssetException { AssetException::Type::TypeMismatch,
-                                       fmt::format("Expected type Model, requested type was {}", detail::fileTypeToString(entry.type)) };
+                                       fmt::format("Expected type Mesh, requested type was {}", detail::fileTypeToString(entry.type)) };
             }
 
-            graphics::ModelPtr model = loadModel(loadingInfo.filesystem, loadingInfo.path);
-            cache_.insert(std::make_pair(hash, Asset::create(model)));
+            graphics::MeshPtr mesh = loadMesh(loadingInfo.filesystem, loadingInfo.path);
+            cache_.insert(std::make_pair(hash, Asset::create(mesh)));
 
-            return model;
+            return mesh;
         }
 
         auto& asset = accessor->second;
 
-        if (asset.type != Filesystem::FileType::Model) {
+        if (asset.type != Filesystem::FileType::Mesh) {
             throw AssetException { AssetException::Type::TypeMismatch,
-                                   fmt::format("Expected type Model, requested type was {}", detail::fileTypeToString(asset.type)) };
+                                   fmt::format("Expected type Mesh, requested type was {}", detail::fileTypeToString(asset.type)) };
         }
 
-        return std::static_pointer_cast<graphics::Model>(asset.actualObject);
+        return std::static_pointer_cast<graphics::Mesh>(asset.actualObject);
     }
 
     void AssetManager::removeFromCache(const std::string& path) { cache_.erase(XXH3_64bits(path.data(), path.size())); }
@@ -438,15 +438,15 @@ namespace coffee {
         compressionTypes_.basisThreeChannels = basist::transcoder_texture_format::cTFRGBA32;
     }
 
-    graphics::ModelPtr AssetManager::loadModel(const FilesystemPtr& filesystem, const std::string& path)
+    graphics::MeshPtr AssetManager::loadMesh(const FilesystemPtr& filesystem, const std::string& path)
     {
         using namespace graphics;
 
         constexpr uint8_t headerMagic[4] = { 0xF0, 0x7B, 0xAE, 0x31 };
         constexpr uint8_t meshMagic[4] = { 0x13, 0xEA, 0xB7, 0xF0 };
 
-        std::vector<uint8_t> modelStream = filesystem->getContent(path);
-        utils::ReaderStream stream { modelStream };
+        std::vector<uint8_t> meshStream = filesystem->getContent(path);
+        utils::ReaderStream stream { meshStream };
 
         if (stream.size() < 8) {
             throw FilesystemException { FilesystemException::Type::InvalidFileType, "Invalid header size!" };
@@ -620,11 +620,11 @@ namespace coffee {
             cache_.insert(std::make_pair(hash, Asset::create(image)));
         }
 
-        std::vector<Mesh> meshes {};
-        meshes.reserve(meshesSize);
+        std::vector<SubMesh> subMeshes {};
+        subMeshes.reserve(meshesSize);
 
         for (uint32_t i = 0; i < meshesSize; i++) {
-            meshes.emplace_back(
+            subMeshes.emplace_back(
                 std::move(materials[i]),
                 std::move(meshesMetadata[i].aabb),
                 meshesMetadata[i].verticesOffset,
@@ -634,7 +634,7 @@ namespace coffee {
             );
         }
 
-        return std::make_shared<Model>(std::move(meshes), std::move(verticesBuffer), std::move(indicesBuffer));
+        return std::make_shared<Mesh>(std::move(subMeshes), std::move(verticesBuffer), std::move(indicesBuffer));
     }
 
     std::string AssetManager::readMaterialName(utils::ReaderStream& stream)

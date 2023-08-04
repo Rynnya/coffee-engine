@@ -6,14 +6,13 @@ namespace coffee {
 
     namespace graphics {
 
-        Mesh::Mesh(Materials&& mats, AABB&& aabb, uint32_t vertsOffset, uint32_t indsOffset, uint32_t vertsCount, uint32_t indsCount)
-            : materials { std::move(mats) }
-            , aabb { std::move(aabb) }
-            , verticesOffset { vertsOffset }
-            , indicesOffset { indsOffset }
-            , verticesCount { vertsCount }
-            , indicesCount { indsCount }
-        {}
+        Mesh::Mesh(std::vector<SubMesh>&& subMeshes, BufferPtr&& verticesBuffer, BufferPtr&& indicesBuffer)
+            : subMeshes { std::move(subMeshes) }
+            , verticesBuffer { std::move(verticesBuffer) }
+            , indicesBuffer { std::move(indicesBuffer) }
+        {
+            COFFEE_ASSERT(this->verticesBuffer != nullptr, "Invalid vertices buffer provided.");
+        }
 
     } // namespace graphics
 
