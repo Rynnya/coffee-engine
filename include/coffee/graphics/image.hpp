@@ -5,9 +5,7 @@
 #include <coffee/graphics/sampler.hpp>
 #include <coffee/utils/non_moveable.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct ImageConfiguration {
         VkImageCreateFlags flags = 0;
@@ -84,8 +82,6 @@ namespace graphics {
         VkImageView view_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

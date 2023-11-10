@@ -1,8 +1,6 @@
 #include <coffee/graphics/aabb.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     AABBPoints AABB::transform(const glm::mat4& meshMatrix) const noexcept
     {
@@ -24,6 +22,4 @@ namespace graphics {
         return aabbPoints;
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

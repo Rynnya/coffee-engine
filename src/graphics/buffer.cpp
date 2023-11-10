@@ -8,9 +8,7 @@
 
 #include <algorithm>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     Buffer::Buffer(const DevicePtr& device, const BufferConfiguration& configuration)
         : instanceSize { configuration.instanceSize }
@@ -48,8 +46,8 @@ namespace graphics {
         VkResult result = vmaCreateBuffer(device_->allocator(), &createInfo, &vmaCreateInfo, &buffer_, &allocation_, nullptr);
 
         if (result != VK_SUCCESS) {
-            COFFEE_ERROR("VMA failed to allocate buffer, requested size {}, with {} usage flags!", 
-                createInfo.size, format::bufferUsageFlags(createInfo.usage));
+            COFFEE_ERROR("VMA failed to allocate buffer, requested size {}, with {} usage flags!",
+                createInfo.size, static_cast<uint64_t>(createInfo.usage));
 
             throw RegularVulkanException { result };
         }
@@ -127,6 +125,4 @@ namespace graphics {
         }
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

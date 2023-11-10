@@ -5,9 +5,7 @@
 
 #include <algorithm>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     Sampler::Sampler(const DevicePtr& device, const SamplerConfiguration& configuration) : device_ { device }
     {
@@ -47,6 +45,4 @@ namespace graphics {
         return std::shared_ptr<Sampler>(new Sampler { device, configuration });
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

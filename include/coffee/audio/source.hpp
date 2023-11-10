@@ -7,9 +7,7 @@
 #include <memory>
 #include <vector>
 
-namespace coffee {
-
-namespace audio {
+namespace coffee { namespace audio {
 
     class Source : NonCopyable {
     public:
@@ -51,8 +49,6 @@ namespace audio {
         ALuint sourceHandle_ = AL_INVALID;
     };
 
-} // namespace audio
-
-} // namespace coffee
+}} // namespace coffee::audio
 
 #endif

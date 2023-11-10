@@ -7,9 +7,7 @@
 
 #include <array>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     GraphicsPipeline::GraphicsPipeline(const DevicePtr& device, const RenderPassPtr& renderPass, const GraphicsPipelineConfiguration& config)
         : device_ { device }
@@ -343,6 +341,4 @@ namespace graphics {
         return std::shared_ptr<GraphicsPipeline>(new GraphicsPipeline { device, renderPass, configuration });
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

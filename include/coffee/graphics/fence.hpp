@@ -4,9 +4,9 @@
 #include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
 
-namespace coffee {
+#include <limits>
 
-namespace graphics {
+namespace coffee { namespace graphics {
 
     class Fence;
     using FencePtr = std::unique_ptr<Fence>;
@@ -31,8 +31,6 @@ namespace graphics {
         VkFence fence_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

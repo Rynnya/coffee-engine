@@ -2,9 +2,7 @@
 
 #include <coffee/utils/log.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     Mesh::Mesh(std::vector<SubMesh>&& subMeshes, BufferPtr&& verticesBuffer, BufferPtr&& indicesBuffer)
         : subMeshes { std::move(subMeshes) }
@@ -14,6 +12,4 @@ namespace graphics {
         COFFEE_ASSERT(this->verticesBuffer != nullptr, "Invalid vertices buffer provided.");
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

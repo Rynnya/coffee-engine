@@ -9,9 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace coffee {
-
-namespace audio {
+namespace coffee { namespace audio {
 
     class Device;
     using DevicePtr = std::shared_ptr<const Device>;
@@ -48,8 +46,6 @@ namespace audio {
         inline static std::vector<DevicePtr> devices_ {};
     };
 
-} // namespace audio
-
-} // namespace coffee
+}} // namespace coffee::audio
 
 #endif

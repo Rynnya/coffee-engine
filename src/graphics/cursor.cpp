@@ -4,9 +4,7 @@
 
 #include <GLFW/glfw3.h>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     int cursorTypeToGLFWtype(CursorType type)
     {
@@ -71,6 +69,4 @@ namespace graphics {
         return nullptr;
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

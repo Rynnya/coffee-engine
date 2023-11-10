@@ -3,9 +3,7 @@
 #include <coffee/graphics/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     ShaderModule::ShaderModule(const DevicePtr& device, const std::vector<uint8_t>& byteCode, const std::string& entrypoint)
         : entrypoint { entrypoint.empty() ? "main" : entrypoint }
@@ -33,6 +31,4 @@ namespace graphics {
         return std::shared_ptr<ShaderModule>(new ShaderModule { device, byteCode, entrypoint });
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

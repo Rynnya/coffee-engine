@@ -3,9 +3,7 @@
 #include <coffee/graphics/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     Framebuffer::Framebuffer(const DevicePtr& device, const RenderPassPtr& renderPass, const FramebufferConfiguration& configuration)
         : width { configuration.extent.width }
@@ -63,6 +61,4 @@ namespace graphics {
         return std::unique_ptr<Framebuffer>(new Framebuffer { device, renderPass, configuration });
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

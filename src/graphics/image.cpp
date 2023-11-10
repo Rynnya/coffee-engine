@@ -5,9 +5,7 @@
 
 #include <algorithm>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     Image::Image(const DevicePtr& device, const ImageConfiguration& configuration)
         : swapChainImage { false }
@@ -41,8 +39,8 @@ namespace graphics {
         VkResult result = vmaCreateImage(device_->allocator(), &imageCreateInfo, &vmaCreateInfo, &image_, &allocation_, nullptr);
 
         if (result != VK_SUCCESS) {
-            COFFEE_ERROR("VMA failed to allocate image, requested extent {{ {}, {}, {} }}, with {} usage flags!", 
-                extent.width, extent.height, extent.depth, format::imageUsageFlags(imageCreateInfo.usage));
+            COFFEE_ERROR("VMA failed to allocate image, requested extent {{ {}, {}, {} }}, with {} usage flags!",
+                extent.width, extent.height, extent.depth, static_cast<uint64_t>(imageCreateInfo.usage));
 
             throw RegularVulkanException { result };
         }
@@ -109,6 +107,4 @@ namespace graphics {
         return std::shared_ptr<ImageView>(new ImageView { image, configuration });
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

@@ -8,9 +8,7 @@
 
 #include <vector>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     class Vertex {
     public:
@@ -35,9 +33,7 @@ namespace graphics {
         bool operator!=(const Vertex& other);
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 namespace std {
 

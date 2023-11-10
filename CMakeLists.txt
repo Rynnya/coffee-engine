@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15...3.25)
 
-set(PROJECT_NAME coffee-engine)
+set(PROJECT_NAME coffee_engine)
 project(${PROJECT_NAME} CXX)
 
 macro(set_option OPTION_NAME OPTION_VALUE)

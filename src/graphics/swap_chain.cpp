@@ -7,9 +7,7 @@
 #include <array>
 #include <stdexcept>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     SwapChain::SwapChain(const DevicePtr& device, VkSurfaceKHR surface, VkExtent2D extent, VkPresentModeKHR preferablePresentMode)
         : device_ { device }
@@ -245,6 +243,4 @@ namespace graphics {
         vkWaitForFences(device_->logicalDevice(), Device::kMaxOperationsInFlight, fences, VK_TRUE, std::numeric_limits<uint64_t>::max());
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

@@ -3,9 +3,7 @@
 #include <coffee/graphics/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     CommandBuffer::CommandBuffer(const DevicePtr& device, CommandBufferType type) : type { type }, device_ { device }
     {
@@ -86,6 +84,4 @@ namespace graphics {
         , buffer_ { std::exchange(other.buffer_, VK_NULL_HANDLE) }
     {}
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

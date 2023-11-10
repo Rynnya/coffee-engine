@@ -1,8 +1,6 @@
 #include <coffee/graphics/vertex.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     bool Vertex::operator==(const Vertex& other)
     {
@@ -11,9 +9,7 @@ namespace graphics {
 
     bool Vertex::operator!=(const Vertex& other) { return !operator==(other); }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 namespace std {
 

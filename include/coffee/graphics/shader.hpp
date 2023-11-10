@@ -3,9 +3,7 @@
 
 #include <coffee/graphics/device.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     class ShaderModule;
     using ShaderPtr = std::shared_ptr<ShaderModule>;
@@ -28,8 +26,6 @@ namespace graphics {
         VkShaderModule shader_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

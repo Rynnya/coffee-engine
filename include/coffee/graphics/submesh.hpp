@@ -5,9 +5,7 @@
 #include <coffee/graphics/buffer.hpp>
 #include <coffee/graphics/materials.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     class SubMesh : NonCopyable {
     public:
@@ -27,8 +25,6 @@ namespace graphics {
         friend class Mesh;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif
