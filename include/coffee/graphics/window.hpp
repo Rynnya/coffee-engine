@@ -16,9 +16,7 @@
 #include <functional>
 #include <mutex>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct WindowSettings {
         // Leave as 0 to automatic selection
@@ -186,8 +184,6 @@ namespace graphics {
         std::unique_ptr<SwapChain> swapChain_ = nullptr;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

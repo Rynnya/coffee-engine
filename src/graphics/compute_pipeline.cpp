@@ -5,9 +5,7 @@
 #include <coffee/utils/math.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     ComputePipeline::ComputePipeline(const DevicePtr& device, const ComputePipelineConfiguration& configuration) : device_ { device }
     {
@@ -144,6 +142,4 @@ namespace graphics {
         }
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

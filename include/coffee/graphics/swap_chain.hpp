@@ -11,9 +11,7 @@
 #include <optional>
 #include <vector>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     class SwapChain {
     public:
@@ -57,8 +55,6 @@ namespace graphics {
         bool immediateSupported_ = false;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

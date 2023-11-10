@@ -4,9 +4,9 @@
 
 #include <AL/alc.h>
 
-namespace coffee {
+#include <utility>
 
-namespace audio {
+namespace coffee { namespace audio {
 
     Source::Source()
     {
@@ -115,6 +115,4 @@ namespace audio {
         alGetError();
     }
 
-} // namespace audio
-
-} // namespace coffee
+}} // namespace coffee::audio

@@ -4,9 +4,7 @@
 #include <coffee/graphics/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     Semaphore::Semaphore(const DevicePtr& device) : device_ { device }
     {
@@ -29,6 +27,4 @@ namespace graphics {
         return std::shared_ptr<Semaphore>(new Semaphore { device });
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

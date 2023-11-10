@@ -9,9 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace coffee {
-
-namespace utils {
+namespace coffee { namespace utils {
 
     namespace detail {
 
@@ -168,12 +166,10 @@ namespace utils {
         }
 
         // Do not use this for regular hashing, only for constant time hashing, instead use XXH3 at runtime
-        static constexpr uint64_t digest(const std::string& str) { return digest(str.data()); }
+        static uint64_t digest(const std::string& str) { return digest(str.data()); }
 
     } // namespace fnv1a
 
-} // namespace utils
-
-} // namespace coffee
+}} // namespace coffee::utils
 
 #endif

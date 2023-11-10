@@ -7,9 +7,7 @@
 
 #include <map>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct DescriptorBindingInfo {
         VkDescriptorType type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -94,8 +92,6 @@ namespace graphics {
         VkDescriptorSet set_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

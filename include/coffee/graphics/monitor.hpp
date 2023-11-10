@@ -13,9 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct DepthBits {
         uint32_t redChannel = 0;
@@ -75,8 +73,6 @@ namespace graphics {
         friend class Device;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

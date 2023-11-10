@@ -3,9 +3,7 @@
 #include <coffee/graphics/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     Monitor::Monitor(GLFWmonitor* handle, uint32_t uniqueID) : uniqueID { uniqueID }, name { glfwGetMonitorName(handle) }, handle_ { handle }
     {
@@ -162,6 +160,4 @@ namespace graphics {
         glfwTerminate();
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

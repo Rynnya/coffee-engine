@@ -3,9 +3,7 @@
 
 #include <coffee/graphics/device.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct SamplerConfiguration {
         VkFilter magFilter = VK_FILTER_NEAREST;
@@ -43,8 +41,6 @@ namespace graphics {
         VkSampler sampler_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

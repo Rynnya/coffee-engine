@@ -4,9 +4,7 @@
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/vk_utils.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     DescriptorLayout::DescriptorLayout(const DevicePtr& device, const std::map<uint32_t, DescriptorBindingInfo>& bindings)
         : bindings { bindings }
@@ -268,6 +266,4 @@ namespace graphics {
         vkUpdateDescriptorSets(device_->logicalDevice(), static_cast<uint32_t>(writesImpl.size()), writesImpl.data(), 0, nullptr);
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

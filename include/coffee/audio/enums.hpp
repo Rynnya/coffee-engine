@@ -5,9 +5,7 @@
 
 #include <cstdint>
 
-namespace coffee {
-
-namespace audio {
+namespace coffee { namespace audio {
 
     enum class SourceValueType : uint32_t {
         Pitch = AL_PITCH,
@@ -32,8 +30,6 @@ namespace audio {
         Stereo16Bit = AL_FORMAT_STEREO16
     };
 
-} // namespace audio
-
-} // namespace coffee
+}} // namespace coffee::audio
 
 #endif

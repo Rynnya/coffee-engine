@@ -4,9 +4,7 @@
 #include <coffee/graphics/device.hpp>
 #include <coffee/utils/non_copyable.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct BufferConfiguration {
         uint32_t instanceSize = 1U;
@@ -89,8 +87,6 @@ namespace graphics {
         bool isHostCoherent_ = false;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

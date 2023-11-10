@@ -4,9 +4,7 @@
 #include <coffee/types.hpp>
 #include <coffee/utils/non_moveable.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     class Semaphore;
     using SemaphorePtr = std::shared_ptr<Semaphore>;
@@ -27,8 +25,6 @@ namespace graphics {
         VkSemaphore semaphore_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

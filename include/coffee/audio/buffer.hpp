@@ -5,11 +5,10 @@
 
 #include <AL/al.h>
 
+#include <cstdint>
 #include <vector>
 
-namespace coffee {
-
-namespace audio {
+namespace coffee { namespace audio {
 
     class Buffer : NonCopyable {
     public:
@@ -23,8 +22,6 @@ namespace audio {
     private:
     };
 
-} // namespace audio
-
-} // namespace coffee
+}} // namespace coffee::audio
 
 #endif

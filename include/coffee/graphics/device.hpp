@@ -18,9 +18,7 @@
 // Required to remove some annoying warning about redefinition on Windows
 #undef APIENTRY
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct DeviceFeatures {
         // Windows: 99.86%
@@ -281,8 +279,6 @@ namespace graphics {
         friend class SwapChain;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

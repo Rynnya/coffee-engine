@@ -4,9 +4,7 @@
 #include <coffee/graphics/exceptions.hpp>
 #include <coffee/utils/log.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     Fence::Fence(const DevicePtr& device, bool signaled) : device_ { device }
     {
@@ -50,6 +48,4 @@ namespace graphics {
         vkResetFences(device_->logicalDevice(), 1, &fence_);
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

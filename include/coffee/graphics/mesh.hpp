@@ -3,9 +3,7 @@
 
 #include <coffee/graphics/submesh.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     class Mesh : NonMoveable {
     public:
@@ -19,8 +17,6 @@ namespace graphics {
 
     using MeshPtr = std::shared_ptr<Mesh>;
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

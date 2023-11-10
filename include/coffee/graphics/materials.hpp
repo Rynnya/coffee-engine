@@ -9,9 +9,7 @@
 #include <glm/vec4.hpp>
 #include <tbb/queuing_mutex.h>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     class Materials : NonCopyable {
     public:
@@ -51,8 +49,6 @@ namespace graphics {
         TextureType textureFlags_ = TextureType::None;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

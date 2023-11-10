@@ -5,9 +5,7 @@
 #include <coffee/graphics/image.hpp>
 #include <coffee/graphics/render_pass.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct FramebufferConfiguration {
         VkExtent2D extent {};
@@ -40,8 +38,6 @@ namespace graphics {
         VkFramebuffer framebuffer_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

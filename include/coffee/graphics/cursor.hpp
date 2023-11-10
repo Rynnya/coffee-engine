@@ -12,9 +12,7 @@
 
 #include <vector>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     enum class CursorType {
         Arrow = 0,
@@ -49,8 +47,6 @@ namespace graphics {
         friend class Window;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

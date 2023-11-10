@@ -2,9 +2,7 @@
 
 #include <coffee/utils/log.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     static uint32_t textureTypeToIndex(TextureType textureType)
     {
@@ -83,6 +81,4 @@ namespace graphics {
 
     const graphics::ImageViewPtr& Materials::defaultTexture() const noexcept { return defaultTexture_; }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

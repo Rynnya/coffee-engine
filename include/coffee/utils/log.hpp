@@ -7,10 +7,10 @@
 
 namespace coffee {
 
-enum class MessageSeverity : uint32_t { Info = 1 << 0, Warning = 1 << 1, Error = 1 << 2, Critical = 1 << 3 };
+    enum class MessageSeverity : uint32_t { Info = 1 << 0, Warning = 1 << 1, Error = 1 << 2, Critical = 1 << 3 };
 
-void mustBe(bool exprResult, const char* exprString, const char* filePath, const unsigned line, const std::string& message);
-void log(MessageSeverity severity, const char* filePath, const unsigned line, const std::string& message);
+    void mustBe(bool exprResult, const char* exprString, const char* filePath, const unsigned line, const std::string& message);
+    void log(MessageSeverity severity, const char* filePath, const unsigned line, const std::string& message);
 
 } // namespace coffee
 

@@ -4,9 +4,7 @@
 #include <coffee/graphics/device.hpp>
 #include <coffee/graphics/image.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct AttachmentConfiguration {
         VkAttachmentDescriptionFlags flags = 0;
@@ -46,8 +44,6 @@ namespace graphics {
         VkRenderPass renderPass_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif

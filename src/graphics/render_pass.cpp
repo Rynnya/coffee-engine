@@ -6,9 +6,7 @@
 
 #include <array>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     RenderPass::RenderPass(const DevicePtr& device, const RenderPassConfiguration& configuration) : device_ { device }
     {
@@ -152,6 +150,4 @@ namespace graphics {
         return std::unique_ptr<RenderPass>(new RenderPass { device, configuration });
     }
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics

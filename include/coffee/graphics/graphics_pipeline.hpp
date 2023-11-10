@@ -5,9 +5,7 @@
 #include <coffee/graphics/render_pass.hpp>
 #include <coffee/graphics/shader.hpp>
 
-namespace coffee {
-
-namespace graphics {
+namespace coffee { namespace graphics {
 
     struct InputElement {
         // Defines a input slot inside input assembler
@@ -115,8 +113,6 @@ namespace graphics {
         VkPipeline pipeline_ = VK_NULL_HANDLE;
     };
 
-} // namespace graphics
-
-} // namespace coffee
+}} // namespace coffee::graphics
 
 #endif
