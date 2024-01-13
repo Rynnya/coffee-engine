@@ -1,6 +1,7 @@
 #ifndef COFFEE_UTILS_MATH
 #define COFFEE_UTILS_MATH
 
+#include <cstddef>
 #include <cstdint>
 
 namespace coffee {

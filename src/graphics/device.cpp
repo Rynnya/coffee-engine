@@ -6,6 +6,7 @@
 #include <coffee/utils/log.hpp>
 #include <coffee/utils/utils.hpp>
 #include <coffee/utils/vk_utils.hpp>
+#include <vulkan/vulkan_core.h>
 
 #define VOLK_IMPLEMENTATION
 
@@ -355,7 +356,7 @@ namespace coffee {
 
             VkResult result = vkQueuePresentKHR(presentQueue_, &presentInfo);
 
-            if (result != VK_SUCCESS) {
+            if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR && result != VK_ERROR_OUT_OF_DATE_KHR) {
                 COFFEE_FATAL("Failed to present image!");
 
                 throw FatalVulkanException { result };
@@ -684,9 +685,10 @@ namespace coffee {
         void Device::createDescriptorPool()
         {
             // clang-format off
-            constexpr std::array<VkDescriptorPoolSize, 4> descriptorSizes = {
+            constexpr std::array<VkDescriptorPoolSize, 5> descriptorSizes = {
                 VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_SAMPLER,                512U  },
                 VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4096U },
+                VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          16U   },
                 VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         1024U },
                 VkDescriptorPoolSize { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         1024U },
             };
@@ -879,13 +881,12 @@ namespace coffee {
 
             // swapChain is not VK_NULL_HANDLE only for graphics submits
             if (submit.swapChain != VK_NULL_HANDLE) {
-                tbb::queuing_mutex::scoped_lock lock { pendingPresentsMutex_ };
-
                 PendingPresent pendingPresent {};
                 pendingPresent.swapChain = submit.swapChain;
                 pendingPresent.waitSemaphore = submit.swapChainWaitSemaphore;
                 pendingPresent.currentFrame = submit.currentFrame;
 
+                tbb::queuing_mutex::scoped_lock lock { pendingPresentsMutex_ };
                 pendingPresents_.push_back(std::move(pendingPresent));
             }
 

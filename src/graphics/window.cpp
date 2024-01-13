@@ -30,7 +30,7 @@ namespace coffee {
                 glfwDefaultWindowHints();
                 glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
                 monitorHandle_ = glfwGetPrimaryMonitor();
-
+                //
                 if (monitorHandle_ == nullptr) {
                     COFFEE_ERROR("Failed to get primary monitor handle!");
 
@@ -139,6 +139,7 @@ namespace coffee {
         Window::~Window() noexcept
         {
             swapChain_ = nullptr;
+
             vkDestroySurfaceKHR(device_->instance(), surfaceHandle_, nullptr);
 
             glfwDestroyWindow(windowHandle_);
@@ -151,7 +152,19 @@ namespace coffee {
             return std::unique_ptr<Window>(new Window { device, settings, windowName });
         }
 
-        bool Window::acquireNextImage() { return swapChain_->acquireNextImage(); }
+        bool Window::acquireNextImage()
+        {
+            bool result = swapChain_->acquireNextImage();
+
+            if (!result) {
+                swapChain_->recreate(framebufferSize_, swapChain_->getPresentMode());
+
+                const ResizeEvent resizeEvent { framebufferSize_.width, framebufferSize_.height };
+                windowResizeEvent(*this, resizeEvent);
+            }
+
+            return result;
+        }
 
         void Window::sendCommandBuffer(CommandBuffer&& commandBuffer)
         {
