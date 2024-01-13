@@ -34,7 +34,9 @@ namespace coffee { namespace graphics {
 
     bool SwapChain::acquireNextImage()
     {
-        waitForAcquire();
+        auto& previousOperation = fencesInFlight_[device_->currentOperationInFlight()];
+
+        previousOperation->wait();
 
         VkResult result = vkAcquireNextImageKHR(
             device_->logicalDevice(),
@@ -45,15 +47,17 @@ namespace coffee { namespace graphics {
             &presentIndex_
         );
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
             return false;
         }
 
-        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        if (result != VK_SUCCESS) {
             COFFEE_ERROR("Failed to acquire swap chain image!");
 
             throw RegularVulkanException { result };
         }
+
+        previousOperation->reset();
 
         return true;
     }
@@ -159,21 +163,9 @@ namespace coffee { namespace graphics {
         createInfo.imageExtent = selectedExtent;
         createInfo.imageArrayLayers = 1;
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-        VkUtils::QueueFamilyIndices indices = VkUtils::findQueueFamilies(device_->physicalDevice(), surface_);
-        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
-
-        if (indices.graphicsFamily == indices.presentFamily) {
-            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            createInfo.queueFamilyIndexCount = 0;
-            createInfo.pQueueFamilyIndices = nullptr;
-        }
-        else {
-            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-            createInfo.queueFamilyIndexCount = 2;
-            createInfo.pQueueFamilyIndices = queueFamilyIndices;
-        }
-
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        createInfo.queueFamilyIndexCount = 0;
+        createInfo.pQueueFamilyIndices = nullptr;
         createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
         createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         createInfo.presentMode = currentPresentMode_;
@@ -222,14 +214,6 @@ namespace coffee { namespace graphics {
                 throw RegularVulkanException { result };
             }
         }
-    }
-
-    void SwapChain::waitForAcquire()
-    {
-        auto& fence = fencesInFlight_[device_->currentOperationInFlight()];
-
-        fence->wait();
-        fence->reset();
     }
 
     void SwapChain::waitForRelease()

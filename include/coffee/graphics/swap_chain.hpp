@@ -34,7 +34,6 @@ namespace coffee { namespace graphics {
         void createSwapChain(VkExtent2D extent, VkPresentModeKHR preferablePresentMode, VkSwapchainKHR oldSwapchain = nullptr);
         void createSyncObjects();
 
-        void waitForAcquire();
         void waitForRelease();
 
         DevicePtr device_;
